@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "arb-bot",
+    "custom-sui-sdk"
+]

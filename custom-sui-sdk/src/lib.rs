@@ -21,8 +21,19 @@ use sui_sdk::rpc_types::{
 use sui_transaction_builder::{DataReader, TransactionBuilder};
 use sui_types::base_types::{ObjectID, ObjectInfo, SuiAddress};
 
-use sui_sdk::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi};
+use crate::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi};
 use sui_sdk::error::{Error, SuiRpcResult};
+
+pub mod apis;
+pub mod error;
+pub const SUI_COIN_TYPE: &str = "0x2::sui::SUI";
+const WAIT_FOR_TX_TIMEOUT_SEC: u64 = 60;
+
+// Provides a non-OpenRPC supporting SuiClientBuilder
+// apis copied in as traits like ReadAPI cannot be implemented
+// without the types present in the crate.
+// We'll use sui_sdk::sui_client_config and 
+// sui_sdk::wallet_context as they have been defined
 
 pub struct SuiClientBuilder {
     request_timeout: Duration,

@@ -1,0 +1,5 @@
+# ignore ALL /lock files
+*.lock
+
+# ignore ALL files in ANY directory named target
+target/
