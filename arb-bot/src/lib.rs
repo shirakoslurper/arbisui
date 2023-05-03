@@ -1,13 +1,11 @@
 use anyhow::Result;
 use sui_sdk::{rpc_types::EventFilter, types::{event::Event, object::Object}};
 use custom_sui_sdk::SuiClient;
-use sui_sdk::types::base_types::ObjectID;
 use sui_sdk::wallet_context::WalletContext;
 use futures::StreamExt;
 
-pub trait Exchange: Send + Sync {
-    fn package_id(&self) -> &ObjectID;
-}
+pub mod markets;
+pub use crate::markets::*;
 
 pub struct RunData {
     pub sui_client: SuiClient,
@@ -38,8 +36,6 @@ pub async fn loop_blocks(run_data: RunData, exchanges: Vec<impl Exchange>) -> Re
     // Equivalent to .is_some() except we can print events
     while let Some(event) = subscribe_any_exchange_package_event.next().await {
         println!("New event: {:#?}", event);
-
-        
     }
     
     Ok(())
