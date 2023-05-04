@@ -33,7 +33,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?,
     };
 
-    loop_blocks(run_data, vec![&flameswap]).await?;
+    flameswap.get_all_markets(&run_data.sui_client).await?;
+
+    // loop_blocks(run_data, vec![&flameswap]).await?;
 
     Ok(())
 }
