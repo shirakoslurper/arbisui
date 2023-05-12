@@ -266,11 +266,11 @@ impl ReadApi {
     }
 }
 
-struct GetOwnedObjectsRequest {
-    address: SuiAddress,
-    query: Option<SuiObjectResponseQuery>,
-    cursor: Option<ObjectID>,
-    limit: Option<usize,>
+pub struct GetOwnedObjectsRequest {
+    pub address: SuiAddress,
+    pub query: Option<SuiObjectResponseQuery>,
+    pub cursor: Option<ObjectID>,
+    pub limit: Option<usize,>
 }
 
 #[async_trait]
@@ -295,10 +295,10 @@ impl PageTurner<GetOwnedObjectsRequest> for ReadApi {
     }
 }
 
-struct GetDynamicFieldsRequest {
-    object_id: ObjectID,
-    cursor: Option<ObjectID>,
-    limit: Option<usize,>
+pub struct GetDynamicFieldsRequest {
+    pub object_id: ObjectID,
+    pub cursor: Option<ObjectID>,
+    pub limit: Option<usize,>
 }
 
 #[async_trait]

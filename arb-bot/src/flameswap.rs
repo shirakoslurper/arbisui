@@ -3,11 +3,16 @@ use std::cmp;
 use async_trait::async_trait;
 use anyhow::{anyhow, Context};
 
-use custom_sui_sdk::SuiClient;
+use futures::TryStreamExt;
+use page_turner::PageTurner;
+use custom_sui_sdk::{
+    SuiClient,
+    apis::GetDynamicFieldsRequest
+};
 
 use sui_sdk::types::base_types::{ObjectID, ObjectType};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponseQuery, SuiObjectResponse};
-// use sui_sdk::types::dynamic_field::DynamicFieldInfo;
+use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 // use sui_sdk::error::{Error, SuiRpcResult};
 
 use crate::markets::Exchange;
@@ -29,31 +34,18 @@ impl Exchange for FlameSwap {
 
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<(), anyhow::Error> {
 
-        let mut pools_dynamic_fields_data = Vec::new();
-
-        let mut next_cursor = None;
-
-        let mut pools_dynamic_fields_page = sui_client
+        let pools_dynamic_fields_data = sui_client
             .read_api()
-            .get_dynamic_fields(
-                ObjectID::from_str(POOLS)?,
-                next_cursor,
-                None
+            .pages(
+                GetDynamicFieldsRequest {
+                    object_id: ObjectID::from_str(POOLS)?,
+                    cursor: None,
+                    limit: None,
+                }
             )
+            .items()
+            .try_collect::<Vec<DynamicFieldInfo>>()
             .await?;
-
-        while pools_dynamic_fields_page.has_next_page {
-            pools_dynamic_fields_data.extend(pools_dynamic_fields_page.data);
-            next_cursor = pools_dynamic_fields_page.next_cursor;
-            pools_dynamic_fields_page = sui_client
-            .read_api()
-            .get_dynamic_fields(
-                ObjectID::from_str(POOLS)?,
-                next_cursor,
-                None
-            )
-            .await?;
-        }
 
         let pool_object_ids = pools_dynamic_fields_data
             .iter()
@@ -63,7 +55,7 @@ impl Exchange for FlameSwap {
             .collect::<Vec<ObjectID>>();
 
         println!(
-            "Num pools: {:#?}", 
+            "Number of pools: {:#?}", 
             pool_object_ids.len()
         );
 
@@ -71,12 +63,14 @@ impl Exchange for FlameSwap {
 
         let mut pools = Vec::new();
 
-        for i in 0..(pool_object_ids.len() as f32 / 50.0).ceil() as usize {
+        for i in 0..(pool_object_ids.len() / 50) + 1 {
+
+            // println!("i*50: {}, pool_object_ids length:{}", i*50, pool_object_ids.len());
             pools.extend(
                 sui_client
                     .read_api()
                     .multi_get_object_with_options(
-                        pool_object_ids[i..cmp::min(i+50, pool_object_ids.len())].to_vec(),
+                        pool_object_ids[i*50..cmp::min(i*50 + 50, pool_object_ids.len())].to_vec(),
                         SuiObjectDataOptions::full_content()
                     )
                     .await?
