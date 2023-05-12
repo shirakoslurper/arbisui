@@ -24,3 +24,4 @@ fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "27ee552d
 thiserror = "1.0.37"
 bcs = "0.1.4"
 futures-core = "0.3.28"
+page-turner = "0.8.2"

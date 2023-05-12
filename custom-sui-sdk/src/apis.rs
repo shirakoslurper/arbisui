@@ -33,6 +33,10 @@ use sui_types::messages_checkpoint::CheckpointSequenceNumber;
 use sui_types::quorum_driver_types::ExecuteTransactionRequestType;
 use sui_types::sui_serde::BigInt;
 use sui_types::sui_system_state::sui_system_state_summary::SuiSystemStateSummary;
+use sui_types::dynamic_field::DynamicFieldInfo;
+
+use async_trait::async_trait;
+use page_turner::prelude::*;
 
 #[derive(Debug)]
 pub struct ReadApi {
@@ -259,6 +263,62 @@ impl ReadApi {
         digest: TransactionDigest,
     ) -> SuiRpcResult<SuiLoadedChildObjectsResponse> {
         Ok(self.api.http.get_loaded_child_objects(digest).await?)
+    }
+}
+
+struct GetOwnedObjectsRequest {
+    address: SuiAddress,
+    query: Option<SuiObjectResponseQuery>,
+    cursor: Option<ObjectID>,
+    limit: Option<usize,>
+}
+
+#[async_trait]
+impl PageTurner<GetOwnedObjectsRequest> for ReadApi {
+    type PageItem = SuiObjectResponse;
+    type PageError = anyhow::Error;
+
+    async fn turn_page(&self, mut request: GetOwnedObjectsRequest) -> PageTurnerOutput<Self, SuiObjectResponse> {
+        let response = self.get_owned_objects(
+            request.address,
+            request.query,
+            request.cursor,
+            request.limit,
+        ).await?;
+        
+        if response.has_next_page {
+            request.cursor = response.next_cursor;
+            Ok(TurnedPage::next(response.data, request))
+        } else {
+            Ok(TurnedPage::last(response.data))
+        }
+    }
+}
+
+struct GetDynamicFieldsRequest {
+    object_id: ObjectID,
+    cursor: Option<ObjectID>,
+    limit: Option<usize,>
+}
+
+#[async_trait]
+impl PageTurner<GetDynamicFieldsRequest> for ReadApi {
+    type PageItem = DynamicFieldInfo;
+    type PageError = anyhow::Error;
+
+    async fn turn_page(&self, mut request: GetDynamicFieldsRequest) -> PageTurnerOutput<Self, GetDynamicFieldsRequest> {
+        let response = self.get_dynamic_fields(
+            request.object_id, 
+            request.cursor, 
+            request.limit,
+        ).await?;
+        
+        if response.has_next_page {
+            request.cursor = response.next_cursor;
+            Ok(TurnedPage::next(response.data, request))
+        } else {
+            Ok(TurnedPage::last(response.data))
+        }
     }
 }
 

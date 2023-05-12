@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 sui-sdk = { git = "https://github.com/MystenLabs/sui" }
+move-core-types = { git = "https://github.com/MystenLabs/sui" }
 custom-sui-sdk = { path = "../custom-sui-sdk" }
 tokio = "1.28.0"
 futures = "0.3.23"
