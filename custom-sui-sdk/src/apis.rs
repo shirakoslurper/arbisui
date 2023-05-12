@@ -278,10 +278,10 @@ impl PageTurner<GetOwnedObjectsRequest> for ReadApi {
     type PageItem = SuiObjectResponse;
     type PageError = anyhow::Error;
 
-    async fn turn_page(&self, mut request: GetOwnedObjectsRequest) -> PageTurnerOutput<Self, SuiObjectResponse> {
+    async fn turn_page(&self, mut request: GetOwnedObjectsRequest) -> PageTurnerOutput<Self, GetOwnedObjectsRequest> {
         let response = self.get_owned_objects(
             request.address,
-            request.query,
+            request.query.clone(),
             request.cursor,
             request.limit,
         ).await?;

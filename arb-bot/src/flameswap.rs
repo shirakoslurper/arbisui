@@ -1,13 +1,12 @@
-// #![feature(async_closure)]
-
 use std::str::FromStr;
-use sui_sdk::types::base_types::ObjectID;
-use custom_sui_sdk::SuiClient;
+use std::cmp;
 use async_trait::async_trait;
 use anyhow::{anyhow, Context};
 
+use custom_sui_sdk::SuiClient;
+
+use sui_sdk::types::base_types::{ObjectID, ObjectType};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponseQuery, SuiObjectResponse};
-use sui_sdk::types::base_types::ObjectType;
 // use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 // use sui_sdk::error::{Error, SuiRpcResult};
 
@@ -30,52 +29,7 @@ impl Exchange for FlameSwap {
 
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<(), anyhow::Error> {
 
-        // // Returns a DynamicFieldPage
-        // let pools_dynamic_fields = sui_client
-        //     .read_api()
-        //     .get_dynamic_fields(
-        //         ObjectID::from_str(POOLS)?,
-        //         None,
-        //         None
-        //     )
-        //     .await?;
-
-        // // There will be multiple pages so we have to do a while has_next_page
-        // // to get all pools
-        // println!("Cursor Next: {:#?}", pools_dynamic_fields.has_next_page);
-
-        // // Paginate
-        // let cursor = None;
-
-        // while true {
-
-        // }
-
-
-
         let mut pools_dynamic_fields_data = Vec::new();
-        
-        // let mut pools_dynamic_fields_page = sui_client
-        //     .read_api()
-        //     .get_dynamic_fields(
-        //         ObjectID::from_str(POOLS)?,
-        //         None,
-        //         None
-        //     )
-        //     .await?;
-
-        // while let Some(next_cursor) = pools_dynamic_fields_page.next_cursor {
-        //     pools_dynamic_fields_data.extend(pools_dynamic_fields_page.data);
-
-        //     pools_dynamic_fields_page = sui_client
-        //     .read_api()
-        //     .get_dynamic_fields(
-        //         ObjectID::from_str(POOLS)?,
-        //         Some(next_cursor),
-        //         None
-        //     )
-        //     .await?;
-        // }
 
         let mut next_cursor = None;
 
@@ -113,13 +67,21 @@ impl Exchange for FlameSwap {
             pool_object_ids.len()
         );
 
-        let pools = sui_client
-            .read_api()
-                .multi_get_object_with_options(
-                pool_object_ids,
-                SuiObjectDataOptions::full_content()
+        // Considering the request limit might make sense to do a page at a time hahahha
+
+        let mut pools = Vec::new();
+
+        for i in 0..(pool_object_ids.len() as f32 / 50.0).ceil() as usize {
+            pools.extend(
+                sui_client
+                    .read_api()
+                    .multi_get_object_with_options(
+                        pool_object_ids[i..cmp::min(i+50, pool_object_ids.len())].to_vec(),
+                        SuiObjectDataOptions::full_content()
+                    )
+                    .await?
             )
-            .await?;
+        }
 
         let coin_pairs = pools.into_iter()
             .map(|pool| {
@@ -132,8 +94,8 @@ impl Exchange for FlameSwap {
                             {
                                 Ok(
                                     FlameswapMarket{
-                                        coin_x: box_struct_tag.type_params[0].clone(),
-                                        coin_y: box_struct_tag.type_params[1].clone(),
+                                        coin_x: box_struct_tag.type_params.get(0).context("Missing coin_x")?.clone(),
+                                        coin_y: box_struct_tag.type_params.get(0).context("Missing coin_y")?.clone(),
                                     }
                                 )
                             } else {
@@ -151,13 +113,12 @@ impl Exchange for FlameSwap {
             })
             .collect::<Result<Vec<FlameswapMarket>, anyhow::Error>>()?;
 
-        coin_pairs.iter().for_each(|market| println!("{:#?}", market));
+        println!("Number of markets: {}", coin_pairs.len());
+        // coin_pairs.iter().for_each(|market| println!("{:#?}", market));
 
         Ok(())
     }
 }
-
-
 
 #[derive(Debug)]
 struct FlameswapMarket {
