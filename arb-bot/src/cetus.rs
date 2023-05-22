@@ -5,22 +5,23 @@ use anyhow::{anyhow, Context};
 
 use futures::TryStreamExt;
 use page_turner::PageTurner;
+use serde_json::Value;
+use fixed::FixedU128;
+
 use custom_sui_sdk::{
     SuiClient,
     apis::QueryEventsRequest
 };
 
 use sui_sdk::types::base_types::{ObjectID, ObjectType};
-use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponseQuery, SuiObjectResponse, EventFilter, SuiEvent};
+use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponseQuery, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiParsedMoveObject};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
-// use sui_sdk::error::{Error, SuiRpcResult};
-
-use crate::markets::Exchange;
-
-
+ 
 use move_core_types::language_storage::{StructTag, TypeTag};
 use std::fmt::format;
-use serde_json::Value;
+use std::collections::BTreeMap;
+
+use crate::markets::Exchange;
 
 const EXCHANGE_ADDRESS: &str = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb";
 const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
@@ -96,7 +97,9 @@ impl Exchange for Cetus {
                 SuiObjectDataOptions::full_content()
             )
             .await?;
-        println!("{:#?}", example_pool);
+
+        let example_fields = get_fields_from_object_response(example_pool)?;
+        println!("current_sqrt_price: {:#?}", example_fields.get("current_sqrt_price").context("Could not get current_sqrt_price from fields")?);
 
         let example_coin_x = sui_client
             .coin_read_api()
@@ -125,7 +128,29 @@ struct CetusMarket {
     coin_x: StructTag,
     coin_y: StructTag,
     pool_id: ObjectID,
-    // coin_prices: 
+    // price_x: FixedU128<U64>, // In terms of y
+    // price_y: FixedU128<U64>, // In terms of x
 }
 
 // We'll need to deal with the math on this side
+// Price is simple matter of ((current_sqrt_price / (2^64))^2) * (10^(a - b))
+fn get_fields_from_object_response(response: SuiObjectResponse) -> Result<BTreeMap<String, SuiMoveValue>, anyhow::Error> {
+    if let Some(object_data) = response.data {
+        if let Some(parsed_data) = object_data.content {
+            if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
+                if let SuiMoveStruct::WithFields(field_map) = parsed_move_object.fields {
+                    // println!("{:#?}", field_map.get("current_sqrt_price").context("Could not get current_sqrt_price from fields")?);
+                    Ok(field_map)
+                } else {
+                    Err(anyhow!("Does not match the SuiMoveStruct::WithFields variant"))
+                }
+            } else {
+                Err(anyhow!("Does not match the SuiParsedData::MoveObject variant"))
+            }
+        } else {
+            Err(anyhow!("Expected Some"))
+        }
+    } else {
+        Err(anyhow!("Expected Some"))
+    }
+}
