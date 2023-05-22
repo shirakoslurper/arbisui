@@ -1,13 +1,15 @@
 use anyhow::Result;
 use sui_sdk::{rpc_types::EventFilter, types::{event::Event, object::Object}};
 use custom_sui_sdk::SuiClient;
-use sui_sdk::wallet_context::WalletContext;
+// use sui_sdk::wallet_context::WalletContext;
 use futures::StreamExt;
 
 pub mod markets;
 pub mod flameswap;
+pub mod cetus;
 pub use crate::markets::*;
 pub use crate::flameswap::*;
+pub use crate::cetus::*;
 
 pub struct RunData {
     pub sui_client: SuiClient,

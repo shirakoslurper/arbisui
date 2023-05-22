@@ -11,17 +11,17 @@ use custom_sui_sdk::{
 };
 
 use sui_sdk::types::base_types::{ObjectID, ObjectType};
-use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponseQuery, SuiObjectResponse};
+use sui_sdk::rpc_types::{SuiObjectDataOptions};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 // use sui_sdk::error::{Error, SuiRpcResult};
 
 use crate::markets::Exchange;
 
 
-use move_core_types::language_storage::{StructTag, TypeTag};
+use move_core_types::language_storage::{TypeTag};
 
 const EXCHANGE_ADDRESS: &str = "0x6b84da4f5dc051759382e60352377fea9d59bc6ec92dc60e0b6387e05274415f";
-// const GLOBAL: &str = "0x3083e3d751360c9084ba33f6d9e1ad38fb2a11cffc151f2ee4a5c03da61fb1e2";
+const GLOBAL: &str = "0x3083e3d751360c9084ba33f6d9e1ad38fb2a11cffc151f2ee4a5c03da61fb1e2";
 const POOLS: &str = "0x6edec171d3b4c6669ac748f6de77f78635b72aac071732b184677db19eefd9e8";
 
 pub struct FlameSwap;
@@ -60,7 +60,6 @@ impl Exchange for FlameSwap {
         );
 
         // Considering the request limit might make sense to do a page at a time hahahha
-
         let mut pools = Vec::new();
 
         for i in 0..(pool_object_ids.len() / 50) + 1 {
@@ -77,7 +76,9 @@ impl Exchange for FlameSwap {
             )
         }
 
-        let coin_pairs = pools.into_iter()
+        // TODO: Refactor
+        let coin_pairs = pools
+            .into_iter()
             .map(|pool| {
                 if let Some(data) = pool.data {
                     if let Some(type_) = data.type_ {
@@ -86,6 +87,7 @@ impl Exchange for FlameSwap {
                                 .type_params()
                                 .get(1).context("Missing coin pair type parameter")? 
                             {
+                                println!("{:#?}", box_struct_tag);
                                 Ok(
                                     FlameswapMarket{
                                         coin_x: box_struct_tag.type_params.get(0).context("Missing coin_x")?.clone(),
@@ -110,6 +112,7 @@ impl Exchange for FlameSwap {
         println!("Number of markets: {}", coin_pairs.len());
         // coin_pairs.iter().for_each(|market| println!("{:#?}", market));
 
+        
         Ok(())
     }
 }
@@ -119,25 +122,3 @@ struct FlameswapMarket {
     coin_x: TypeTag,
     coin_y: TypeTag,
 }
-
-// fn markets_from_sui_object_response(pools: Vec<SuiObjectResponse>) -> Vec<FlameswapMarket> {
-
-//     vec![]
-// }
-
-// fn market_from_sui_object_response(pool: SuiObjectResponse) -> Result<(), anyhow::Error> {
-//     if let Some(data) = pool.data {
-//         if let Some(type_) = data.type_ {
-//             if let ObjectType::Struct(move_object_type) = type_ {
-//                 move_object_type
-//                     .type_params()
-//                     .iter()
-//                     .map(|type_param| {
-//                         println!("{:#?}", type_param)
-//                     })
-//             }
-//         }
-//     }
-
-
-// }

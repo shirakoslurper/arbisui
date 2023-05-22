@@ -270,7 +270,7 @@ pub struct GetOwnedObjectsRequest {
     pub address: SuiAddress,
     pub query: Option<SuiObjectResponseQuery>,
     pub cursor: Option<ObjectID>,
-    pub limit: Option<usize,>
+    pub limit: Option<usize>,
 }
 
 #[async_trait]
@@ -298,7 +298,7 @@ impl PageTurner<GetOwnedObjectsRequest> for ReadApi {
 pub struct GetDynamicFieldsRequest {
     pub object_id: ObjectID,
     pub cursor: Option<ObjectID>,
-    pub limit: Option<usize,>
+    pub limit: Option<usize>,
 }
 
 #[async_trait]
@@ -507,6 +507,35 @@ impl EventApi {
                 }
             },
         )
+    }
+}
+
+pub struct QueryEventsRequest {
+    pub query: EventFilter,
+    pub cursor: Option<EventID>,
+    pub limit: Option<usize>,
+    pub descending_order: bool,
+}
+
+#[async_trait]
+impl PageTurner<QueryEventsRequest> for EventApi {
+    type PageItem = SuiEvent;
+    type PageError = anyhow::Error;
+
+    async fn turn_page(&self, mut request: QueryEventsRequest) -> PageTurnerOutput<Self, QueryEventsRequest> {
+        let response = self.query_events(
+            request.query.clone(),
+            request.cursor,
+            request.limit,
+            request.descending_order,
+        ).await?;
+        
+        if response.has_next_page {
+            request.cursor = response.next_cursor;
+            Ok(TurnedPage::next(response.data, request))
+        } else {
+            Ok(TurnedPage::last(response.data))
+        }
     }
 }
 
