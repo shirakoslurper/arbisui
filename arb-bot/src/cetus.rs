@@ -6,7 +6,7 @@ use anyhow::{anyhow, Context};
 use futures::TryStreamExt;
 use page_turner::PageTurner;
 use serde_json::Value;
-use fixed::FixedU128;
+use fixed::{types::{U64F64}, ParseFixedError};
 
 use custom_sui_sdk::{
     SuiClient,
@@ -57,67 +57,122 @@ impl Exchange for Cetus {
             .try_collect::<Vec<SuiEvent>>()
             .await?;
 
-        let markets = pool_created_events
-            .into_iter()
-            .map(|pool_created_event| {
-                let parsed_json = &pool_created_event.parsed_json;
-                if let (
-                    Value::String(coin_x_value), 
-                    Value::String(coin_y_value), 
-                    Value::String(pool_id_value)
-                ) = 
-                    (
-                        parsed_json.get("coin_type_a").context("Failed to get coin_type_a for a CetusMarket")?,
-                        parsed_json.get("coin_type_b").context("Failed to get coin_type_b for a CetusMarket")?,
-                        parsed_json.get("pool_id").context("Failed to get pool_id for a CetusMarket")?
-                    ) {
-                        // println!("coin x: {}", coin_x_value);
-                        let coin_x = StructTag::from_str(&format!("0x{}", coin_x_value))?;
-                        // println!("coin y: {}", coin_y_value);
-                        let coin_y = StructTag::from_str(&format!("0x{}", coin_y_value))?;
-                        // println!("pool id: {}", pool_id_value);
-                        let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
-                        Ok(
-                            CetusMarket {
-                                coin_x,
-                                coin_y,
-                                pool_id,
-                            }
-                        )
-                    } else {
-                        Err(anyhow!("Failed to match pattern."))
-                    }
-            })
-            .collect::<Result<Vec<CetusMarket>, anyhow::Error>>()?;
+        // let markets = pool_created_events
+        //     .into_iter()
+        //     .map(|pool_created_event| {
+        //         let parsed_json = &pool_created_event.parsed_json;
+        //         if let (
+        //             Value::String(coin_x_value), 
+        //             Value::String(coin_y_value), 
+        //             Value::String(pool_id_value)
+        //         ) = 
+        //             (
+        //                 parsed_json.get("coin_type_a").context("Failed to get coin_type_a for a CetusMarket")?,
+        //                 parsed_json.get("coin_type_b").context("Failed to get coin_type_b for a CetusMarket")?,
+        //                 parsed_json.get("pool_id").context("Failed to get pool_id for a CetusMarket")?
+        //             ) {
+        //                 let coin_x = StructTag::from_str(&format!("0x{}", coin_x_value))?;
+        //                 let coin_y = StructTag::from_str(&format!("0x{}", coin_y_value))?;
+        //                 let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
 
-        let example_pool = sui_client
-            .read_api()
-            .get_object_with_options(
-                markets[9].pool_id,
-                SuiObjectDataOptions::full_content()
-            )
-            .await?;
+        //                 Ok(
+        //                     CetusMarket {
+        //                         coin_x,
+        //                         coin_y,
+        //                         pool_id,
+        //                     }
+        //                 )
+        //             } else {
+        //                 Err(anyhow!("Failed to match pattern."))
+        //             }
+        //     })
+        //     .collect::<Result<Vec<CetusMarket>, anyhow::Error>>()?;
 
-        let example_fields = get_fields_from_object_response(example_pool)?;
-        println!("current_sqrt_price: {:#?}", example_fields.get("current_sqrt_price").context("Could not get current_sqrt_price from fields")?);
+        // let example_pool = sui_client
+        //     .read_api()
+        //     .get_object_with_options(
+        //         markets[9].pool_id,
+        //         SuiObjectDataOptions::full_content()
+        //     )
+        //     .await?;
 
-        let example_coin_x = sui_client
-            .coin_read_api()
-            .get_coin_metadata(
-                format!("0x{}", markets[9].coin_x.to_canonical_string())
-            )
-            .await?;
+        // let example_fields = get_fields_from_object_response(example_pool)?;
+        // println!("current_sqrt_price: {:#?}", example_fields.get("current_sqrt_price").context("Could not get current_sqrt_price from fields")?);
 
-        println!("coin_x: {:#?}", example_coin_x);
+        // let example_coin_x = sui_client
+        //     .coin_read_api()
+        //     .get_coin_metadata(
+        //         format!("0x{}", markets[9].coin_x.to_canonical_string())
+        //     )
+        //     .await?;
 
-        let example_coin_y = sui_client
-            .coin_read_api()
-            .get_coin_metadata(
-                format!("0x{}", markets[9].coin_y.to_canonical_string())
-            )
-            .await?;
+        // println!("coin_x: {:#?}", example_coin_x);
 
-        println!("coin_y: {:#?}", example_coin_y);
+        // let example_coin_y = sui_client
+        //     .coin_read_api()
+        //     .get_coin_metadata(
+        //         format!("0x{}", markets[9].coin_y.to_canonical_string())
+        //     )
+        //     .await?;
+
+        // println!("coin_y: {:#?}", example_coin_y);
+
+        let mut markets = Vec::new();
+
+        for pool_created_event in pool_created_events {
+            let parsed_json = &pool_created_event.parsed_json;
+            if let (
+                Value::String(coin_x_value), 
+                Value::String(coin_y_value), 
+                Value::String(pool_id_value)
+            ) = 
+                (
+                    parsed_json.get("coin_type_a").context("Failed to get coin_type_a for a CetusMarket")?,
+                    parsed_json.get("coin_type_b").context("Failed to get coin_type_b for a CetusMarket")?,
+                    parsed_json.get("pool_id").context("Failed to get pool_id for a CetusMarket")?
+                ) {
+                    let coin_x = StructTag::from_str(&format!("0x{}", coin_x_value))?;
+                    let coin_y = StructTag::from_str(&format!("0x{}", coin_y_value))?;
+                    let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
+                    let coin_x_price = U64F64::from_bits(
+                        u128::from_str(
+                            if let SuiMoveValue::String(str_value) = 
+                                get_fields_from_object_response(
+                                    sui_client
+                                        .read_api()
+                                        .get_object_with_options(
+                                            pool_id, 
+                                            SuiObjectDataOptions::full_content()
+                                        )
+                                        .await?
+                                )?
+                                .get("current_sqrt_price")
+                                .context("Missing field current_sqrt_price.")? {
+                                    str_value
+                                } else {
+                                    return Err(anyhow!("current_sqrt_price field does not match SuiMoveValue::String value."));
+                                }
+                        )?
+                    );
+
+                    let (coin_y_price, overflowed) = U64F64::from_num(1).overflowing_div(coin_x_price);
+
+                    markets.push(
+                        CetusMarket {
+                            coin_x,
+                            coin_y,
+                            pool_id,
+                            coin_x_price,
+                            coin_y_price,
+                        }
+                    );
+                } else {
+                    return Err(anyhow!("Failed to match pattern."));
+                }
+        }
+
+        println!("{:#?}", markets);
+
 
         Ok(())
     }
@@ -128,8 +183,8 @@ struct CetusMarket {
     coin_x: StructTag,
     coin_y: StructTag,
     pool_id: ObjectID,
-    // price_x: FixedU128<U64>, // In terms of y
-    // price_y: FixedU128<U64>, // In terms of x
+    coin_x_price: U64F64, // In terms of y
+    coin_y_price: U64F64, // In terms of x
 }
 
 // We'll need to deal with the math on this side
