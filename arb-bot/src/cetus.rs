@@ -1,9 +1,9 @@
-use std::str::FromStr;
+use std::{str::FromStr, slice::ChunksExact};
 use std::cmp;
 use async_trait::async_trait;
 use anyhow::{anyhow, Context};
 
-use futures::TryStreamExt;
+use futures::{future, TryStreamExt};
 use page_turner::PageTurner;
 use serde_json::Value;
 use fixed::{types::{U64F64}, ParseFixedError};
@@ -13,7 +13,7 @@ use custom_sui_sdk::{
     apis::QueryEventsRequest
 };
 
-use sui_sdk::types::base_types::{ObjectID, ObjectType};
+use sui_sdk::types::{base_types::{ObjectID, ObjectType}, governance::STAKING_POOL_MODULE_NAME};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponseQuery, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiParsedMoveObject};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
  
@@ -134,36 +134,36 @@ impl Exchange for Cetus {
                     let coin_x = StructTag::from_str(&format!("0x{}", coin_x_value))?;
                     let coin_y = StructTag::from_str(&format!("0x{}", coin_y_value))?;
                     let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
-                    let coin_x_price = U64F64::from_bits(
-                        u128::from_str(
-                            if let SuiMoveValue::String(str_value) = 
-                                get_fields_from_object_response(
-                                    sui_client
-                                        .read_api()
-                                        .get_object_with_options(
-                                            pool_id, 
-                                            SuiObjectDataOptions::full_content()
-                                        )
-                                        .await?
-                                )?
-                                .get("current_sqrt_price")
-                                .context("Missing field current_sqrt_price.")? {
-                                    str_value
-                                } else {
-                                    return Err(anyhow!("current_sqrt_price field does not match SuiMoveValue::String value."));
-                                }
-                        )?
-                    );
+                    // let coin_x_price = U64F64::from_bits(
+                    //     u128::from_str(
+                    //         if let SuiMoveValue::String(str_value) = 
+                    //             get_fields_from_object_response(
+                    //                 sui_client
+                    //                     .read_api()
+                    //                     .get_object_with_options(
+                    //                         pool_id, 
+                    //                         SuiObjectDataOptions::full_content()
+                    //                     )
+                    //                     .await?
+                    //             )?
+                    //             .get("current_sqrt_price")
+                    //             .context("Missing field current_sqrt_price.")? {
+                    //                 str_value
+                    //             } else {
+                    //                 return Err(anyhow!("current_sqrt_price field does not match SuiMoveValue::String value."));
+                    //             }
+                    //     )?
+                    // );
 
-                    let (coin_y_price, overflowed) = U64F64::from_num(1).overflowing_div(coin_x_price);
+                    // let (coin_y_price, overflowed) = U64F64::from_num(1).overflowing_div(coin_x_price);
 
                     markets.push(
                         CetusMarket {
                             coin_x,
                             coin_y,
                             pool_id,
-                            coin_x_price,
-                            coin_y_price,
+                            coin_x_price: None,
+                            coin_y_price: None,
                         }
                     );
                 } else {
@@ -171,11 +171,19 @@ impl Exchange for Cetus {
                 }
         }
 
-        println!("{:#?}", markets);
+        // // println!("{:#?}", markets);
+        // let pool_ids = markets
+        //     .iter()
+        //     .map(|market| market.pool_id)
+        //     .collect::<Vec<ObjectID>>();
+        
+        // println!("# pool_ids {}", pool_ids.len());
 
+        // let pools_fields = CetusMarket::get_markets_info(sui_client, pool_ids).await?;
 
         Ok(())
     }
+
 }
 
 #[derive(Debug)]
@@ -183,9 +191,57 @@ struct CetusMarket {
     coin_x: StructTag,
     coin_y: StructTag,
     pool_id: ObjectID,
-    coin_x_price: U64F64, // In terms of y
-    coin_y_price: U64F64, // In terms of x
+    coin_x_price: Option<U64F64>, // In terms of y. x / y
+    coin_y_price: Option<U64F64>, // In terms of x. y / x
 }
+
+const OBJECT_REQUEST_LIMIT: usize = 50;
+
+impl CetusMarket {
+    // We're getting the fields
+    // WE could rename this and make it a bit more general
+    // async fn get_objects_fields
+    async fn get_markets_info(sui_client: &SuiClient, pool_ids: Vec<ObjectID>) -> Result<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
+        // 50 Object Requests Limit
+        // Make requests for pool_ids in batches of 50
+        let chunked_pool_ids = pool_ids.chunks(OBJECT_REQUEST_LIMIT);
+
+        let chunked_pool_object_responses = future::try_join_all(
+            chunked_pool_ids
+            .map(|pool_ids| {
+                async {
+                    let pool_object_responses = sui_client
+                    .read_api()
+                    .multi_get_object_with_options(
+                        pool_ids.to_vec(),
+                        SuiObjectDataOptions::full_content()
+                    )
+                    .await?;
+
+                    let pool_fields = pool_object_responses
+                        .into_iter()
+                        .map(|pool_object_response| {
+                            get_fields_from_object_response(pool_object_response)
+                        })
+                        .collect::<Result<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
+
+                    Ok::<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error>(pool_fields)
+                }
+            })
+        )
+        .await?;
+
+        let pool_object_responses = chunked_pool_object_responses
+            .into_iter()
+            .flatten()
+            .collect::<Vec<BTreeMap<String, SuiMoveValue>>>();
+
+        Ok(pool_object_responses)
+    }
+}
+
+
+// Helpers
 
 // We'll need to deal with the math on this side
 // Price is simple matter of ((current_sqrt_price / (2^64))^2) * (10^(a - b))
