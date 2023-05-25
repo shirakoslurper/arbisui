@@ -5,10 +5,8 @@ use custom_sui_sdk::SuiClient;
 use futures::StreamExt;
 
 pub mod markets;
-pub mod flameswap;
 pub mod cetus;
 pub use crate::markets::*;
-pub use crate::flameswap::*;
 pub use crate::cetus::*;
 
 pub struct RunData {

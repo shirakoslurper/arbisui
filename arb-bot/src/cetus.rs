@@ -1,27 +1,24 @@
-use std::{str::FromStr, slice::ChunksExact};
-use std::cmp;
+use std::{str::FromStr};
 use async_trait::async_trait;
 use anyhow::{anyhow, Context};
 
 use futures::{future, TryStreamExt};
 use page_turner::PageTurner;
 use serde_json::Value;
-use fixed::{types::{U64F64}, ParseFixedError};
+use fixed::{types::{U64F64}};
 
 use custom_sui_sdk::{
     SuiClient,
     apis::QueryEventsRequest
 };
 
-use sui_sdk::types::{base_types::{ObjectID, ObjectType}, governance::STAKING_POOL_MODULE_NAME};
-use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponseQuery, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiParsedMoveObject};
-use sui_sdk::types::dynamic_field::DynamicFieldInfo;
+use sui_sdk::types::{base_types::{ObjectID}};
+use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue};
  
-use move_core_types::language_storage::{StructTag, TypeTag};
-use std::fmt::format;
+use move_core_types::language_storage::StructTag;
 use std::collections::BTreeMap;
 
-use crate::markets::Exchange;
+use crate::markets::{Exchange, Market};
 
 const EXCHANGE_ADDRESS: &str = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb";
 const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
@@ -36,7 +33,7 @@ impl Exchange for Cetus {
     }
 
     // Cetus has us query for events
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<(), anyhow::Error> {
+    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
 
         // TODO: Write page turner
         let pool_created_events = sui_client
@@ -57,67 +54,7 @@ impl Exchange for Cetus {
             .try_collect::<Vec<SuiEvent>>()
             .await?;
 
-        // let markets = pool_created_events
-        //     .into_iter()
-        //     .map(|pool_created_event| {
-        //         let parsed_json = &pool_created_event.parsed_json;
-        //         if let (
-        //             Value::String(coin_x_value), 
-        //             Value::String(coin_y_value), 
-        //             Value::String(pool_id_value)
-        //         ) = 
-        //             (
-        //                 parsed_json.get("coin_type_a").context("Failed to get coin_type_a for a CetusMarket")?,
-        //                 parsed_json.get("coin_type_b").context("Failed to get coin_type_b for a CetusMarket")?,
-        //                 parsed_json.get("pool_id").context("Failed to get pool_id for a CetusMarket")?
-        //             ) {
-        //                 let coin_x = StructTag::from_str(&format!("0x{}", coin_x_value))?;
-        //                 let coin_y = StructTag::from_str(&format!("0x{}", coin_y_value))?;
-        //                 let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
-
-        //                 Ok(
-        //                     CetusMarket {
-        //                         coin_x,
-        //                         coin_y,
-        //                         pool_id,
-        //                     }
-        //                 )
-        //             } else {
-        //                 Err(anyhow!("Failed to match pattern."))
-        //             }
-        //     })
-        //     .collect::<Result<Vec<CetusMarket>, anyhow::Error>>()?;
-
-        // let example_pool = sui_client
-        //     .read_api()
-        //     .get_object_with_options(
-        //         markets[9].pool_id,
-        //         SuiObjectDataOptions::full_content()
-        //     )
-        //     .await?;
-
-        // let example_fields = get_fields_from_object_response(example_pool)?;
-        // println!("current_sqrt_price: {:#?}", example_fields.get("current_sqrt_price").context("Could not get current_sqrt_price from fields")?);
-
-        // let example_coin_x = sui_client
-        //     .coin_read_api()
-        //     .get_coin_metadata(
-        //         format!("0x{}", markets[9].coin_x.to_canonical_string())
-        //     )
-        //     .await?;
-
-        // println!("coin_x: {:#?}", example_coin_x);
-
-        // let example_coin_y = sui_client
-        //     .coin_read_api()
-        //     .get_coin_metadata(
-        //         format!("0x{}", markets[9].coin_y.to_canonical_string())
-        //     )
-        //     .await?;
-
-        // println!("coin_y: {:#?}", example_coin_y);
-
-        let mut markets = Vec::new();
+        let mut markets: Vec<Box<dyn Market>> = Vec::new();
 
         for pool_created_event in pool_created_events {
             let parsed_json = &pool_created_event.parsed_json;
@@ -134,44 +71,26 @@ impl Exchange for Cetus {
                     let coin_x = StructTag::from_str(&format!("0x{}", coin_x_value))?;
                     let coin_y = StructTag::from_str(&format!("0x{}", coin_y_value))?;
                     let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
-                    // let coin_x_price = U64F64::from_bits(
-                    //     u128::from_str(
-                    //         if let SuiMoveValue::String(str_value) = 
-                    //             get_fields_from_object_response(
-                    //                 sui_client
-                    //                     .read_api()
-                    //                     .get_object_with_options(
-                    //                         pool_id, 
-                    //                         SuiObjectDataOptions::full_content()
-                    //                     )
-                    //                     .await?
-                    //             )?
-                    //             .get("current_sqrt_price")
-                    //             .context("Missing field current_sqrt_price.")? {
-                    //                 str_value
-                    //             } else {
-                    //                 return Err(anyhow!("current_sqrt_price field does not match SuiMoveValue::String value."));
-                    //             }
-                    //     )?
-                    // );
 
-                    // let (coin_y_price, overflowed) = U64F64::from_num(1).overflowing_div(coin_x_price);
+                    // println!("{:#?}", coin_y);
 
                     markets.push(
-                        CetusMarket {
-                            coin_x,
-                            coin_y,
-                            pool_id,
-                            coin_x_price: None,
-                            coin_y_price: None,
-                        }
+                        Box::new(
+                            CetusMarket {
+                                coin_x,
+                                coin_y,
+                                pool_id,
+                                coin_x_price: None,
+                                coin_y_price: None,
+                            }
+                        )
                     );
                 } else {
                     return Err(anyhow!("Failed to match pattern."));
                 }
         }
 
-        // // println!("{:#?}", markets);
+        // println!("{:#?}", markets);
         // let pool_ids = markets
         //     .iter()
         //     .map(|market| market.pool_id)
@@ -181,7 +100,7 @@ impl Exchange for Cetus {
 
         // let pools_fields = CetusMarket::get_markets_info(sui_client, pool_ids).await?;
 
-        Ok(())
+        Ok(markets)
     }
 
 }
@@ -238,8 +157,46 @@ impl CetusMarket {
 
         Ok(pool_object_responses)
     }
+
+    fn update_market(&mut self, fields: &BTreeMap<String, SuiMoveValue>) -> Result <(), anyhow::Error> {
+        let coin_x_price = U64F64::from_bits(
+            u128::from_str(
+                if let SuiMoveValue::String(str_value) = fields
+                    .get("current_sqrt_price")
+                    .context("Missing field current_sqrt_price.")? {
+                        str_value
+                    } else {
+                        return Err(anyhow!("current_sqrt_price field does not match SuiMoveValue::String value."));
+                    }
+            )?
+        );
+
+        let coin_y_price = U64F64::from_num(1) / coin_x_price;
+        
+        self.coin_x_price = Some(coin_x_price);
+        self.coin_y_price = Some(coin_y_price);
+
+        Ok(())
+    }
 }
 
+impl Market for CetusMarket {
+    fn coin_x(&self) -> &StructTag {
+        &self.coin_x
+    }
+
+    fn coin_y(&self) -> &StructTag {
+        &self.coin_y
+    }
+
+    fn coin_x_price(&self) -> Option<U64F64> {
+        self.coin_x_price
+    }
+
+    fn coin_y_price(&self) -> Option<U64F64> {
+        self.coin_y_price
+    }
+}
 
 // Helpers
 
