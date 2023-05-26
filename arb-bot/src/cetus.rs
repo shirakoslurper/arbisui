@@ -15,7 +15,7 @@ use custom_sui_sdk::{
 use sui_sdk::types::{base_types::{ObjectID}};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue};
  
-use move_core_types::language_storage::StructTag;
+use move_core_types::language_storage::{StructTag, TypeTag};
 use std::collections::BTreeMap;
 
 use crate::markets::{Exchange, Market};
@@ -68,8 +68,8 @@ impl Exchange for Cetus {
                     parsed_json.get("coin_type_b").context("Failed to get coin_type_b for a CetusMarket")?,
                     parsed_json.get("pool_id").context("Failed to get pool_id for a CetusMarket")?
                 ) {
-                    let coin_x = StructTag::from_str(&format!("0x{}", coin_x_value))?;
-                    let coin_y = StructTag::from_str(&format!("0x{}", coin_y_value))?;
+                    let coin_x = TypeTag::from_str(&format!("0x{}", coin_x_value))?;
+                    let coin_y = TypeTag::from_str(&format!("0x{}", coin_y_value))?;
                     let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
 
                     // println!("{:#?}", coin_y);
@@ -107,8 +107,8 @@ impl Exchange for Cetus {
 
 #[derive(Debug)]
 struct CetusMarket {
-    coin_x: StructTag,
-    coin_y: StructTag,
+    coin_x: TypeTag,
+    coin_y: TypeTag,
     pool_id: ObjectID,
     coin_x_price: Option<U64F64>, // In terms of y. x / y
     coin_y_price: Option<U64F64>, // In terms of x. y / x
@@ -181,11 +181,11 @@ impl CetusMarket {
 }
 
 impl Market for CetusMarket {
-    fn coin_x(&self) -> &StructTag {
+    fn coin_x(&self) -> &TypeTag {
         &self.coin_x
     }
 
-    fn coin_y(&self) -> &StructTag {
+    fn coin_y(&self) -> &TypeTag {
         &self.coin_y
     }
 
