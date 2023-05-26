@@ -21,7 +21,7 @@ pub async fn loop_blocks(run_data: RunData, exchanges: Vec<&impl Exchange>) -> R
         .map(|exchange| {
             Ok(
                 EventFilter::Package(
-                    exchange.package_id()?
+                    exchange.package_id().clone()
                 )
             )
         })

@@ -10,11 +10,12 @@ use sui_sdk::types::base_types::ObjectID;
 use move_core_types::language_storage::TypeTag;
 
 const SUI_COIN_ADDRESS: &str = "0x0000000000000000000000000000000000000000000000000000000000000002";
+const CETUS_EXCHANGE_ADDRESS: &str = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
 
-    let cetus = Cetus;
+    let cetus = Cetus::from_str(CETUS_EXCHANGE_ADDRESS);
 
     let run_data = RunData {
         sui_client: SuiClientBuilder::default()

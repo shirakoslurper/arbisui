@@ -69,7 +69,10 @@ impl DirectedMarketGraph<'data> {
         Ok(graph);
     }
 
-    // 
+    // The callee of update may not necessarily (likely won't actually) 
+    // maintain the order of vertex pairs we get by calling <GraphMap>.all_edges()
+    // We'll need to identify the vertex pairs in the parameters we pass
+    // Hmmm, we could also 
     pub fn update(&mut self, ) -> Result<(), anyhow::Error> {
 
     }
