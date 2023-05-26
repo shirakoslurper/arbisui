@@ -7,12 +7,14 @@ use move_core_types::language_storage::TypeTag;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::visit::{Dfs, Walker};
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
+use sui_sdk::types::base_types::ObjectID;
 use sui_sdk::rpc_types::SuiMoveValue;
 
 use crate::markets::*;
+use crate::hash::coin_pair_hash;
 
 // The DirectedMarketGraph should provide pure structure
 
@@ -90,14 +92,21 @@ impl <'data> DirectedMarketGraph<'data> {
     // We'll need to identify the vertex pairs in the parameters we pass
     // Make more sense to iterate through all edges
     // But markets fields to edges is one to many
-    pub fn update_markets_with_fields(&mut self, markets_fields: &Vec<BTreeMap<String, SuiMoveValue>>) -> Result<(), anyhow::Error> {
+    pub fn update_markets_with_fields(&mut self, pool_id_to_fields: &HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>) -> Result<(), anyhow::Error> {
         self
             .graph
             .all_edges_mut()
-            .for_each(|(origin, destination, weight)| {
-                
-            });
-
+            .try_for_each(|(origin_coin, destination_coin, markets_infos)| {
+                markets_infos
+                    .iter_mut()
+                    .try_for_each(|market_info| {
+                        let pool_id = market_info.market.pool_id();
+                        let fields = pool_id_to_fields.get(pool_id).context("Missing fields for pool.")?;
+                        // *Rc::get_mut(&mut market_info.market).update_with_fields(fields);
+                        Ok::<(),  anyhow::Error>(())
+                    })?;
+                Ok::<(),  anyhow::Error>(())
+            })?;
         Ok(())
     }
 }

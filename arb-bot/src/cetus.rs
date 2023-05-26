@@ -12,7 +12,7 @@ use custom_sui_sdk::{
     apis::QueryEventsRequest
 };
 
-use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError}};
+use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError}, object::Object};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue};
  
 use move_core_types::language_storage::{StructTag, TypeTag};
@@ -20,7 +20,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use crate::markets::{Exchange, Market};
-use crate::hash::coin_pair_hash;
 
 const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
 const POOLS: &str = "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0";
@@ -119,28 +118,19 @@ impl Exchange for Cetus {
     }
 
     // Lets return a map instead
-    async fn get_markets_fields(&self, sui_client: &SuiClient, markets: &Vec<impl Market>) -> Result<HashMap<u64, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
-        let coin_pair_hash_and_pool_ids = markets
+    async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &Vec<impl Market>) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
+        let pool_ids = markets
             .iter()
             .map(|market| {
-                (coin_pair_hash(market.coin_x(), market.coin_y()), market.pool_id().clone())
+                market.pool_id().clone()
             })
-            .collect::<Vec<(u64, ObjectID)>>();
-// 
-        // let coin_pair_hash_and_pool_ids_chunks = coin_pair_hash_and_pool_ids.chunks(OBJECT_REQUEST_LIMIT);
-
-        // let chunked_split_markets = split_markets.chunks(OBJECT_REQUEST_LIMIT);
+            .collect::<Vec<ObjectID>>();
 
         let chunked_pool_object_responses = future::try_join_all(
-            coin_pair_hash_and_pool_ids
+            pool_ids
             .chunks(OBJECT_REQUEST_LIMIT)
-            .map(|coin_pair_hash_and_pool_ids_chunk| {
+            .map(|pool_ids| {
                 async {
-                    let (coin_pair_hashes, pool_ids): (Vec<_>, Vec<_>) = coin_pair_hash_and_pool_ids_chunk
-                        .iter()
-                        .cloned()
-                        .unzip();
-
                     let pool_object_responses = sui_client
                         .read_api()
                         .multi_get_object_with_options(
@@ -149,22 +139,20 @@ impl Exchange for Cetus {
                         )
                         .await?;
 
-                    let pool_fields = pool_object_responses
+                    let fields = pool_object_responses
                         .into_iter()
                         .map(|pool_object_response| {
                             get_fields_from_object_response(pool_object_response)
                         })
                         .collect::<Result<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
 
-                    let coin_pair_hash_to_pool_fields = coin_pair_hashes
-                        .into_iter()
-                        .zip(
-                            pool_fields.into_iter()
-                        )
-                        .collect::<HashMap<u64, BTreeMap<String, SuiMoveValue>>>();
-                    
+                    let pool_id_to_fields = pool_ids
+                        .iter()
+                        .cloned()
+                        .zip(fields.into_iter())
+                        .collect::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>>();
 
-                    Ok::<HashMap<u64, BTreeMap<String, SuiMoveValue>>, anyhow::Error>(coin_pair_hash_to_pool_fields)
+                    Ok::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>(pool_id_to_fields)
                 }
             })
         )
@@ -173,7 +161,7 @@ impl Exchange for Cetus {
         let pool_object_responses = chunked_pool_object_responses
             .into_iter()
             .flatten()
-            .collect::<HashMap<u64, BTreeMap<String, SuiMoveValue>>>();
+            .collect::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>>();
 
         Ok(pool_object_responses)
     }
