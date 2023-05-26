@@ -1,17 +1,15 @@
 use move_core_types::language_storage::TypeTag;
-use sui_sdk::types::{base_types::ObjectID, object::Object};
+use sui_sdk::types::base_types::ObjectID;
 use custom_sui_sdk::SuiClient;
 use async_trait::async_trait;
-use petgraph::graphmap::DiGraphMap;
-use petgraph::visit::Dfs;
-use std::collections::{HashMap, BTreeMap};
-use futures::future;
 
-use petgraph::visit::Walker;
+use std::collections::{BTreeMap, HashMap};
 
-use fixed::{types::{U64F64}};
+use fixed::types::U64F64;
 
+use std::rc::Rc;
 use sui_sdk::rpc_types::SuiMoveValue;
+
 
 // use move_core_types::language_storage::StructTag;
 // use anyhow::Result;
@@ -19,8 +17,8 @@ use sui_sdk::rpc_types::SuiMoveValue;
 #[async_trait]
 pub trait Exchange: Send + Sync {
     fn package_id(&self) -> &ObjectID;
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error>; // -> Result<Vec<Box<dyn Market>>>
-    async fn get_markets_fields(&self, sui_client: &SuiClient, markets: &Vec<impl Market>) -> Result<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error>;
+    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Rc<dyn Market>>, anyhow::Error>; // -> Result<Vec<Box<dyn Market>>>
+    async fn get_markets_fields(&self, sui_client: &SuiClient, markets: &Vec<impl Market>) -> Result<HashMap<u64, BTreeMap<String, SuiMoveValue>>, anyhow::Error>;
 }
 
 // Provides basic market details and call generation

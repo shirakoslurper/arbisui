@@ -16,9 +16,11 @@ use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError}};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue};
  
 use move_core_types::language_storage::{StructTag, TypeTag};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::rc::Rc;
 
 use crate::markets::{Exchange, Market};
+use crate::hash::coin_pair_hash;
 
 const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
 const POOLS: &str = "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0";
@@ -56,7 +58,7 @@ impl Exchange for Cetus {
     }
 
     // Cetus has us query for events
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
+    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Rc<dyn Market>>, anyhow::Error> {
 
         // TODO: Write page turner
         let pool_created_events = sui_client
@@ -77,7 +79,7 @@ impl Exchange for Cetus {
             .try_collect::<Vec<SuiEvent>>()
             .await?;
 
-        let mut markets: Vec<Box<dyn Market>> = Vec::new();
+        let mut markets: Vec<Rc<dyn Market>> = Vec::new();
 
         for pool_created_event in pool_created_events {
             let parsed_json = &pool_created_event.parsed_json;
@@ -98,7 +100,7 @@ impl Exchange for Cetus {
                     // println!("{:#?}", coin_y);
 
                     markets.push(
-                        Box::new(
+                        Rc::new(
                             CetusMarket {
                                 coin_x,
                                 coin_y,
@@ -116,29 +118,36 @@ impl Exchange for Cetus {
         Ok(markets)
     }
 
-    async fn get_markets_fields(&self, sui_client: &SuiClient, markets: &Vec<impl Market>) -> Result<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
-        // 50 Object Requests Limit
-        // Make requests for pool_ids in batches of 50
-        let pool_ids = markets
+    // Lets return a map instead
+    async fn get_markets_fields(&self, sui_client: &SuiClient, markets: &Vec<impl Market>) -> Result<HashMap<u64, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
+        let coin_pair_hash_and_pool_ids = markets
             .iter()
             .map(|market| {
-                market.pool_id().clone()
+                (coin_pair_hash(market.coin_x(), market.coin_y()), market.pool_id().clone())
             })
-            .collect::<Vec<ObjectID>>();
+            .collect::<Vec<(u64, ObjectID)>>();
+// 
+        // let coin_pair_hash_and_pool_ids_chunks = coin_pair_hash_and_pool_ids.chunks(OBJECT_REQUEST_LIMIT);
 
-        let chunked_pool_ids = pool_ids.chunks(OBJECT_REQUEST_LIMIT);
+        // let chunked_split_markets = split_markets.chunks(OBJECT_REQUEST_LIMIT);
 
         let chunked_pool_object_responses = future::try_join_all(
-            chunked_pool_ids
-            .map(|pool_ids| {
+            coin_pair_hash_and_pool_ids
+            .chunks(OBJECT_REQUEST_LIMIT)
+            .map(|coin_pair_hash_and_pool_ids_chunk| {
                 async {
+                    let (coin_pair_hashes, pool_ids): (Vec<_>, Vec<_>) = coin_pair_hash_and_pool_ids_chunk
+                        .iter()
+                        .cloned()
+                        .unzip();
+
                     let pool_object_responses = sui_client
-                    .read_api()
-                    .multi_get_object_with_options(
-                        pool_ids.to_vec(),
-                        SuiObjectDataOptions::full_content()
-                    )
-                    .await?;
+                        .read_api()
+                        .multi_get_object_with_options(
+                            pool_ids.to_vec(),
+                            SuiObjectDataOptions::full_content()
+                        )
+                        .await?;
 
                     let pool_fields = pool_object_responses
                         .into_iter()
@@ -147,7 +156,15 @@ impl Exchange for Cetus {
                         })
                         .collect::<Result<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
 
-                    Ok::<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error>(pool_fields)
+                    let coin_pair_hash_to_pool_fields = coin_pair_hashes
+                        .into_iter()
+                        .zip(
+                            pool_fields.into_iter()
+                        )
+                        .collect::<HashMap<u64, BTreeMap<String, SuiMoveValue>>>();
+                    
+
+                    Ok::<HashMap<u64, BTreeMap<String, SuiMoveValue>>, anyhow::Error>(coin_pair_hash_to_pool_fields)
                 }
             })
         )
@@ -156,13 +173,13 @@ impl Exchange for Cetus {
         let pool_object_responses = chunked_pool_object_responses
             .into_iter()
             .flatten()
-            .collect::<Vec<BTreeMap<String, SuiMoveValue>>>();
+            .collect::<HashMap<u64, BTreeMap<String, SuiMoveValue>>>();
 
         Ok(pool_object_responses)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct CetusMarket {
     coin_x: TypeTag,
     coin_y: TypeTag,

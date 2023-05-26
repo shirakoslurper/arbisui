@@ -30,7 +30,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
     
     
-    // let market_graph = MarketGraph::new(&run_data.sui_client, &exchanges, &base_coin).await?;
+    // let market_graph = DirectedMarketGraph::new(&run_data.sui_client, &exchanges, &base_coin).await?;
     // println!("{:#?}", market_graph.graph.all_edges());
     // loop_blocks(run_data, vec![&flameswap]).await?;
 
