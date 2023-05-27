@@ -1,4 +1,4 @@
-use std::{str::FromStr};
+use std::str::FromStr;
 use async_trait::async_trait;
 use anyhow::{anyhow, Context};
 
@@ -20,8 +20,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::markets::{Exchange, Market};
 
-const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
-const POOLS: &str = "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0";
+// const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
+// const POOLS: &str = "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0";
 
 const OBJECT_REQUEST_LIMIT: usize = 50;
 
@@ -207,6 +207,9 @@ impl Market for CetusMarket {
         self.coin_x_price = Some(coin_x_price);
         self.coin_y_price = Some(coin_y_price);
 
+        // println!("coin_x<{}>: {}", self.coin_x, self.coin_x_price.unwrap());
+        // println!("coin_y<{}>: {}\n", self.coin_y, self.coin_y_price.unwrap());
+
         Ok(())
     }
 
@@ -224,7 +227,6 @@ fn get_fields_from_object_response(response: SuiObjectResponse) -> Result<BTreeM
         if let Some(parsed_data) = object_data.content {
             if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
                 if let SuiMoveStruct::WithFields(field_map) = parsed_move_object.fields {
-                    // println!("{:#?}", field_map.get("current_sqrt_price").context("Could not get current_sqrt_price from fields")?);
                     Ok(field_map)
                 } else {
                     Err(anyhow!("Does not match the SuiMoveStruct::WithFields variant"))
