@@ -18,6 +18,7 @@ use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, EventFilter, S
 use move_core_types::language_storage::{StructTag, TypeTag};
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::markets::{Exchange, Market};
 
@@ -57,7 +58,7 @@ impl Exchange for Cetus {
     }
 
     // Cetus has us query for events
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Rc<dyn Market>>, anyhow::Error> {
+    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Rc<RefCell<dyn Market>>>, anyhow::Error> {
 
         // TODO: Write page turner
         let pool_created_events = sui_client
@@ -78,7 +79,7 @@ impl Exchange for Cetus {
             .try_collect::<Vec<SuiEvent>>()
             .await?;
 
-        let mut markets: Vec<Rc<dyn Market>> = Vec::new();
+        let mut markets: Vec<Rc<RefCell<dyn Market>>> = Vec::new();
 
         for pool_created_event in pool_created_events {
             let parsed_json = &pool_created_event.parsed_json;
@@ -96,17 +97,32 @@ impl Exchange for Cetus {
                     let coin_y = TypeTag::from_str(&format!("0x{}", coin_y_value))?;
                     let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
 
-                    // println!("{:#?}", coin_y);
+                    // // println!("{:#?}", coin_y);
+                    // let sized_rc: Rc<RefCell<CetusMarket>> = Rc::new(
+                    //     RefCell::new(
+                    //         CetusMarket {
+                    //             coin_x,
+                    //             coin_y,
+                    //             pool_id,
+                    //             coin_x_price: None,
+                    //             coin_y_price: None,
+                    //         }
+                    //     )
+                    // );
+
+                    // let unsized_rc= Rc::clone(&sized_rc) as Rc<RefCell<dyn Market>>;
 
                     markets.push(
                         Rc::new(
-                            CetusMarket {
-                                coin_x,
-                                coin_y,
-                                pool_id,
-                                coin_x_price: None,
-                                coin_y_price: None,
-                            }
+                            RefCell::new(
+                                CetusMarket {
+                                    coin_x,
+                                    coin_y,
+                                    pool_id,
+                                    coin_x_price: None,
+                                    coin_y_price: None,
+                                }
+                            )
                         )
                     );
                 } else {
