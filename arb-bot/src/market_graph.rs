@@ -40,7 +40,7 @@ impl <'data> MarketGraph<'data> {
         markets
             .iter()
             .try_for_each(| market| {
-                let coin_x_node = market.coin_y();
+                let coin_x_node = market.coin_x();
                 let coin_y_node = market.coin_y();
 
                 if !graph.contains_edge(coin_x_node, coin_y_node) {
