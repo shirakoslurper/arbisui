@@ -2,8 +2,6 @@ use anyhow::Context;
 
 use dyn_clone::DynClone;
 
-use fixed::types::U64F64;
-
 use move_core_types::language_storage::TypeTag;
 
 use petgraph::graphmap::{DiGraphMap};

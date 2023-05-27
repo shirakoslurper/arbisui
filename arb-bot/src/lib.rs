@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sui_sdk::{rpc_types::EventFilter, types::{event::Event, object::Object}};
+use sui_sdk::rpc_types::EventFilter;
 use custom_sui_sdk::SuiClient;
 // use sui_sdk::wallet_context::WalletContext;
 use futures::StreamExt;

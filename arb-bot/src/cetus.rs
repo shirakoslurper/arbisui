@@ -5,7 +5,7 @@ use anyhow::{anyhow, Context};
 use futures::{future, TryStreamExt};
 use page_turner::PageTurner;
 use serde_json::Value;
-use fixed::{types::{U64F64}};
+use fixed::types::U64F64;
 
 use custom_sui_sdk::{
     SuiClient,
@@ -114,7 +114,7 @@ impl Exchange for Cetus {
     }
 
     // Lets return a map instead
-    async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &Vec<Box<dyn Market>>) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
+    async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
         let pool_ids = markets
             .iter()
             .map(|market| {

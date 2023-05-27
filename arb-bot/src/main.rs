@@ -1,13 +1,16 @@
-use arb_bot::Exchange;
 use custom_sui_sdk::SuiClientBuilder;
 use sui_sdk::SUI_COIN_TYPE;
 
 use arb_bot::*;
 
+use anyhow::Context;
+
+use std::cmp;
 use std::str::FromStr;
-use sui_sdk::types::base_types::ObjectID;
 
 use move_core_types::language_storage::TypeTag;
+
+use fixed::types::U64F64;
 
 use petgraph::algo::all_simple_paths;
 
@@ -57,7 +60,54 @@ async fn main() -> Result<(), anyhow::Error> {
 
     all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(4))
         .for_each(|path: Vec<&TypeTag>| {
-            println!("{:?}", path);
+            // println!("SIMPLE CYCLE: ");
+            // path
+            //     .iter()
+            //     .for_each(|coin| {
+            //         println!("{}", *coin);
+            //     });
+
+            let mut best_path_rate = U64F64::from_num(1);
+
+            for pair in path[..].windows(2) {
+                let orig = pair[0];
+                let dest = pair[1];
+
+                let markets = market_graph
+                    .graph
+                    .edge_weight(orig, dest)
+                    .context("Missing edge weight")
+                    .unwrap();
+
+                let directional_rates = markets
+                    .iter()
+                    .map(|market_info| {
+                        let coin_x = market_info.market.coin_x();
+                        let coin_y = market_info.market.coin_y();
+                        if (coin_x, coin_y) == (orig, dest) {
+                            market_info.market.coin_x_price().unwrap()
+                        } else if (coin_y, coin_x) == (orig, dest){
+                            market_info.market.coin_y_price().unwrap()
+                        } else {
+                            panic!("coin pair does not match");
+                        }
+                    });
+
+                let best_leg_rate = directional_rates
+                    .fold(U64F64::from_num(0), |max, current| {
+                        cmp::max(max, current)
+                    });
+
+                // println!("{}", orig);
+                // println!("    -> {}:", dest);
+                // println!("    leg rate: {}", best_leg_rate);s
+
+                best_path_rate = best_path_rate * best_leg_rate;
+            }
+
+            println!("PATH RATE: {}", best_path_rate);
+
+            // println!("\n");
         });
     
     // let market_graph = DirectedMarketGraph::new(&run_data.sui_client, &exchanges, &base_coin).await?;
