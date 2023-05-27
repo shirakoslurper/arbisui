@@ -58,7 +58,6 @@ impl Exchange for Cetus {
     // Cetus has us query for events
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
 
-        // TODO: Write page turner
         let pool_created_events = sui_client
             .event_api()
             .pages(
@@ -115,7 +114,7 @@ impl Exchange for Cetus {
     }
 
     // Lets return a map instead
-    async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &Vec<impl Market>) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
+    async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &Vec<Box<dyn Market>>) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
         let pool_ids = markets
             .iter()
             .map(|market| {

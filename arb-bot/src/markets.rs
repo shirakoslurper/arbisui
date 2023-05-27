@@ -16,7 +16,7 @@ use dyn_clone::DynClone;
 pub trait Exchange: Send + Sync {
     fn package_id(&self) -> &ObjectID;
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error>; // -> Result<Vec<Box<dyn Market>>>
-    async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &Vec<impl Market>) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>;
+    async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &Vec<Box<dyn Market>>) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>;
 }
 
 pub trait Market: Send + Sync + DynClone {
