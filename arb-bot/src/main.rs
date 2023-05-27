@@ -57,7 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(4))
         .for_each(|path: Vec<&TypeTag>| {
-            println!("{:#?}", path);
+            println!("{:?}", path);
         });
     
     // let market_graph = DirectedMarketGraph::new(&run_data.sui_client, &exchanges, &base_coin).await?;

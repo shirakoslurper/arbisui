@@ -8,7 +8,6 @@ pub mod markets;
 pub mod market_graph;
 pub mod cetus;
 pub mod hash;
-pub mod simple_cycles;
 pub use crate::markets::*;
 pub use crate::market_graph::*;
 pub use crate::cetus::*;
