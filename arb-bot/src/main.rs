@@ -41,6 +41,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let cetus_markets = cetus.get_all_markets(&run_data.sui_client).await?;
     let turbos_markets = turbos.get_all_markets(&run_data.sui_client).await?;
 
+    // turbos_markets
+    //     .iter()
+    //     .for_each(|market| {
+    //         println!("coin_x: {}\ncoin_y: {}", market.coin_x(), market.coin_y());
+    //     });
+
     let mut markets = vec![];
     // markets.extend(cetus_markets.clone());
     markets.extend(turbos_markets.clone());

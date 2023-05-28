@@ -119,7 +119,7 @@ impl Exchange for Turbos {
             })
             .collect::<Result<Vec<Box<dyn Market>>, anyhow::Error>>()?;
 
-        Ok(vec![])
+        Ok(markets)
     }
 
     // async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
