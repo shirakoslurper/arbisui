@@ -6,7 +6,11 @@ use arb_bot::*;
 use anyhow::Context;
 
 use std::cmp;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+
+use sui_sdk::rpc_types::SuiMoveValue;
+use sui_sdk::types::base_types::ObjectID;
 
 use move_core_types::language_storage::TypeTag;
 
@@ -16,11 +20,13 @@ use petgraph::algo::all_simple_paths;
 
 const SUI_COIN_ADDRESS: &str = "0x0000000000000000000000000000000000000000000000000000000000000002";
 const CETUS_EXCHANGE_ADDRESS: &str = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb";
+const TURBOS_EXCHANGE_ADDRESS: &str = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
 
     let cetus = Cetus::from_str(CETUS_EXCHANGE_ADDRESS)?;
+    let turbos = Turbos::from_str(TURBOS_EXCHANGE_ADDRESS)?;
 
     let run_data = RunData {
         sui_client: SuiClientBuilder::default()
@@ -29,38 +35,55 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?
     };
 
-    // cetus.get_all_markets(&run_data.sui_client).await?;
-
     // let exchanges = vec![cetus];
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
     
-    let markets = cetus.get_all_markets(&run_data.sui_client).await?;
+    let cetus_markets = cetus.get_all_markets(&run_data.sui_client).await?;
+    let turbos_markets = turbos.get_all_markets(&run_data.sui_client).await?;
+
+    let mut markets = vec![];
+    markets.extend(cetus_markets.clone());
+    markets.extend(turbos_markets.clone());
 
     let mut market_graph = MarketGraph::new(&markets)?;
 
-    let pool_id_to_fields = cetus.get_pool_id_to_fields(&run_data.sui_client, &markets).await?;
+    let cetus_pool_id_to_fields = cetus
+        .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
+        .await?
+        .iter()
+        .map(|(pool_id, object_response)| {
+            Ok(
+                (
+                    pool_id.clone(),
+                    sui_sdk_utils::get_fields_from_object_response(object_response)?
+                )
+            )
+        })
+        .collect::<Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
+
+    let turbos_pool_id_to_fields = turbos
+        .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
+        .await?
+        .iter()
+        .map(|(pool_id, object_response)| {
+            Ok(
+                (
+                    pool_id.clone(),
+                    sui_sdk_utils::get_fields_from_object_response(object_response)?
+                )
+            )
+        })
+        .collect::<Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
+
+    let mut pool_id_to_fields = HashMap::new();
+    pool_id_to_fields.extend(cetus_pool_id_to_fields);
+    pool_id_to_fields.extend(turbos_pool_id_to_fields);
 
     market_graph.update_markets_with_fields(&pool_id_to_fields)?;
 
-    // market_graph.graph.all_edges()
-    //     .for_each(|(coin_x, coin_y, markets)| {
-    //         println!("<{}, {}>: {} markets", coin_x, coin_y, markets.len());
-    //     });
-
-    // market_graph.graph.nodes()
-    //     .for_each(|n| {
-    //         println!("{}", n);
-    //     });
-
-
-    // market_graph.graph.neighbors(&base_coin)
-    //     .for_each(|n| {
-    //         println!("{}", n.coin_x());
-    //     });
-
     all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(4))
         .for_each(|path: Vec<&TypeTag>| {
-            // println!("SIMPLE CYCLE: ");
+            println!("SIMPLE CYCLE: ");
             // path
             //     .iter()
             //     .for_each(|coin| {
@@ -98,20 +121,18 @@ async fn main() -> Result<(), anyhow::Error> {
                         cmp::max(max, current)
                     });
 
-                // println!("{}", orig);
-                // println!("    -> {}:", dest);
-                // println!("    leg rate: {}", best_leg_rate);s
+                println!("{}", orig);
+                println!("    -> {}:", dest);
+                println!("    leg rate: {}", best_leg_rate);
 
-                best_path_rate = best_path_rate * best_leg_rate;
+                best_path_rate *= best_leg_rate;
             }
 
             println!("PATH RATE: {}", best_path_rate);
 
-            // println!("\n");
+            println!("\n");
         });
     
-    // let market_graph = DirectedMarketGraph::new(&run_data.sui_client, &exchanges, &base_coin).await?;
-    // println!("{:#?}", market_graph.graph.all_edges());
     // loop_blocks(run_data, vec![&flameswap]).await?;
 
     Ok(())

@@ -7,10 +7,13 @@ use futures::StreamExt;
 pub mod markets;
 pub mod market_graph;
 pub mod cetus;
-pub mod hash;
+pub mod turbos;
+pub mod constants;
+pub mod sui_sdk_utils;
 pub use crate::markets::*;
 pub use crate::market_graph::*;
 pub use crate::cetus::*;
+pub use crate::turbos::*;
 
 pub struct RunData {
     pub sui_client: SuiClient,
@@ -24,7 +27,7 @@ pub async fn loop_blocks(run_data: RunData, exchanges: Vec<&impl Exchange>) -> R
         .map(|exchange| {
             Ok(
                 EventFilter::Package(
-                    exchange.package_id().clone()
+                    *exchange.package_id()
                 )
             )
         })

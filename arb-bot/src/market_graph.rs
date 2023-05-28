@@ -1,11 +1,10 @@
 use anyhow::Context;
 
-use dyn_clone::DynClone;
+
 
 use move_core_types::language_storage::TypeTag;
 
 use petgraph::graphmap::{DiGraphMap};
-use petgraph::visit::{Dfs, Walker};
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -32,7 +31,7 @@ impl <'data> MarketGraph<'data> {
     // Not consuming. Data is external to the structure.
     // Uses Rc as multiple edges may refer to the same market.
     // Also 2 edges (directional) per market.
-    pub fn new(markets: &'data Vec<Box<dyn Market>>) -> Result<Self, anyhow::Error> {
+    pub fn new(markets: &'data [Box<dyn Market>]) -> Result<Self, anyhow::Error> {
 
         let mut graph = DiGraphMap::<&TypeTag, Vec<MarketInfo>>::with_capacity(15000, 15000);
         
@@ -95,7 +94,7 @@ impl <'data> MarketGraph<'data> {
                 markets_infos
                     .iter_mut()
                     .try_for_each(|market_info| {
-                        let pool_id = market_info.market.pool_id().clone();
+                        let pool_id = *market_info.market.pool_id();
                         let fields = pool_id_to_fields.get(&pool_id).context("Missing fields for pool.")?;
                         market_info.market.update_with_fields(fields)?;
                         Ok::<(),  anyhow::Error>(())

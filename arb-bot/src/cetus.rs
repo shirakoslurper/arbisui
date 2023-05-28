@@ -13,17 +13,16 @@ use custom_sui_sdk::{
 };
 
 use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError};
-use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue};
+use sui_sdk::rpc_types::{EventFilter, SuiEvent, SuiMoveValue, SuiObjectResponse};
  
 use move_core_types::language_storage::{StructTag, TypeTag};
 use std::collections::{BTreeMap, HashMap};
 
 use crate::markets::{Exchange, Market};
+use crate::sui_sdk_utils;
 
 // const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
 // const POOLS: &str = "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0";
-
-const OBJECT_REQUEST_LIMIT: usize = 50;
 
 pub struct Cetus {
     package_id: ObjectID
@@ -43,7 +42,7 @@ impl FromStr for Cetus {
     fn from_str(package_id_str: &str) -> Result<Self, anyhow::Error> {
         Ok(
             Cetus {
-                package_id: ObjectID::from_str(package_id_str).map_err(|err| <ObjectIDParseError as Into<anyhow::Error>>::into(err))?,
+                package_id: ObjectID::from_str(package_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
             }
         )
     }
@@ -76,90 +75,66 @@ impl Exchange for Cetus {
             .try_collect::<Vec<SuiEvent>>()
             .await?;
 
-        let mut markets: Vec<Box<dyn Market>> = Vec::new();
+        // let mut markets: Vec<Box<dyn Market>> = Vec::new();
 
-        for pool_created_event in pool_created_events {
-            let parsed_json = &pool_created_event.parsed_json;
-            if let (
-                Value::String(coin_x_value), 
-                Value::String(coin_y_value), 
-                Value::String(pool_id_value)
-            ) = 
-                (
-                    parsed_json.get("coin_type_a").context("Failed to get coin_type_a for a CetusMarket")?,
-                    parsed_json.get("coin_type_b").context("Failed to get coin_type_b for a CetusMarket")?,
-                    parsed_json.get("pool_id").context("Failed to get pool_id for a CetusMarket")?
-                ) {
-                    let coin_x = TypeTag::from_str(&format!("0x{}", coin_x_value))?;
-                    let coin_y = TypeTag::from_str(&format!("0x{}", coin_y_value))?;
-                    let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
+        let markets = pool_created_events
+            .iter()
+            .map(|pool_created_event| {
+                let parsed_json = &pool_created_event.parsed_json;
+                if let (
+                    Value::String(coin_x_value), 
+                    Value::String(coin_y_value), 
+                    Value::String(pool_id_value)
+                ) = 
+                    (
+                        parsed_json.get("coin_type_a").context("Failed to get coin_type_a for a CetusMarket")?,
+                        parsed_json.get("coin_type_b").context("Failed to get coin_type_b for a CetusMarket")?,
+                        parsed_json.get("pool_id").context("Failed to get pool_id for a CetusMarket")?
+                    ) {
+                        let coin_x = TypeTag::from_str(&format!("0x{}", coin_x_value))?;
+                        let coin_y = TypeTag::from_str(&format!("0x{}", coin_y_value))?;
+                        let pool_id = ObjectID::from_str(&format!("0x{}", pool_id_value))?;
 
-                    markets.push(
-                        Box::new(
-                            CetusMarket {
-                                coin_x,
-                                coin_y,
-                                pool_id,
-                                coin_x_price: None,
-                                coin_y_price: None,
-                            }
+                        Ok(
+                            Box::new(
+                                CetusMarket {
+                                    coin_x,
+                                    coin_y,
+                                    pool_id,
+                                    coin_x_price: None,
+                                    coin_y_price: None,
+                                }
+                            ) as Box<dyn Market>
                         )
-                    );
-                } else {
-                    return Err(anyhow!("Failed to match pattern."));
-                }
-        }
+                    } else {
+                        Err(anyhow!("Failed to match pattern."))
+                    }
+            })
+            .collect::<Result<Vec<Box<dyn Market>> ,anyhow::Error>>()?;
 
         Ok(markets)
     }
 
-    // Lets return a map instead
-    async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
+    // async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
+    //     let pool_ids = markets
+    //         .iter()
+    //         .map(|market| {
+    //             *market.pool_id()
+    //         })
+    //         .collect::<Vec<ObjectID>>();
+
+    //     sui_sdk_utils::get_pool_id_to_fields(sui_client, &pool_ids).await
+    // }
+
+    async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
         let pool_ids = markets
             .iter()
             .map(|market| {
-                market.pool_id().clone()
+                *market.pool_id()
             })
             .collect::<Vec<ObjectID>>();
 
-        let chunked_pool_object_responses = future::try_join_all(
-            pool_ids
-            .chunks(OBJECT_REQUEST_LIMIT)
-            .map(|pool_ids| {
-                async {
-                    let pool_object_responses = sui_client
-                        .read_api()
-                        .multi_get_object_with_options(
-                            pool_ids.to_vec(),
-                            SuiObjectDataOptions::full_content()
-                        )
-                        .await?;
-
-                    let fields = pool_object_responses
-                        .into_iter()
-                        .map(|pool_object_response| {
-                            get_fields_from_object_response(pool_object_response)
-                        })
-                        .collect::<Result<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
-
-                    let pool_id_to_fields = pool_ids
-                        .iter()
-                        .cloned()
-                        .zip(fields.into_iter())
-                        .collect::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>>();
-
-                    Ok::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>(pool_id_to_fields)
-                }
-            })
-        )
-        .await?;
-
-        let pool_object_responses = chunked_pool_object_responses
-            .into_iter()
-            .flatten()
-            .collect::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>>();
-
-        Ok(pool_object_responses)
+        sui_sdk_utils::get_pool_ids_to_object_response(sui_client, &pool_ids).await
     }
 }
 
@@ -215,29 +190,5 @@ impl Market for CetusMarket {
 
     fn pool_id(&self) -> &ObjectID {
         &self.pool_id
-    }
-}
-
-// Helpers
-
-// We'll need to deal with the math on this side
-// Price is simple matter of ((current_sqrt_price / (2^64))^2) * (10^(a - b))
-fn get_fields_from_object_response(response: SuiObjectResponse) -> Result<BTreeMap<String, SuiMoveValue>, anyhow::Error> {
-    if let Some(object_data) = response.data {
-        if let Some(parsed_data) = object_data.content {
-            if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
-                if let SuiMoveStruct::WithFields(field_map) = parsed_move_object.fields {
-                    Ok(field_map)
-                } else {
-                    Err(anyhow!("Does not match the SuiMoveStruct::WithFields variant"))
-                }
-            } else {
-                Err(anyhow!("Does not match the SuiParsedData::MoveObject variant"))
-            }
-        } else {
-            Err(anyhow!("Expected Some"))
-        }
-    } else {
-        Err(anyhow!("Expected Some"))
     }
 }
