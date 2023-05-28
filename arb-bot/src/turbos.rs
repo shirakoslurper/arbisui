@@ -12,7 +12,7 @@ use custom_sui_sdk::{
     apis::QueryEventsRequest
 };
 
-use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError};
+use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError, ObjectType};
 use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue};
  
 use move_core_types::language_storage::{StructTag, TypeTag};
@@ -89,7 +89,7 @@ impl Exchange for Turbos {
             .map(|(pool_id, object_response)| {
 
                 let fields = sui_sdk_utils::get_fields_from_object_response(&object_response)?;
-                let (coin_x, coin_y) = sui_sdk_utils::get_coin_pair_from_object_response(&object_response)?;
+                let (coin_x, coin_y) = get_coin_pair_from_object_response(&object_response)?;
 
                 let coin_x_price = U64F64::from_bits(
                     u128::from_str(
@@ -196,5 +196,30 @@ impl Market for TurbosMarket {
 
     fn pool_id(&self) -> &ObjectID {
         &self.pool_id
+    }
+}
+
+fn get_coin_pair_from_object_response (
+    response: &SuiObjectResponse
+) -> Result<(TypeTag, TypeTag), anyhow::Error> {
+    if let Some(data) = response.clone().data {
+        if let Some(type_) = data.type_ {
+            if let ObjectType::Struct(move_object_type) = type_ {
+                let type_params = move_object_type.type_params();
+
+                Ok(
+                    (
+                        type_params.get(0).context("Missing coin_x")?.clone(),
+                        type_params.get(1).context("Missing coin_y")?.clone()
+                    )
+                )
+            } else {
+                Err(anyhow!("Does not match the ObjectType::Struct variant"))
+            }
+        } else {
+            Err(anyhow!("Expected Some"))
+        }
+    } else {
+        Err(anyhow!("Expected Some"))
     }
 }

@@ -45,7 +45,7 @@ pub fn get_coin_pair_from_object_response (
             if let ObjectType::Struct(move_object_type) = type_ {
                     if let TypeTag::Struct(box_struct_tag) = move_object_type
                     .type_params()
-                    .get(1).context("Missing coin pair type parameter")? 
+                    .get(0).context("Missing coin pair type parameter")? 
                 {
                     println!("{:#?}", box_struct_tag);
                     Ok(

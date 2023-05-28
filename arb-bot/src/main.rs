@@ -42,7 +42,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let turbos_markets = turbos.get_all_markets(&run_data.sui_client).await?;
 
     let mut markets = vec![];
-    markets.extend(cetus_markets.clone());
+    // markets.extend(cetus_markets.clone());
     markets.extend(turbos_markets.clone());
 
     let mut market_graph = MarketGraph::new(&markets)?;
@@ -76,7 +76,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .collect::<Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
 
     let mut pool_id_to_fields = HashMap::new();
-    pool_id_to_fields.extend(cetus_pool_id_to_fields);
+    // pool_id_to_fields.extend(cetus_pool_id_to_fields);
     pool_id_to_fields.extend(turbos_pool_id_to_fields);
 
     market_graph.update_markets_with_fields(&pool_id_to_fields)?;
