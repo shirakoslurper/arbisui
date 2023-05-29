@@ -13,7 +13,7 @@ use custom_sui_sdk::{
 };
 
 use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError, ObjectType};
-use sui_sdk::rpc_types::{SuiObjectDataOptions, SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue};
+use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue};
  
 use move_core_types::language_storage::{StructTag, TypeTag};
 use std::collections::{BTreeMap, HashMap};
@@ -82,16 +82,16 @@ impl Exchange for Turbos {
             })
             .collect::<Result<Vec<ObjectID>, anyhow::Error>>()?;
 
+
         let pool_id_to_object_response = sui_sdk_utils::get_pool_ids_to_object_response(sui_client, &pool_ids).await?;
 
         let markets = pool_id_to_object_response
             .into_iter()
             .map(|(pool_id, object_response)| {
-
                 let fields = sui_sdk_utils::get_fields_from_object_response(&object_response)?;
                 let (coin_x, coin_y) = get_coin_pair_from_object_response(&object_response)?;
 
-                let coin_x_price = U64F64::from_bits(
+                let coin_x_sqrt_price = U64F64::from_bits(
                     u128::from_str(
                         if let SuiMoveValue::String(str_value) = fields
                             .get("sqrt_price")
@@ -103,7 +103,7 @@ impl Exchange for Turbos {
                     )?
                 );
         
-                let coin_y_price = U64F64::from_num(1) / coin_x_price;
+                let coin_y_sqrt_price = U64F64::from_num(1) / coin_x_sqrt_price;
 
                 Ok(
                     Box::new(
@@ -111,27 +111,37 @@ impl Exchange for Turbos {
                             coin_x,
                             coin_y,
                             pool_id,
-                            coin_x_price: Some(coin_x_price),
-                            coin_y_price: Some(coin_y_price),
+                            coin_x_sqrt_price: Some(coin_x_sqrt_price),
+                            coin_y_sqrt_price: Some(coin_y_sqrt_price),
                         }
                     ) as Box<dyn Market>
                 )
             })
             .collect::<Result<Vec<Box<dyn Market>>, anyhow::Error>>()?;
 
+        // future::try_join_all(
+        //     markets
+        //         .iter()
+        //         .map(|market| {
+        //             async {
+        //                 let coin_x_metadata = sui_client
+        //                     .coin_read_api()
+        //                     .get_coin_metadata(market.coin_x().to_string()).await?;
+
+        //                 let coin_y_metadata = sui_client
+        //                     .coin_read_api()
+        //                     .get_coin_metadata(market.coin_y().to_string()).await?;
+
+        //                 println!("coin_x_metadata: {:#?}", coin_x_metadata);
+        //                 println!("coin_y_metadata: {:#?}\n", coin_y_metadata);
+
+        //                 Ok::<(), anyhow::Error>(())
+        //             }
+        //         })
+        //     ).await?;
+
         Ok(markets)
     }
-
-    // async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
-    //     let pool_ids = markets
-    //         .iter()
-    //         .map(|market| {
-    //             *market.pool_id()
-    //         })
-    //         .collect::<Vec<ObjectID>>();
-
-    //     sui_sdk_utils::get_pool_id_to_fields(sui_client, &pool_ids).await
-    // }
 
     async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
         let pool_ids = markets
@@ -149,8 +159,8 @@ struct TurbosMarket {
     coin_x: TypeTag,
     coin_y: TypeTag,
     pool_id: ObjectID,
-    coin_x_price: Option<U64F64>, // In terms of y. x / y
-    coin_y_price: Option<U64F64>, // In terms of x. y / x
+    coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
+    coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
 }
 
 impl Market for TurbosMarket {
@@ -163,15 +173,23 @@ impl Market for TurbosMarket {
     }
 
     fn coin_x_price(&self) -> Option<U64F64> {
-        self.coin_x_price
+        if let Some(coin_x_sqrt_price) = self.coin_x_sqrt_price {
+            Some(coin_x_sqrt_price * coin_x_sqrt_price)
+        } else {
+            self.coin_x_sqrt_price
+        }
     }
 
     fn coin_y_price(&self) -> Option<U64F64> {
-        self.coin_y_price
+        if let Some(coin_y_sqrt_price) = self.coin_y_sqrt_price {
+            Some(coin_y_sqrt_price * coin_y_sqrt_price)
+        } else {
+            self.coin_y_sqrt_price
+        }
     }
 
     fn update_with_fields(&mut self, fields: &BTreeMap<String, SuiMoveValue>) -> Result<(), anyhow::Error> {
-        let coin_x_price = U64F64::from_bits(
+        let coin_x_sqrt_price = U64F64::from_bits(
             u128::from_str(
                 if let SuiMoveValue::String(str_value) = fields
                     .get("sqrt_price")
@@ -183,10 +201,10 @@ impl Market for TurbosMarket {
             )?
         );
 
-        let coin_y_price = U64F64::from_num(1) / coin_x_price;
+        let coin_y_sqrt_price = U64F64::from_num(1) / coin_x_sqrt_price;
         
-        self.coin_x_price = Some(coin_x_price);
-        self.coin_y_price = Some(coin_y_price);
+        self.coin_x_sqrt_price = Some(coin_x_sqrt_price);
+        self.coin_y_sqrt_price = Some(coin_y_sqrt_price);
 
         // println!("coin_x<{}>: {}", self.coin_x, self.coin_x_price.unwrap());
         // println!("coin_y<{}>: {}\n", self.coin_y, self.coin_y_price.unwrap());
@@ -202,6 +220,7 @@ impl Market for TurbosMarket {
 fn get_coin_pair_from_object_response (
     response: &SuiObjectResponse
 ) -> Result<(TypeTag, TypeTag), anyhow::Error> {
+    // println!("{:#?}", response);
     if let Some(data) = response.clone().data {
         if let Some(type_) = data.type_ {
             if let ObjectType::Struct(move_object_type) = type_ {

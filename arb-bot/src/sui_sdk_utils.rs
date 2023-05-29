@@ -37,37 +37,6 @@ pub fn get_fields_from_object_response(
     }
 }
 
-pub fn get_coin_pair_from_object_response (
-    response: &SuiObjectResponse
-) -> Result<(TypeTag, TypeTag), anyhow::Error> {
-    if let Some(data) = response.clone().data {
-        if let Some(type_) = data.type_ {
-            if let ObjectType::Struct(move_object_type) = type_ {
-                    if let TypeTag::Struct(box_struct_tag) = move_object_type
-                    .type_params()
-                    .get(0).context("Missing coin pair type parameter")? 
-                {
-                    println!("{:#?}", box_struct_tag);
-                    Ok(
-                        (
-                            box_struct_tag.type_params.get(0).context("Missing coin_x")?.clone(),
-                            box_struct_tag.type_params.get(0).context("Missing coin_y")?.clone(),
-                        )
-                    )
-                } else {
-                    Err(anyhow!("Does not match the TypeTag::Struct variant"))
-                }
-            } else {
-                Err(anyhow!("Does not match the ObjectType::Struct variant"))
-            }
-        } else {
-            Err(anyhow!("Expected Some"))
-        }
-    } else {
-        Err(anyhow!("Expected Some"))
-    }
-}
-
 pub async fn get_pool_ids_to_object_response(
     sui_client: &SuiClient, 
     pool_ids: &[ObjectID]

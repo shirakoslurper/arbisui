@@ -5,11 +5,13 @@ use arb_bot::*;
 
 use anyhow::Context;
 
+use futures::future;
+
 use std::cmp;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
-use sui_sdk::rpc_types::SuiMoveValue;
+use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata};
 use sui_sdk::types::base_types::ObjectID;
 
 use move_core_types::language_storage::TypeTag;
@@ -18,7 +20,6 @@ use fixed::types::U64F64;
 
 use petgraph::algo::all_simple_paths;
 
-const SUI_COIN_ADDRESS: &str = "0x0000000000000000000000000000000000000000000000000000000000000002";
 const CETUS_EXCHANGE_ADDRESS: &str = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb";
 const TURBOS_EXCHANGE_ADDRESS: &str = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1";
 
@@ -41,15 +42,41 @@ async fn main() -> Result<(), anyhow::Error> {
     let cetus_markets = cetus.get_all_markets(&run_data.sui_client).await?;
     let turbos_markets = turbos.get_all_markets(&run_data.sui_client).await?;
 
-    // turbos_markets
-    //     .iter()
-    //     .for_each(|market| {
-    //         println!("coin_x: {}\ncoin_y: {}", market.coin_x(), market.coin_y());
-    //     });
-
     let mut markets = vec![];
     // markets.extend(cetus_markets.clone());
     markets.extend(turbos_markets.clone());
+
+    println!("markets.len(): {}", markets.len());
+
+    let coin_to_metadata = future::try_join_all(
+        markets
+            .iter()
+            .map(|market| {
+                async {
+                    let mut coin_to_metadata = HashMap::new();
+
+                    if let Some(coin_x_metadata) = run_data.sui_client
+                        .coin_read_api()
+                        .get_coin_metadata(market.coin_x().to_string()).await? {
+                            coin_to_metadata.insert(market.coin_x().clone(), coin_x_metadata);
+                        }
+
+                    if let Some(coin_y_metadata) = run_data.sui_client
+                        .coin_read_api()
+                        .get_coin_metadata(market.coin_y().to_string()).await? {
+                            coin_to_metadata.insert(market.coin_y().clone(), coin_y_metadata);
+                        }
+
+                    // println!("coin_x_metadata: {:#?}", coin_x_metadata);
+                    // println!("coin_y_metadata: {:#?}\n", coin_y_metadata);
+
+                    Ok::<HashMap<TypeTag, SuiCoinMetadata>, anyhow::Error>(coin_to_metadata)
+                }
+            })
+        ).await?
+        .into_iter()
+        .flatten()
+        .collect::<HashMap<TypeTag, SuiCoinMetadata>>();
 
     let mut market_graph = MarketGraph::new(&markets)?;
 
@@ -68,7 +95,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .collect::<Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
 
     let turbos_pool_id_to_fields = turbos
-        .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
+        .get_pool_id_to_object_response(&run_data.sui_client, &turbos_markets)
         .await?
         .iter()
         .map(|(pool_id, object_response)| {
@@ -85,11 +112,13 @@ async fn main() -> Result<(), anyhow::Error> {
     // pool_id_to_fields.extend(cetus_pool_id_to_fields);
     pool_id_to_fields.extend(turbos_pool_id_to_fields);
 
+    println!("pool_id_to_fields.keys().len(): {}", pool_id_to_fields.keys().len());
+
     market_graph.update_markets_with_fields(&pool_id_to_fields)?;
 
-    all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(4))
+    all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7))
         .for_each(|path: Vec<&TypeTag>| {
-            println!("SIMPLE CYCLE: ");
+            // println!("SIMPLE CYCLE ({} HOP) ", path.len() - 1);
             // path
             //     .iter()
             //     .for_each(|coin| {
@@ -101,6 +130,14 @@ async fn main() -> Result<(), anyhow::Error> {
             for pair in path[..].windows(2) {
                 let orig = pair[0];
                 let dest = pair[1];
+
+                // Decimals for human readability (rates we would see on exchanges)
+                let orig_decimals = coin_to_metadata.get(orig).unwrap().decimals as i32;
+                let dest_decimals = coin_to_metadata.get(dest).unwrap().decimals as i32;
+
+
+                // let ten =  U64F64::from_num(10);
+                let adj = U64F64::from_num(10_f64.powi(dest_decimals - orig_decimals));
 
                 let markets = market_graph
                     .graph
@@ -127,16 +164,17 @@ async fn main() -> Result<(), anyhow::Error> {
                         cmp::max(max, current)
                     });
 
-                println!("{}", orig);
-                println!("    -> {}:", dest);
-                println!("    leg rate: {}", best_leg_rate);
+                println!("    {}: {} decimals", orig, orig_decimals);
+                println!("    -> {}: {} decimals", dest, dest_decimals);
+                // Using decimals for human readability
+                println!("        leg rate: {}", best_leg_rate / adj);
 
                 best_path_rate *= best_leg_rate;
             }
 
-            println!("PATH RATE: {}", best_path_rate);
+            println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
 
-            println!("\n");
+            // println!("\n");
         });
     
     // loop_blocks(run_data, vec![&flameswap]).await?;

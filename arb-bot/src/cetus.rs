@@ -101,8 +101,8 @@ impl Exchange for Cetus {
                                     coin_x,
                                     coin_y,
                                     pool_id,
-                                    coin_x_price: None,
-                                    coin_y_price: None,
+                                    coin_x_sqrt_price: None,
+                                    coin_y_sqrt_price: None,
                                 }
                             ) as Box<dyn Market>
                         )
@@ -114,17 +114,6 @@ impl Exchange for Cetus {
 
         Ok(markets)
     }
-
-    // async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
-    //     let pool_ids = markets
-    //         .iter()
-    //         .map(|market| {
-    //             *market.pool_id()
-    //         })
-    //         .collect::<Vec<ObjectID>>();
-
-    //     sui_sdk_utils::get_pool_id_to_fields(sui_client, &pool_ids).await
-    // }
 
     async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
         let pool_ids = markets
@@ -143,8 +132,8 @@ struct CetusMarket {
     coin_x: TypeTag,
     coin_y: TypeTag,
     pool_id: ObjectID,
-    coin_x_price: Option<U64F64>, // In terms of y. x / y
-    coin_y_price: Option<U64F64>, // In terms of x. y / x
+    coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
+    coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
 }
 
 impl Market for CetusMarket {
@@ -157,15 +146,23 @@ impl Market for CetusMarket {
     }
 
     fn coin_x_price(&self) -> Option<U64F64> {
-        self.coin_x_price
+        if let Some(coin_x_sqrt_price) = self.coin_x_sqrt_price {
+            Some(coin_x_sqrt_price * coin_x_sqrt_price)
+        } else {
+            self.coin_x_sqrt_price
+        }
     }
 
     fn coin_y_price(&self) -> Option<U64F64> {
-        self.coin_y_price
+        if let Some(coin_y_sqrt_price) = self.coin_y_sqrt_price {
+            Some(coin_y_sqrt_price * coin_y_sqrt_price)
+        } else {
+            self.coin_y_sqrt_price
+        }
     }
 
     fn update_with_fields(&mut self, fields: &BTreeMap<String, SuiMoveValue>) -> Result<(), anyhow::Error> {
-        let coin_x_price = U64F64::from_bits(
+        let coin_x_sqrt_price = U64F64::from_bits(
             u128::from_str(
                 if let SuiMoveValue::String(str_value) = fields
                     .get("current_sqrt_price")
@@ -177,10 +174,10 @@ impl Market for CetusMarket {
             )?
         );
 
-        let coin_y_price = U64F64::from_num(1) / coin_x_price;
+        let coin_y_sqrt_price = U64F64::from_num(1) / coin_x_sqrt_price;
         
-        self.coin_x_price = Some(coin_x_price);
-        self.coin_y_price = Some(coin_y_price);
+        self.coin_x_sqrt_price = Some(coin_x_sqrt_price);
+        self.coin_y_sqrt_price = Some(coin_y_sqrt_price);
 
         // println!("coin_x<{}>: {}", self.coin_x, self.coin_x_price.unwrap());
         // println!("coin_y<{}>: {}\n", self.coin_y, self.coin_y_price.unwrap());

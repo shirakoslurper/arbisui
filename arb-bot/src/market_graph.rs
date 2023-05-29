@@ -4,7 +4,7 @@ use anyhow::Context;
 
 use move_core_types::language_storage::TypeTag;
 
-use petgraph::graphmap::{DiGraphMap};
+use petgraph::graphmap::DiGraphMap;
 
 use std::collections::{BTreeMap, HashMap};
 
