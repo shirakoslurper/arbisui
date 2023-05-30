@@ -88,6 +88,8 @@ impl Exchange for Turbos {
         let markets = pool_id_to_object_response
             .into_iter()
             .map(|(pool_id, object_response)| {
+                // println!("{:#?}", object_response);
+
                 let fields = sui_sdk_utils::get_fields_from_object_response(&object_response)?;
                 let (coin_x, coin_y) = get_coin_pair_from_object_response(&object_response)?;
 

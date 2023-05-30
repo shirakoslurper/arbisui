@@ -22,6 +22,7 @@ use petgraph::algo::all_simple_paths;
 
 const CETUS_EXCHANGE_ADDRESS: &str = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb";
 const TURBOS_EXCHANGE_ADDRESS: &str = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1";
+const TURBOS_TICK_MAP: &str = "0xd836ea2a159743a568fe29e8f42672a1b88414ab21be5411f8f6331e66b218d3";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -35,6 +36,15 @@ async fn main() -> Result<(), anyhow::Error> {
         .build("https://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f")
         .await?
     };
+
+    // Testing Turbos TickMap
+    let turbos_dynamic_fields =  run_data.sui_client.get_dynamic_fields(
+        ObjectID::from_str(turbos),
+        None,
+        None
+    ).await?;
+
+    println!("{:#?}", turbos_dynamic_fields);
 
     // let exchanges = vec![cetus];
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
