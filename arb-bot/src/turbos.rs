@@ -75,6 +75,7 @@ impl Exchange for Turbos {
             .map(|pool_created_event| {
                 let parsed_json = pool_created_event.parsed_json;
                 if let Value::String(pool_id_value) = parsed_json.get("pool").context("Failed to get pool_id for a CetusMarket")? {
+                    println!("pool_id: {}", pool_id_value);
                     Ok(ObjectID::from_str(&format!("0x{}", pool_id_value))?)
                 } else {
                     Err(anyhow!("Failed to match pattern."))

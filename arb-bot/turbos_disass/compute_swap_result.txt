@@ -1,0 +1,686 @@
+public(friend) compute_swap_result<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: address, Arg2: bool, Arg3: u128, Arg4: bool, Arg5: u128, Arg6: bool, Arg7: &Clock, Arg8: &mut TxContext): ComputeSwapState {
+L0:	loc9: bool
+L1:	loc10: I32
+L2:	loc11: u128
+L3:	loc12: u128
+L4:	loc13: bool
+L5:	loc14: bool
+L6:	loc15: u128
+L7:	loc16: I32
+L8:	loc17: u128
+L9:	loc18: u128
+L10:	loc19: u128
+L11:	loc20: u128
+L12:	loc21: u128
+L13:	loc22: u128
+L14:	loc23: u128
+L15:	loc24: I128
+L16:	loc25: vector<u128>
+L17:	loc26: ComputeSwapState
+L18:	loc27: u128
+L19:	loc28: u128
+L20:	loc29: u128
+L21:	loc30: bool
+L22:	loc31: u128
+L23:	loc32: u128
+L24:	loc33: I32
+L25:	loc34: u128
+L26:	loc35: I32
+B0:
+	0: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	1: ImmBorrowFieldGeneric[0](Pool.unlocked: bool)
+	2: ReadRef
+	3: BrFalse(5)
+B1:
+	4: Branch(13)
+B2:
+	5: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	6: Pop
+	7: MoveLoc[8](Arg8: &mut TxContext)
+	8: Pop
+	9: MoveLoc[7](Arg7: &Clock)
+	10: Pop
+	11: LdConst[8](U64: [8, 0, 0, 0, 0, 0, 0, 0])
+	12: Abort
+B3:
+	13: CopyLoc[3](Arg3: u128)
+	14: LdU128(0)
+	15: Neq
+	16: BrFalse(18)
+B4:
+	17: Branch(26)
+B5:
+	18: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	19: Pop
+	20: MoveLoc[8](Arg8: &mut TxContext)
+	21: Pop
+	22: MoveLoc[7](Arg7: &Clock)
+	23: Pop
+	24: LdConst[7](U64: [7, 0, 0, 0, 0, 0, 0, 0])
+	25: Abort
+B6:
+	26: CopyLoc[5](Arg5: u128)
+	27: LdConst[28](U128: [80, 59, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+	28: Lt
+	29: BrFalse(33)
+B7:
+	30: LdTrue
+	31: StLoc[9](loc0: bool)
+	32: Branch(37)
+B8:
+	33: CopyLoc[5](Arg5: u128)
+	34: LdConst[29](U128: [175, 51, 27, 168, 50, 127, 187, 53, 177, 196, 254, 255, 0, 0, 0, 0])
+	35: Gt
+	36: StLoc[9](loc0: bool)
+B9:
+	37: MoveLoc[9](loc0: bool)
+	38: BrFalse(47)
+B10:
+	39: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	40: Pop
+	41: MoveLoc[8](Arg8: &mut TxContext)
+	42: Pop
+	43: MoveLoc[7](Arg7: &Clock)
+	44: Pop
+	45: LdConst[19](U64: [19, 0, 0, 0, 0, 0, 0, 0])
+	46: Abort
+B11:
+	47: CopyLoc[2](Arg2: bool)
+	48: BrFalse(56)
+B12:
+	49: CopyLoc[5](Arg5: u128)
+	50: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	51: ImmBorrowFieldGeneric[1](Pool.sqrt_price: u128)
+	52: ReadRef
+	53: Gt
+	54: StLoc[18](loc9: bool)
+	55: Branch(58)
+B13:
+	56: LdFalse
+	57: StLoc[18](loc9: bool)
+B14:
+	58: MoveLoc[18](loc9: bool)
+	59: BrFalse(63)
+B15:
+	60: LdTrue
+	61: StLoc[23](loc14: bool)
+	62: Branch(77)
+B16:
+	63: CopyLoc[2](Arg2: bool)
+	64: Not
+	65: BrFalse(73)
+B17:
+	66: CopyLoc[5](Arg5: u128)
+	67: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	68: ImmBorrowFieldGeneric[1](Pool.sqrt_price: u128)
+	69: ReadRef
+	70: Lt
+	71: StLoc[22](loc13: bool)
+	72: Branch(75)
+B18:
+	73: LdFalse
+	74: StLoc[22](loc13: bool)
+B19:
+	75: MoveLoc[22](loc13: bool)
+	76: StLoc[23](loc14: bool)
+B20:
+	77: MoveLoc[23](loc14: bool)
+	78: BrFalse(87)
+B21:
+	79: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	80: Pop
+	81: MoveLoc[8](Arg8: &mut TxContext)
+	82: Pop
+	83: MoveLoc[7](Arg7: &Clock)
+	84: Pop
+	85: LdConst[20](U64: [20, 0, 0, 0, 0, 0, 0, 0])
+	86: Abort
+B22:
+	87: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	88: MoveLoc[7](Arg7: &Clock)
+	89: Call clock::timestamp_ms(&Clock): u64
+	90: Call next_pool_reward_infos<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, u64): vector<u128>
+	91: StLoc[34](loc25: vector<u128>)
+	92: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	93: ImmBorrowFieldGeneric[2](Pool.tick_current_index: I32)
+	94: ReadRef
+	95: StLoc[44](loc35: I32)
+	96: CopyLoc[3](Arg3: u128)
+	97: StLoc[27](loc18: u128)
+	98: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	99: ImmBorrowFieldGeneric[1](Pool.sqrt_price: u128)
+	100: ReadRef
+	101: StLoc[26](loc17: u128)
+	102: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	103: ImmBorrowFieldGeneric[2](Pool.tick_current_index: I32)
+	104: ReadRef
+	105: StLoc[25](loc16: I32)
+	106: CopyLoc[2](Arg2: bool)
+	107: BrFalse(113)
+B23:
+	108: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	109: ImmBorrowFieldGeneric[3](Pool.fee_growth_global_a: u128)
+	110: ReadRef
+	111: StLoc[24](loc15: u128)
+	112: Branch(117)
+B24:
+	113: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	114: ImmBorrowFieldGeneric[4](Pool.fee_growth_global_b: u128)
+	115: ReadRef
+	116: StLoc[24](loc15: u128)
+B25:
+	117: LdU128(0)
+	118: LdU128(0)
+	119: MoveLoc[27](loc18: u128)
+	120: LdU128(0)
+	121: MoveLoc[26](loc17: u128)
+	122: MoveLoc[25](loc16: I32)
+	123: MoveLoc[24](loc15: u128)
+	124: LdU128(0)
+	125: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	126: ImmBorrowFieldGeneric[5](Pool.liquidity: u128)
+	127: ReadRef
+	128: LdU128(0)
+	129: Pack[7](ComputeSwapState)
+	130: StLoc[35](loc26: ComputeSwapState)
+B26:
+	131: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	132: ImmBorrowField[9](ComputeSwapState.amount_specified_remaining: u128)
+	133: ReadRef
+	134: LdU128(0)
+	135: Gt
+	136: BrFalse(145)
+B27:
+	137: Branch(138)
+B28:
+	138: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	139: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	140: ReadRef
+	141: CopyLoc[5](Arg5: u128)
+	142: Neq
+	143: StLoc[10](loc1: bool)
+	144: Branch(147)
+B29:
+	145: LdFalse
+	146: StLoc[10](loc1: bool)
+B30:
+	147: MoveLoc[10](loc1: bool)
+	148: BrFalse(408)
+B31:
+	149: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	150: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	151: ReadRef
+	152: StLoc[41](loc32: u128)
+	153: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	154: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	155: ImmBorrowField[11](ComputeSwapState.tick_current_index: I32)
+	156: ReadRef
+	157: CopyLoc[2](Arg2: bool)
+	158: Call next_initialized_tick_within_one_word<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, bool): I32 * bool
+	159: StLoc[39](loc30: bool)
+	160: StLoc[42](loc33: I32)
+	161: CopyLoc[42](loc33: I32)
+	162: LdConst[25](U32: [244, 196, 6, 0])
+	163: Call i32::neg_from(u32): I32
+	164: Call i32::lt(I32, I32): bool
+	165: BrFalse(170)
+B32:
+	166: LdConst[25](U32: [244, 196, 6, 0])
+	167: Call i32::neg_from(u32): I32
+	168: StLoc[42](loc33: I32)
+	169: Branch(178)
+B33:
+	170: CopyLoc[42](loc33: I32)
+	171: LdConst[25](U32: [244, 196, 6, 0])
+	172: Call i32::from(u32): I32
+	173: Call i32::gt(I32, I32): bool
+	174: BrFalse(178)
+B34:
+	175: LdConst[25](U32: [244, 196, 6, 0])
+	176: Call i32::from(u32): I32
+	177: StLoc[42](loc33: I32)
+B35:
+	178: CopyLoc[42](loc33: I32)
+	179: Call math_tick::sqrt_price_from_tick_index(I32): u128
+	180: StLoc[40](loc31: u128)
+	181: CopyLoc[2](Arg2: bool)
+	182: BrFalse(188)
+B36:
+	183: CopyLoc[40](loc31: u128)
+	184: CopyLoc[5](Arg5: u128)
+	185: Lt
+	186: StLoc[11](loc2: bool)
+	187: Branch(192)
+B37:
+	188: CopyLoc[40](loc31: u128)
+	189: CopyLoc[5](Arg5: u128)
+	190: Gt
+	191: StLoc[11](loc2: bool)
+B38:
+	192: MoveLoc[11](loc2: bool)
+	193: BrFalse(197)
+B39:
+	194: CopyLoc[5](Arg5: u128)
+	195: StLoc[12](loc3: u128)
+	196: Branch(199)
+B40:
+	197: CopyLoc[40](loc31: u128)
+	198: StLoc[12](loc3: u128)
+B41:
+	199: MoveLoc[12](loc3: u128)
+	200: StLoc[43](loc34: u128)
+	201: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	202: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	203: ReadRef
+	204: MoveLoc[43](loc34: u128)
+	205: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	206: ImmBorrowField[12](ComputeSwapState.liquidity: u128)
+	207: ReadRef
+	208: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	209: ImmBorrowField[9](ComputeSwapState.amount_specified_remaining: u128)
+	210: ReadRef
+	211: CopyLoc[4](Arg4: bool)
+	212: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	213: ImmBorrowFieldGeneric[6](Pool.fee: u32)
+	214: ReadRef
+	215: Call math_swap::compute_swap(u128, u128, u128, u128, bool, u32): u128 * u128 * u128 * u128
+	216: StLoc[38](loc29: u128)
+	217: StLoc[37](loc28: u128)
+	218: StLoc[36](loc27: u128)
+	219: MutBorrowLoc[35](loc26: ComputeSwapState)
+	220: MutBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	221: WriteRef
+	222: CopyLoc[4](Arg4: bool)
+	223: BrFalse(243)
+B42:
+	224: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	225: ImmBorrowField[9](ComputeSwapState.amount_specified_remaining: u128)
+	226: ReadRef
+	227: MoveLoc[36](loc27: u128)
+	228: Sub
+	229: CopyLoc[38](loc29: u128)
+	230: Sub
+	231: MutBorrowLoc[35](loc26: ComputeSwapState)
+	232: MutBorrowField[9](ComputeSwapState.amount_specified_remaining: u128)
+	233: WriteRef
+	234: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	235: ImmBorrowField[14](ComputeSwapState.amount_calculated: u128)
+	236: ReadRef
+	237: MoveLoc[37](loc28: u128)
+	238: Add
+	239: MutBorrowLoc[35](loc26: ComputeSwapState)
+	240: MutBorrowField[14](ComputeSwapState.amount_calculated: u128)
+	241: WriteRef
+	242: Branch(261)
+B43:
+	243: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	244: ImmBorrowField[9](ComputeSwapState.amount_specified_remaining: u128)
+	245: ReadRef
+	246: MoveLoc[37](loc28: u128)
+	247: Sub
+	248: MutBorrowLoc[35](loc26: ComputeSwapState)
+	249: MutBorrowField[9](ComputeSwapState.amount_specified_remaining: u128)
+	250: WriteRef
+	251: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	252: ImmBorrowField[14](ComputeSwapState.amount_calculated: u128)
+	253: ReadRef
+	254: MoveLoc[36](loc27: u128)
+	255: Add
+	256: CopyLoc[38](loc29: u128)
+	257: Add
+	258: MutBorrowLoc[35](loc26: ComputeSwapState)
+	259: MutBorrowField[14](ComputeSwapState.amount_calculated: u128)
+	260: WriteRef
+B44:
+	261: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	262: ImmBorrowField[15](ComputeSwapState.fee_amount: u128)
+	263: ReadRef
+	264: CopyLoc[38](loc29: u128)
+	265: Add
+	266: MutBorrowLoc[35](loc26: ComputeSwapState)
+	267: MutBorrowField[15](ComputeSwapState.fee_amount: u128)
+	268: WriteRef
+	269: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	270: ImmBorrowFieldGeneric[7](Pool.fee_protocol: u32)
+	271: ReadRef
+	272: LdU32(0)
+	273: Gt
+	274: BrFalse(296)
+B45:
+	275: CopyLoc[38](loc29: u128)
+	276: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	277: ImmBorrowFieldGeneric[7](Pool.fee_protocol: u32)
+	278: ReadRef
+	279: CastU128
+	280: Mul
+	281: LdU128(1000000)
+	282: Div
+	283: StLoc[29](loc20: u128)
+	284: MoveLoc[38](loc29: u128)
+	285: CopyLoc[29](loc20: u128)
+	286: Sub
+	287: StLoc[38](loc29: u128)
+	288: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	289: ImmBorrowField[17](ComputeSwapState.protocol_fee: u128)
+	290: ReadRef
+	291: MoveLoc[29](loc20: u128)
+	292: Call math_u128::wrapping_add(u128, u128): u128
+	293: MutBorrowLoc[35](loc26: ComputeSwapState)
+	294: MutBorrowField[17](ComputeSwapState.protocol_fee: u128)
+	295: WriteRef
+B46:
+	296: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	297: ImmBorrowField[12](ComputeSwapState.liquidity: u128)
+	298: ReadRef
+	299: LdU128(0)
+	300: Gt
+	301: BrFalse(317)
+B47:
+	302: MoveLoc[38](loc29: u128)
+	303: LdConst[26](U128: [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])
+	304: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	305: ImmBorrowField[12](ComputeSwapState.liquidity: u128)
+	306: ReadRef
+	307: Call full_math_u128::mul_div_floor(u128, u128, u128): u128
+	308: StLoc[32](loc23: u128)
+	309: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	310: ImmBorrowField[18](ComputeSwapState.fee_growth_global: u128)
+	311: ReadRef
+	312: MoveLoc[32](loc23: u128)
+	313: Call math_u128::wrapping_add(u128, u128): u128
+	314: MutBorrowLoc[35](loc26: ComputeSwapState)
+	315: MutBorrowField[18](ComputeSwapState.fee_growth_global: u128)
+	316: WriteRef
+B48:
+	317: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	318: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	319: ReadRef
+	320: MoveLoc[40](loc31: u128)
+	321: Eq
+	322: BrFalse(394)
+B49:
+	323: MoveLoc[39](loc30: bool)
+	324: BrFalse(379)
+B50:
+	325: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	326: ImmBorrowFieldGeneric[3](Pool.fee_growth_global_a: u128)
+	327: ReadRef
+	328: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	329: ImmBorrowFieldGeneric[4](Pool.fee_growth_global_b: u128)
+	330: ReadRef
+	331: StLoc[31](loc22: u128)
+	332: StLoc[30](loc21: u128)
+	333: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	334: StLoc[17](loc8: &mut Pool<Ty0, Ty1, Ty2>)
+	335: CopyLoc[42](loc33: I32)
+	336: StLoc[16](loc7: I32)
+	337: CopyLoc[2](Arg2: bool)
+	338: BrFalse(344)
+B51:
+	339: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	340: ImmBorrowField[18](ComputeSwapState.fee_growth_global: u128)
+	341: ReadRef
+	342: StLoc[14](loc5: u128)
+	343: Branch(346)
+B52:
+	344: MoveLoc[30](loc21: u128)
+	345: StLoc[14](loc5: u128)
+B53:
+	346: MoveLoc[14](loc5: u128)
+	347: StLoc[15](loc6: u128)
+	348: CopyLoc[2](Arg2: bool)
+	349: BrFalse(353)
+B54:
+	350: MoveLoc[31](loc22: u128)
+	351: StLoc[13](loc4: u128)
+	352: Branch(357)
+B55:
+	353: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	354: ImmBorrowField[18](ComputeSwapState.fee_growth_global: u128)
+	355: ReadRef
+	356: StLoc[13](loc4: u128)
+B56:
+	357: MoveLoc[17](loc8: &mut Pool<Ty0, Ty1, Ty2>)
+	358: MoveLoc[16](loc7: I32)
+	359: MoveLoc[15](loc6: u128)
+	360: MoveLoc[13](loc4: u128)
+	361: ImmBorrowLoc[34](loc25: vector<u128>)
+	362: CopyLoc[6](Arg6: bool)
+	363: CopyLoc[8](Arg8: &mut TxContext)
+	364: Call cross_tick<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, u128, u128, &vector<u128>, bool, &mut TxContext): I128
+	365: StLoc[33](loc24: I128)
+	366: CopyLoc[2](Arg2: bool)
+	367: BrFalse(371)
+B57:
+	368: MoveLoc[33](loc24: I128)
+	369: Call i128::neg(I128): I128
+	370: StLoc[33](loc24: I128)
+B58:
+	371: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	372: ImmBorrowField[12](ComputeSwapState.liquidity: u128)
+	373: ReadRef
+	374: MoveLoc[33](loc24: I128)
+	375: Call math_liquidity::add_delta(u128, I128): u128
+	376: MutBorrowLoc[35](loc26: ComputeSwapState)
+	377: MutBorrowField[12](ComputeSwapState.liquidity: u128)
+	378: WriteRef
+B59:
+	379: CopyLoc[2](Arg2: bool)
+	380: BrFalse(387)
+B60:
+	381: MoveLoc[42](loc33: I32)
+	382: LdU32(1)
+	383: Call i32::from(u32): I32
+	384: Call i32::sub(I32, I32): I32
+	385: StLoc[19](loc10: I32)
+	386: Branch(389)
+B61:
+	387: MoveLoc[42](loc33: I32)
+	388: StLoc[19](loc10: I32)
+B62:
+	389: MoveLoc[19](loc10: I32)
+	390: MutBorrowLoc[35](loc26: ComputeSwapState)
+	391: MutBorrowField[11](ComputeSwapState.tick_current_index: I32)
+	392: WriteRef
+	393: Branch(407)
+B63:
+	394: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	395: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	396: ReadRef
+	397: MoveLoc[41](loc32: u128)
+	398: Neq
+	399: BrFalse(407)
+B64:
+	400: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	401: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	402: ReadRef
+	403: Call math_tick::tick_index_from_sqrt_price(u128): I32
+	404: MutBorrowLoc[35](loc26: ComputeSwapState)
+	405: MutBorrowField[11](ComputeSwapState.tick_current_index: I32)
+	406: WriteRef
+B65:
+	407: Branch(131)
+B66:
+	408: MoveLoc[8](Arg8: &mut TxContext)
+	409: Pop
+	410: MoveLoc[6](Arg6: bool)
+	411: Not
+	412: BrFalse(504)
+B67:
+	413: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	414: ImmBorrowField[11](ComputeSwapState.tick_current_index: I32)
+	415: ReadRef
+	416: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	417: ImmBorrowFieldGeneric[2](Pool.tick_current_index: I32)
+	418: ReadRef
+	419: Call i32::eq(I32, I32): bool
+	420: Not
+	421: BrFalse(435)
+B68:
+	422: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	423: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	424: ReadRef
+	425: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	426: MutBorrowFieldGeneric[1](Pool.sqrt_price: u128)
+	427: WriteRef
+	428: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	429: ImmBorrowField[11](ComputeSwapState.tick_current_index: I32)
+	430: ReadRef
+	431: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	432: MutBorrowFieldGeneric[2](Pool.tick_current_index: I32)
+	433: WriteRef
+	434: Branch(441)
+B69:
+	435: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	436: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	437: ReadRef
+	438: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	439: MutBorrowFieldGeneric[1](Pool.sqrt_price: u128)
+	440: WriteRef
+B70:
+	441: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	442: ImmBorrowFieldGeneric[5](Pool.liquidity: u128)
+	443: ReadRef
+	444: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	445: ImmBorrowField[12](ComputeSwapState.liquidity: u128)
+	446: ReadRef
+	447: Neq
+	448: BrFalse(455)
+B71:
+	449: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	450: ImmBorrowField[12](ComputeSwapState.liquidity: u128)
+	451: ReadRef
+	452: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	453: MutBorrowFieldGeneric[5](Pool.liquidity: u128)
+	454: WriteRef
+B72:
+	455: CopyLoc[2](Arg2: bool)
+	456: BrFalse(481)
+B73:
+	457: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	458: ImmBorrowField[18](ComputeSwapState.fee_growth_global: u128)
+	459: ReadRef
+	460: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	461: MutBorrowFieldGeneric[3](Pool.fee_growth_global_a: u128)
+	462: WriteRef
+	463: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	464: ImmBorrowField[17](ComputeSwapState.protocol_fee: u128)
+	465: ReadRef
+	466: LdU128(0)
+	467: Gt
+	468: BrFalse(480)
+B74:
+	469: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	470: ImmBorrowFieldGeneric[8](Pool.protocol_fees_a: u64)
+	471: ReadRef
+	472: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	473: ImmBorrowField[17](ComputeSwapState.protocol_fee: u128)
+	474: ReadRef
+	475: CastU64
+	476: Add
+	477: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	478: MutBorrowFieldGeneric[8](Pool.protocol_fees_a: u64)
+	479: WriteRef
+B75:
+	480: Branch(504)
+B76:
+	481: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	482: ImmBorrowField[18](ComputeSwapState.fee_growth_global: u128)
+	483: ReadRef
+	484: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	485: MutBorrowFieldGeneric[4](Pool.fee_growth_global_b: u128)
+	486: WriteRef
+	487: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	488: ImmBorrowField[17](ComputeSwapState.protocol_fee: u128)
+	489: ReadRef
+	490: LdU128(0)
+	491: Gt
+	492: BrFalse(504)
+B77:
+	493: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	494: ImmBorrowFieldGeneric[9](Pool.protocol_fees_b: u64)
+	495: ReadRef
+	496: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	497: ImmBorrowField[17](ComputeSwapState.protocol_fee: u128)
+	498: ReadRef
+	499: CastU64
+	500: Add
+	501: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	502: MutBorrowFieldGeneric[9](Pool.protocol_fees_b: u64)
+	503: WriteRef
+B78:
+	504: CopyLoc[2](Arg2: bool)
+	505: CopyLoc[4](Arg4: bool)
+	506: Eq
+	507: BrFalse(519)
+B79:
+	508: MoveLoc[3](Arg3: u128)
+	509: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	510: ImmBorrowField[9](ComputeSwapState.amount_specified_remaining: u128)
+	511: ReadRef
+	512: Sub
+	513: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	514: ImmBorrowField[14](ComputeSwapState.amount_calculated: u128)
+	515: ReadRef
+	516: StLoc[21](loc12: u128)
+	517: StLoc[20](loc11: u128)
+	518: Branch(529)
+B80:
+	519: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	520: ImmBorrowField[14](ComputeSwapState.amount_calculated: u128)
+	521: ReadRef
+	522: MoveLoc[3](Arg3: u128)
+	523: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	524: ImmBorrowField[9](ComputeSwapState.amount_specified_remaining: u128)
+	525: ReadRef
+	526: Sub
+	527: StLoc[21](loc12: u128)
+	528: StLoc[20](loc11: u128)
+B81:
+	529: MoveLoc[20](loc11: u128)
+	530: MoveLoc[21](loc12: u128)
+	531: StLoc[28](loc19: u128)
+	532: MutBorrowLoc[35](loc26: ComputeSwapState)
+	533: MutBorrowField[2](ComputeSwapState.amount_a: u128)
+	534: WriteRef
+	535: MoveLoc[28](loc19: u128)
+	536: MutBorrowLoc[35](loc26: ComputeSwapState)
+	537: MutBorrowField[3](ComputeSwapState.amount_b: u128)
+	538: WriteRef
+	539: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	540: FreezeRef
+	541: Call object::id<Pool<Ty0, Ty1, Ty2>>(&Pool<Ty0, Ty1, Ty2>): ID
+	542: MoveLoc[1](Arg1: address)
+	543: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	544: ImmBorrowField[2](ComputeSwapState.amount_a: u128)
+	545: ReadRef
+	546: CastU64
+	547: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	548: ImmBorrowField[3](ComputeSwapState.amount_b: u128)
+	549: ReadRef
+	550: CastU64
+	551: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	552: ImmBorrowField[12](ComputeSwapState.liquidity: u128)
+	553: ReadRef
+	554: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	555: ImmBorrowField[11](ComputeSwapState.tick_current_index: I32)
+	556: ReadRef
+	557: MoveLoc[44](loc35: I32)
+	558: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	559: ImmBorrowField[10](ComputeSwapState.sqrt_price: u128)
+	560: ReadRef
+	561: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	562: ImmBorrowField[17](ComputeSwapState.protocol_fee: u128)
+	563: ReadRef
+	564: CastU64
+	565: ImmBorrowLoc[35](loc26: ComputeSwapState)
+	566: ImmBorrowField[15](ComputeSwapState.fee_amount: u128)
+	567: ReadRef
+	568: CastU64
+	569: MoveLoc[2](Arg2: bool)
+	570: MoveLoc[4](Arg4: bool)
+	571: Pack[8](SwapEvent)
+	572: Call event::emit<SwapEvent>(SwapEvent)
+	573: MoveLoc[35](loc26: ComputeSwapState)
+	574: Ret
+}

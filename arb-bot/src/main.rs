@@ -11,7 +11,7 @@ use std::cmp;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 
-use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata};
+use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata, SuiObjectDataOptions};
 use sui_sdk::types::base_types::ObjectID;
 
 use move_core_types::language_storage::TypeTag;
@@ -37,14 +37,40 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?
     };
 
-    // Testing Turbos TickMap
-    let turbos_dynamic_fields =  run_data.sui_client.get_dynamic_fields(
-        ObjectID::from_str(turbos),
-        None,
-        None
-    ).await?;
+    // // Testing Turbos TickMap
+    // let turbos_dynamic_fields =  run_data
+    //     .sui_client
+    //     .read_api()
+    //     .get_dynamic_fields(
+    //     ObjectID::from_str("0x86ed41e9b4c6cce36de4970cfd4ae3e98d6281f13a1b16aa31fc73ec90079c3d")?,
+    //     None,
+    //     None
+    // ).await?;
 
-    println!("{:#?}", turbos_dynamic_fields);
+    // println!("{:#?}", turbos_dynamic_fields);
+
+    // let turbos_tick = run_data
+    //     .sui_client
+    //     .read_api()
+    //     .get_object_with_options(
+    //         ObjectID::from_str("0xb5fed30450f21fb4df0c9881eb645be2dd583b41551ad47161a547c467bf7efd")?,
+    //         SuiObjectDataOptions::full_content()
+    //     )
+    //     .await?;
+
+    // println!("turbos_tick: {:#?}", turbos_tick);
+
+    // let turbos_tick_map = run_data
+    //     .sui_client
+    //     .read_api()
+    //     .get_dynamic_fields(
+    //         ObjectID::from_str(TURBOS_TICK_MAP)?,
+    //         None,
+    //         None
+    //     )
+    //     .await?;
+
+    // println!("turbos_tick_map: {:#?}", turbos_tick_map);
 
     // let exchanges = vec![cetus];
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;

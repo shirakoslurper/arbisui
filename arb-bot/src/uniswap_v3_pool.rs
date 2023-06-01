@@ -3,218 +3,37 @@ use move_core_types::language_storage::TypeTag;
 use std::collections:: BTreeMap;
 use fixed::types::{U64F64, I64F64};
 
-const ONE_POINT_ZERO_ZERO_ONE: f64 = 1.001;
-
-// // As of current we're not working with deltas
-// // We're grabbing end of last block state
-// // and loading new information entirely.
-// // The functions we need only need to operate on data
-// // and track state during computation.
-// pub struct Tick {
-//     // Gross tally of liquidity referencing the tick
-//     // Ensures that even if net liquidity is 0, we 
-//     // can know if a tick is referenced by >= 1 position,
-//     // which lets us know whether to update the bitmap
-//     pub liquidity_gross: u128,
-//     pub liquidity_net: i128,
-//     pub initialized: bool, // We can simply remove from the BTreeMap
-// }
-
-// pub struct PoolInfo {
-//     pub coin_x: TypeTag,
-//     pub coin_y: TypeTag,
-//     pub coin_x_sqrt_price: U64F64,      // U64F64
-//     pub coin_y_sqrt_price: U64F64,      // U64F64
-//     pub fee_rate: u64,
-//     pub liquidity: u128,                // U64F64 ?
-//     pub tick: i128,                     // Turbos: i32, Cetus: u64
-//     pub initialized_ticks: BTreeMap<i128, Tick>,
-//     pub tick_spacing: u32, 
-// }
-
-// struct SwapState {
-//     amount_specified_remaining: u128,
-//     amount_calculated: u128,
-//     coin_x_sqrt_price: U64F64,
-//     coin_y_sqrt_prict: U64F64,
-//     tick: i128
-// }
-
-// struct StepState {
-//     coin_x_sqrt_price_start: U64F64,
-//     coin_x_sqrt_price_next: Option<U64F64>,
-//     coin_y_sqrt_price_start: U64F64,
-//     coin_y_sqrt_price_next: Option<U64F64>,
-//     tick_next: Option<i128>,
-//     amount_in: u128,
-//     amount_out: u128,
-//     fee_amount: u128,
-// }
-
-// impl PoolInfo {
-//     fn swap(&self, amount_specified: u128, x_for_y: bool) {
-//         // Iterate over initialized ticks in direction chosen by user
-//         let mut state = SwapState {
-//             amount_specified_remaining: amount_specified,
-//             amount_calculated: 0,
-//             coin_x_sqrt_price: self.coin_x_sqrt_price.clone(),
-//             coin_y_sqrt_prict: self.coin_y_sqrt_price.clone(),
-//             tick: self.tick,
-//         };
-
-//         let mut step = StepState {
-//             coin_x_sqrt_price_start: U64F64::from_num(0),
-//             coin_x_sqrt_price_next: None,
-//             coin_y_sqrt_price_start: U64F64::from_num(0),
-//             coin_y_sqrt_price_next: None,
-//             tick_next: None,
-//             amount_in: 0,
-//             amount_out: 0,
-//             fee_amount: 0,
-//         };
-
-//         while state.amount_specified_remaining > 0 {
-//             step.coin_x_sqrt_price_start = state.coin_x_sqrt_price.clone();
-//             step.tick_next = self.next_initialized_tick(state.tick, true);
-//             step.coin_x_sqrt_price_next = Some(get_sqrt_ratio_at_tick(step.tick_next));
-
-//             ()
-//         }
-//     }
-
-//     // We're not using bitmaps here
-//     // Though tick spacing is used by both turbos and cetus
-//     // we don't need to if we're using BTreeMap.
-//     // We can simply insert the tick IF it is initialized.
-//     // If we find the BTreeMap to be too slow we can switch to an array.
-//     fn next_initialized_tick(&self, tick: i128, x_for_y: bool) -> Option<i128> {
-//         match x_for_y {
-//             true => {
-//                 self.initialized_ticks.range(tick..).map(|(index, _)| index.clone()).next()
-//             },
-//             false => {
-//                 self.initialized_ticks.range(..tick).map(|(index, _)| index.clone()).next_back()
-//             },
-//         }
-//     }
-// }
-
-// fn compute_swap_step(
-//     sqrt_ratio_current: U64F64,
-//     sqrt_ratio_target: U64F64,
-//     liquidity: u128,
-//     amount_remaining: u128,
-//     fee_pips: u32,
-// ) -> (
-//     U64F64,     // sqrt_ratio_next 
-//     u128,       // amount_in
-//     u128,       // amount_out
-//     u128        // fee_amount
-// ) {
-//     let x_for_y = sqrt_ratio_current >= sqrt_ratio_target;
-//     let exact_in = amount_remaining >= 0;
-//     let mut sqrt_ratio_next = U64F64::from_num(0);
-
-//     if exact_in {
-//         let amount_remaining_less_fee = (amount_remaining * (1_000_000_u128 - fee_pips as u128)) / 1_000_000;
-//         let amount_in = if x_for_y {
-//             get_amount_x_delta(sqrt_ratio_target, sqrt_ratio_current, liquidity)
-//         } else {
-//             get_amount_y_delta(sqrt_ratio_current, sqrt_ratio_target, liquidity)
-//         };
-
-//         if amount_remaining_less_fee >= amount_in {
-//             sqrt_ratio_next = sqrt_ratio_target;
-//         } else {
-//             // sqrt_ratio_next = get_next_sqrt_price_from_input(
-
-//             // );
-//         }
-
-//     }
-
-//     ()
-// }
-
-
-
-
-//  // Calculates sqrt(1.0001 * tick)
-// // We're making some compromises here
-// // - Using a floating point base
-// // - Using a converting tick to i32 even though Cetus uses U64
-// fn get_sqrt_ratio_at_tick(tick: i128) -> U64F64 {
-//     U64F64::from_num(ONE_POINT_ZERO_ZERO_ONE.powi(tick as i32))
-// }
-
-// fn get_next_sqrt_price_from_amount_x_rounding_up(
-//     sqrt_price: U64F64,
-//     liquidity: u128,
-//     amount_in: u128
-// ) -> U64F64 {
-//     let liquidity = U64F64::from_num(liquidity);
-//     let amount_in = U64F64::from_num(amount_in);
-
-//     if (sqrt_price * amount_in) / amount_in == sqrt_price {
-//         let denominator = liquidity + (amount_in * sqrt_price);
-//         if denominator >= liquidity {
-//             return (sqrt_price * liquidity) / (liquidity);
-//         }
-//     }
-
-//     liquidity / (amount_in + (liquidity / sqrt_price))
-// }
-
-// fn get_amount_x_delta(
-//     sqrt_ratio_a: U64F64, 
-//     sqrt_ratio_b: U64F64,
-//     liquidity: u128,
-//     round_up: bool
-// ) -> u128 {
-//     // Order so that lesser is a and greater is b (to get absolute value later)
-//     let (sqrt_ratio_a, sqrt_ratio_b) = if sqrt_ratio_a > sqrt_ratio_b {
-//         (sqrt_ratio_b, sqrt_ratio_a)
-//     } else {
-//         (sqrt_ratio_a, sqrt_ratio_b)
-//     };
-
-//     let liquidity = U64F64::from_num(liquidity);
-
-//     assert!(sqrt_ratio_a > 0);
-
-//     ((liquidity * (sqrt_ratio_b - sqrt_ratio_a)) / (sqrt_ratio_a * sqrt_ratio_b)).to_num::<u128>()
-// }
-
-// fn get_amount_y_delta(
-//     sqrt_ratio_a: U64F64, 
-//     sqrt_ratio_b: U64F64,
-//     liquidity: u128,
-//     // round_up: blah blah precision
-// ) -> u128 {
-//     // Order so that lesser is a and greater is b (to get absolute value later)
-//     let (sqrt_ratio_a, sqrt_ratio_b) = if sqrt_ratio_a > sqrt_ratio_b {
-//         (sqrt_ratio_b, sqrt_ratio_a)
-//     } else {
-//         (sqrt_ratio_a, sqrt_ratio_b)
-//     };
-
-//     let liquidity = U64F64::from_num(liquidity);
-
-//     assert!(sqrt_ratio_a > 0);
-
-//     (liquidity * (sqrt_ratio_b - sqrt_ratio_a)).to_num::<u128>()
-// }
-
 mod pool {
-    use super::math_swap;
+    use crate::uniswap_v3_pool::full_math_u128;
+
+    use super::{
+        math_swap,
+        math_bit,
+        math_tick,
+        math_liquidity
+    };
     use std::collections::BTreeMap;
+    use std::num::Wrapping;
     use ethnum::U256;
 
-    struct Pool {
+    struct Tick {
+		// id: UID,
+        liquidity_gross: u128,
+        liquidity_net: i128,
+        fee_growth_outside_a: u128,
+		fee_growth_outside_b: u128,
+        reward_growths_outside: Vec<u128>,
+        initialized: bool,
+    }
+
+    pub struct Pool {
+        // id: UID,
+        // coin_a: Balance<CoinTypeA>,
+        // coin_b: Balance<CoinTypeB>,
         protocol_fees_a: u64,
         protocol_fees_b: u64,
         sqrt_price: u128,
-        tick_current_index: i32,
+        tick_current_index: u32,
         tick_spacing: u32,
         max_liquidity_per_tick: u128,
         fee: u32,
@@ -223,10 +42,16 @@ mod pool {
         fee_growth_global_a: u128,
         fee_growth_global_b: u128,
         liquidity: u128,
-		tick_map: BTreeMap<i32, U256>,
+        initialized_ticks: BTreeMap<i32, Tick> ,//new
+        tick_map: BTreeMap<i32, U256> //new
+		// tick_map: Table<i32, U256>,
+        // deploy_time_ms: u64,
+        // reward_infos: vector<PoolRewardInfo>,
+        // reward_last_updated_time_ms: u64,
     }
 
-    struct ComputeSwapState {
+    #[derive(Clone, Debug)]
+    pub struct ComputeSwapState {
         amount_a: u128,
         amount_b: u128, 
         amount_specified_remaining: u128,
@@ -237,6 +62,458 @@ mod pool {
         protocol_fee: u128,
         liquidity: u128,
         fee_amount: u128,
+    }
+
+    // pub fn swap(
+    //     pool: &mut Pool,
+    //     // recipient
+    //     a_to_b: bool,
+    //     amount_specified: u128,
+    //     amount_specified_is_input: bool,
+    //     sqrt_price_limit: u128,
+    //     // clock 
+    //     // context
+    // ) -> (u128, u128) {
+    //     let compute_swap_result = compute_swap_result(
+    //         pool,
+    //         a_to_b,
+    //         amount_specified,
+    //         amount_specified_is_input,
+    //         sqrt_price_limit
+    //     );
+
+    //     (compute_swap_result.amount_a, compute_swap_result.amount_b)
+    // }
+
+    // Seems that this does most of the work in swap()
+    pub fn compute_swap_result(
+        pool: &mut Pool,
+        a_to_b: bool,
+        amount_specified: u128,
+        amount_specified_is_input: bool,
+        sqrt_price_limit: u128,
+        simulating: bool
+    ) -> ComputeSwapState {
+        
+        assert!(pool.unlocked);
+        assert!(amount_specified != 0);
+        assert!(
+            if a_to_b {
+                sqrt_price_limit < pool.sqrt_price && sqrt_price_limit > math_tick::MIN_SQRT_PRICE_X64
+            } else {
+                sqrt_price_limit > pool.sqrt_price && sqrt_price_limit < math_tick::MAX_SQRT_PRICE_X64
+            }
+        );
+
+        // TODO: When we're doing backruns & whatnot. L2 orderbook style client side delta application.
+        let next_pool_reward_infos = vec![]; // next_pool_reward_infos()
+
+        let tick_current_index = pool.tick_current_index as i32;
+        let sqrt_price = pool.sqrt_price;
+        let amount_specified_remaining = amount_specified;
+        
+        let mut compute_swap_state = ComputeSwapState {
+            amount_a: 0,
+            amount_b: 0, 
+            amount_specified_remaining,
+            amount_calculated: 0,
+            sqrt_price,
+            tick_current_index,
+            fee_growth_global: 0,
+            protocol_fee: 0,
+            liquidity: pool.liquidity,
+            fee_amount: 0,
+        };
+
+        while amount_specified > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
+            let sqrt_price_start = compute_swap_state.sqrt_price;
+            let (mut tick_next, initialized) = next_initialized_tick_within_one_word(
+                pool,
+                compute_swap_state.tick_current_index,
+                a_to_b
+            );
+
+            if tick_next < math_tick::MIN_TICK_INDEX {
+                tick_next = math_tick::MIN_TICK_INDEX;
+            } else if tick_next > math_tick::MAX_TICK_INDEX {
+                tick_next = math_tick::MAX_TICK_INDEX;
+            }
+
+            let sqrt_price_next = math_tick::sqrt_price_from_tick_index(tick_next);
+
+            let amount_in;
+            let amount_out;
+            let mut fee_amount;
+
+            (compute_swap_state.sqrt_price, amount_in, amount_out, fee_amount) =
+                math_swap::compute_swap(
+                    compute_swap_state.sqrt_price,
+                    if {
+                        if a_to_b {
+                            sqrt_price_next < sqrt_price_limit
+                        } else {
+                            sqrt_price_next > sqrt_price_limit
+                        }
+                    } {
+                        sqrt_price_limit
+                    } else {
+                        sqrt_price_next
+                    },
+                    compute_swap_state.liquidity,
+                    compute_swap_state.amount_specified_remaining,
+                    amount_specified_is_input,
+                    pool.fee
+                );
+            
+            if amount_specified_is_input {
+                compute_swap_state.amount_specified_remaining -= amount_in + fee_amount;
+                compute_swap_state.amount_calculated += amount_out;
+            } else {
+                compute_swap_state.amount_specified_remaining -= amount_out;
+                compute_swap_state.amount_calculated += amount_in + fee_amount;
+            }
+
+            compute_swap_state.fee_amount += fee_amount;
+
+            if pool.fee_protocol > 0 {
+                let delta = (fee_amount * pool.fee_protocol as u128) / 1000000;
+                fee_amount -= delta;
+                compute_swap_state.protocol_fee = (Wrapping(compute_swap_state.protocol_fee as u128) + Wrapping(delta)).0;
+            } 
+
+            if compute_swap_state.liquidity > 0 {
+                let temp = full_math_u128::mul_div_floor(
+                    fee_amount,
+                    math_liquidity::Q64,
+                    compute_swap_state.liquidity
+                );
+
+                compute_swap_state.fee_growth_global = (Wrapping(compute_swap_state.fee_growth_global) + Wrapping(temp)).0;
+            }
+
+            if compute_swap_state.sqrt_price == sqrt_price_next {
+                if initialized {
+                    let mut liquidity_net = cross_tick(
+                        pool,
+                        tick_next,
+                        if a_to_b {
+                            compute_swap_state.fee_growth_global
+                        } else {
+                            pool.fee_growth_global_a
+                        },
+                        if a_to_b {
+                            pool.fee_growth_global_b
+                        } else {
+                            compute_swap_state.fee_growth_global
+                        },
+                        &next_pool_reward_infos,
+                        simulating
+                    );
+
+                    if a_to_b {
+                        liquidity_net = -liquidity_net;
+                    }
+
+                    compute_swap_state.liquidity = math_liquidity::add_delta(
+                        compute_swap_state.liquidity,
+                        liquidity_net
+                    );
+                }
+
+                compute_swap_state.tick_current_index = if a_to_b {
+                    tick_next - 1
+                } else {
+                    tick_next
+                }
+            } else if compute_swap_state.sqrt_price != sqrt_price_start {
+                compute_swap_state.tick_current_index = math_tick::tick_index_from_sqrt_price(
+                    compute_swap_state.sqrt_price
+                );
+            }
+        }
+
+        // TODO: When we're doing backruns & whatnot. L2 orderbook style client side delta application.
+        if !simulating {
+            // lines 413 - 513 in disassembeld function
+        }
+
+        (compute_swap_state.amount_a, compute_swap_state.amount_b) = if amount_specified_is_input {
+            (amount_specified - compute_swap_state.amount_specified_remaining, compute_swap_state.amount_calculated)
+        } else {
+            (compute_swap_state.amount_calculated, amount_specified - compute_swap_state.amount_specified_remaining)
+        };
+
+        compute_swap_state
+
+    }
+
+    pub fn next_initialized_tick_within_one_word(
+        pool: &mut Pool,
+        tick: i32,
+        lte: bool,
+    ) -> (i32, bool) {
+
+        // let one: U256 = U256::from(1_u8);
+
+        let tick_spacing_i32 = pool.tick_spacing as i32;
+
+        let mut compressed: i32 = tick / tick_spacing_i32;
+
+        if tick < 0 && tick % tick_spacing_i32 != 0 {
+            compressed -= 1;
+        }
+
+        if lte {
+            let (word_pos, bit_pos) = position_tick(tick);
+            let word = pool.tick_map.entry(word_pos).or_insert(U256::from(0_u8));
+
+            let mask = (U256::from(1_u8) << bit_pos) - 1 + (U256::from(1_u8) << bit_pos);
+            let masked = *word & mask;
+
+            let initialized = masked != 0;
+
+            let next = if initialized {
+                (compressed - (bit_pos - math_bit::most_significant_bit(masked)) as i32) * tick_spacing_i32
+            } else {
+                (compressed - bit_pos as i32) * tick_spacing_i32
+            };
+
+            (next, initialized)
+        } else {
+            let (word_pos, bit_pos) = position_tick(compressed + 1);
+            let word = pool.tick_map.entry(word_pos).or_insert(U256::from(0_u8));
+
+            let mask = !((U256::from(1_u8) << bit_pos) - 1);
+            let masked = *word & mask;
+
+            let initialized = masked != 0;
+
+            let next = if initialized {
+                (compressed + 1 + (math_bit::least_significant_bit(masked) - bit_pos) as i32) * tick_spacing_i32
+            } else {
+                (compressed + 1 + (u8::MAX - bit_pos) as i32) * tick_spacing_i32
+            };
+
+            (next, initialized)
+        }
+    }
+
+    pub fn position_tick(
+        tick: i32
+    ) -> (i32, u8) {
+        let word_pos = tick >> 8;
+        let bit_pos = (tick % 256).abs() as u8;
+
+        (word_pos, bit_pos)
+    }
+
+    pub fn cross_tick(
+        pool: &mut Pool,
+        tick_next_index: i32,
+        fee_growth_global_a: u128,
+        fee_growth_global_b: u128,
+        next_pool_reward_infos: &[u128],
+        simulating: bool,  // determines whether we 
+    ) -> i128 {
+        let tick_next = pool
+            .initialized_ticks
+            .entry(tick_next_index)
+            .or_insert(
+                Tick {
+                    // id: UID,
+                    liquidity_gross: 0,
+                    liquidity_net: 0,
+                    fee_growth_outside_a: 0,
+                    fee_growth_outside_b: 0,
+                    reward_growths_outside: vec![],
+                    initialized: false,
+                }
+            );
+
+        if !simulating {
+            tick_next.fee_growth_outside_a = (Wrapping(fee_growth_global_a) - Wrapping(tick_next.fee_growth_outside_a)).0;
+            tick_next.fee_growth_outside_b = (Wrapping(fee_growth_global_b) - Wrapping(tick_next.fee_growth_outside_b)).0;
+
+            for i in 0..next_pool_reward_infos.len() {
+                tick_next.reward_growths_outside[i] = (Wrapping(next_pool_reward_infos[i]) - Wrapping(tick_next.reward_growths_outside[i])).0;
+            }
+        }
+
+        tick_next.liquidity_net
+    }
+
+    // pub fn deploy_pool(
+    //     sqrt_price
+    // )
+
+    #[cfg(test)]
+    mod tests {
+        use crate::uniswap_v3_pool::pool::compute_swap_result;
+
+        // #[test]
+        // fn test_compute_swap_result_one_price_range() {
+        //     // let pool =     pub struct Pool {
+        //     //     protocol_fees_a: u64,
+        //     //     protocol_fees_b: u64,
+        //     //     sqrt_price: u128,
+        //     //     tick_current_index: u32,
+        //     //     tick_spacing: u32,
+        //     //     max_liquidity_per_tick: u128,
+        //     //     fee: u32,
+        //     //     fee_protocol: u32,
+        //     //     unlocked: bool,
+        //     //     fee_growth_global_a: u128,
+        //     //     fee_growth_global_b: u128,
+        //     //     liquidity: u128,
+        //     //     initialized_ticks: BTreeMap<i32, Tick> ,//new
+        //     //     tick_map: BTreeMap<i32, U256> //new
+        //     // }
+
+        //     println!(
+        //         "{:#?}",
+        //         compute_swap_result(
+        //             pool, 
+        //             a_to_b, 
+        //             amount_specified, 
+        //             amount_specified_is_input, 
+        //             sqrt_price_limit, 
+        //             simulating
+        //         )
+        //     );
+        // }
+    }
+
+}
+
+mod math_bit {
+    use ethnum::U256;
+    // use std::ops::Shr;
+
+    pub fn most_significant_bit(
+        mut x: U256
+    ) -> u8 {
+        assert!(x > 0, "x must be greater than 0.");
+        let mut r = 0;
+
+        if x >= 0x10000000000000000000000000000000 {
+            x = x >> 128;
+            r = r + 128;
+        }
+
+        if x >= 0x10000000000000000 {
+            x = x >> 64;
+            r = r + 64;
+        }
+
+        if x >= 0x100000000 {
+            x = x >> 32;
+            r = r + 32;
+        }
+
+        if x >= 0x10000 {
+            x = x >> 16;
+            r = r + 16;
+        };
+
+        if x >= 0x100 {
+            x = x >> 8;
+            r = r + 8;
+        };
+
+        if x >= 0x10 {
+            x = x >> 4;
+            r = r + 4;
+        };
+
+        if x >= 0x4 {
+            x = x >> 2;
+            r = r + 2;
+        };
+
+        if x >= 0x2 {
+            r = r + 1;
+        }
+
+        r
+    }
+
+    pub fn least_significant_bit(
+        mut x: U256
+    ) -> u8 {
+        assert!(x > 0, "x must be greater than 0.");
+
+        let mut r: u8 = 255;
+
+        if x & 0xffffffffffffffffffffffffffffffff > 0 {
+            r = r - 128;
+        } else {
+            x = x >> 128;
+        };
+
+        if x & 0xffffffffffffffff > 0 {
+            r = r - 64;
+        } else {
+            x = x >> 64;
+        };
+
+        if x & 0xffffffff > 0 {
+            r = r - 32;
+        } else {
+            x = x >> 32;
+        };
+
+        if x & 0xffff > 0 {
+            r = r - 16;
+        } else {
+            x = x >> 16;
+        };
+
+        if x & 0xff > 0 {
+            r = r - 8;
+        } else {
+            x = x >> 8;
+        };
+
+        if x & 0xf > 0 {
+            r = r - 4;
+        } else {
+            x = x >> 4;
+        };
+
+        if x & 0x3 > 0 {
+            r = r - 2;
+        } else {
+            x = x >> 2;
+        };
+
+        if x & 0x1 > 0 {
+            r = r - 1;
+        }
+
+        r
+    }
+}
+
+mod math_liquidity {
+
+    pub const Q64: u128 = 0x10000000000000000;
+
+    pub fn add_delta(
+        x: u128,
+        y: i128
+    ) -> u128 {
+        let mut z;
+        let abs_y = y.abs() as u128;
+
+        if y < 0 {
+            assert!(x >= abs_y, "add_delta: x < y.");
+            z = x - abs_y;
+        } else {
+            z = x + abs_y;
+            assert!(z >= x, "add_delta: x < x");
+        }
+
+        z
     }
 }
 
@@ -261,7 +538,7 @@ mod math_swap {
         fee_rate: u32,
     ) -> (u128, u128, u128, u128) {
         let a_to_b = sqrt_price_current >= sqrt_price_target;
-        let mut fee_amount = 0;
+        let mut fee_amount;
 
         let mut amount_fixed_delta = get_amount_fixed_delta(
             sqrt_price_current,
@@ -391,7 +668,7 @@ mod math_sqrt_price {
         math_u128
     };
     use ethnum::U256;
-    use std::ops::Shl;
+    // use std::ops::Shl;
 
     const RESOLUTION: u8 = 64;
     const Q64: u128 = 0x10000000000000000;
@@ -414,10 +691,10 @@ mod math_sqrt_price {
         let (sqrt_price_a_u256, sqrt_price_b_u256, liquidity_u256) = 
             (U256::from(sqrt_price_a), U256::from(sqrt_price_b), U256::from(liquidity));
 
-        let numerator1 = liquidity_u256.shl(RESOLUTION);
-        let numerator2 = sqrt_price_b_u256;
+        let numerator1 = liquidity_u256 << RESOLUTION;
+        let numerator2 = sqrt_price_b_u256 - sqrt_price_b_u256;
 
-        let mut amount_a;
+        let amount_a;
         if round_up {
             amount_a = math_u256::div_round(
                 numerator1 * numerator2 / sqrt_price_b_u256,
@@ -490,11 +767,11 @@ mod math_sqrt_price {
             (U256::from(sqrt_price), U256::from(liquidity), U256::from(amount));
 
         let p = amount_u256 * sqrt_price_u256;
-        let numerator = (liquidity_u256 * sqrt_price_u256).shl(RESOLUTION);
+        let numerator = (liquidity_u256 * sqrt_price_u256) << RESOLUTION;
 
-        let liquidity_shl = liquidity_u256.shl(RESOLUTION);
+        let liquidity_shl = liquidity_u256 << RESOLUTION;
         let denominator = if add {
-            liquidity_shl
+            liquidity_shl + p
         } else {
             liquidity_shl - p
         };
@@ -510,7 +787,7 @@ mod math_sqrt_price {
     ) -> u128 {
         if add {
             let quotient = if amount <= MAX_U64 {
-                amount.shl(RESOLUTION) / liquidity
+                (amount << RESOLUTION) / liquidity
             } else {
                 full_math_u128::mul_div_floor(amount, Q64, liquidity)
             };
@@ -544,6 +821,312 @@ mod math_sqrt_price {
     }
 }
 
+mod math_tick {
+    use super::{
+        full_math_u128,
+        math_u128
+    };
+
+    pub const MAX_SQRT_PRICE_X64: u128 = 79226673515401279992447579055;
+    pub const MIN_SQRT_PRICE_X64: u128 = 4295048016;
+    pub const MAX_TICK_INDEX: i32 = 443636;
+    pub const MIN_TICK_INDEX: i32 = -443636;
+    pub const BIT_PRECISION: u32 = 14;
+    pub const LOG_B_2_X32: u128 = 59543866431248;
+    pub const LOG_B_P_ERR_MARGIN_LOWER_X64: u128 = 184467440737095516; // 0.01
+    pub const LOG_B_P_ERR_MARGIN_UPPER_X64: u128 = 15793534762490258745; // 2^-precision / log_2_b + 0.01
+
+    pub fn tick_index_from_sqrt_price(
+        sqrt_price_x64: u128
+    ) -> i32 {
+        let msb = 128 - math_u128::leading_zeros(sqrt_price_x64) - 1;
+        let log2p_integer_x32 = ((msb as i128) - 64i128) << 32;
+
+        let mut bit = 0x8000_0000_0000_0000_i128;
+        let mut precision = 0;
+        let mut log2p_fraction_x64 = 0i128;
+        let mut r = if msb >= 64 {
+            sqrt_price_x64 >> (msb - 63)
+        } else {
+            sqrt_price_x64 << (63 - msb)
+        };
+
+        while bit > 0 && precision < BIT_PRECISION {
+            r = r * r;
+            let is_r_more_than_two = r >> 127 as u32;
+            r = r >> (63 + is_r_more_than_two as u8);
+            log2p_fraction_x64 = log2p_fraction_x64 + (bit * is_r_more_than_two as i128);
+            bit = bit >> 1;
+            precision = precision + 1;
+        }
+
+        let log2p_fraction_x32 = log2p_fraction_x64 >> 32;
+        let log2p_x32 = log2p_integer_x32 + log2p_fraction_x32;
+
+        // Transform from base 2 to base b
+        let logbp_x64 = log2p_x32 * LOG_B_2_X32 as i128;
+
+        let tick_low = ((logbp_x64 - LOG_B_P_ERR_MARGIN_LOWER_X64 as i128) >> 64) as i32;
+        let tick_high = ((logbp_x64 + LOG_B_P_ERR_MARGIN_UPPER_X64 as i128) >> 64) as i32;
+
+        let result_tick;
+        if tick_low == tick_high {
+            result_tick = tick_low;
+        } else {
+            let actual_tick_high_sqrt_price_x64 = sqrt_price_from_tick_index(tick_high);
+            if actual_tick_high_sqrt_price_x64 <= sqrt_price_x64 {
+                result_tick = tick_high;
+            } else {
+                result_tick = tick_low;
+            }
+        }
+        
+        result_tick
+    }
+
+    pub fn get_min_tick(
+        tick_spacing: u32
+    ) -> i32 {
+        let tick_spacing = tick_spacing as i32;
+        MIN_TICK_INDEX / tick_spacing * tick_spacing
+    }
+
+    pub fn get_max_tick(
+        tick_spacing: u32
+    ) -> i32 {
+        let tick_spacing = tick_spacing as i32;
+        MAX_TICK_INDEX / tick_spacing * tick_spacing
+    }
+
+    pub fn sqrt_price_from_tick_index(
+        tick: i32
+    ) -> u128 {
+        if tick >= 0 {
+            get_sqrt_price_positive_tick(tick)
+        } else {
+            get_sqrt_price_negative_tick(tick)
+        }
+    }
+
+    pub fn get_sqrt_price_positive_tick(
+        tick: i32
+    ) -> u128 {
+        let mut ratio;
+        if tick & 1i32 != 0 {
+            ratio = 79232123823359799118286999567
+        } else {
+            ratio = 79228162514264337593543950336
+        };
+        if tick & 2i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 79236085330515764027303304731, 96u8);
+        };
+        if tick & 4i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 79244008939048815603706035061, 96u8);
+        };
+        if tick & 8i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 79259858533276714757314932305, 96u8);
+        };
+        if tick & 16i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 79291567232598584799939703904, 96u8);
+        };
+        if tick & 32i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 79355022692464371645785046466, 96u8);
+        };
+        if tick & 64i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 79482085999252804386437311141, 96u8);
+        };
+        if tick & 128i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 79736823300114093921829183326, 96u8);
+        };
+        if tick & 256i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 80248749790819932309965073892, 96u8);
+        };
+        if tick & 512i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 81282483887344747381513967011, 96u8);
+        };
+        if tick & 1024i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 83390072131320151908154831281, 96u8);
+        };
+        if tick & 2048i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 87770609709833776024991924138, 96u8);
+        };
+        if tick & 4096i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 97234110755111693312479820773, 96u8);
+        };
+        if tick & 8192i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 119332217159966728226237229890, 96u8);
+        };
+        if tick & 16384i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 179736315981702064433883588727, 96u8);
+        };
+        if tick & 32768i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 407748233172238350107850275304, 96u8);
+        };
+        if tick & 65536i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 2098478828474011932436660412517, 96u8);
+        };
+        if tick & 131072i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 55581415166113811149459800483533, 96u8);
+        };
+        if tick & 262144i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 38992368544603139932233054999993551, 96u8);
+        };
+
+        ratio >> 32
+    }
+
+    pub fn get_sqrt_price_negative_tick(
+        tick: i32
+    ) -> u128 {
+        let abs_tick = tick.abs();
+        let mut ratio;
+        if abs_tick & 1i32 != 0 {
+            ratio = 18445821805675392311
+        } else {
+            ratio = 18446744073709551616
+        };
+
+        if abs_tick & 2i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 18444899583751176498, 64u8);
+        };
+        if abs_tick & 4i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 18443055278223354162, 64u8);
+        };
+        if abs_tick & 8i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 18439367220385604838, 64u8);
+        };
+        if abs_tick & 16i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 18431993317065449817, 64u8);
+        };
+        if abs_tick & 32i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 18417254355718160513, 64u8);
+        };
+        if abs_tick & 64i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 18387811781193591352, 64u8);
+        };
+        if abs_tick & 128i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 18329067761203520168, 64u8);
+        };
+        if abs_tick & 256i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 18212142134806087854, 64u8);
+        };
+        if abs_tick & 512i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 17980523815641551639, 64u8);
+        };
+        if abs_tick & 1024i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 17526086738831147013, 64u8);
+        };
+        if abs_tick & 2048i32 != 0{
+            ratio = full_math_u128::mul_shr(ratio, 16651378430235024244, 64u8);
+        };
+        if abs_tick & 4096i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 15030750278693429944, 64u8);
+        };
+        if abs_tick & 8192i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 12247334978882834399, 64u8);
+        };
+        if abs_tick & 16384i32 != 0{
+            ratio = full_math_u128::mul_shr(ratio, 8131365268884726200, 64u8);
+        };
+        if abs_tick & 32768i32 != 0  {
+            ratio = full_math_u128::mul_shr(ratio, 3584323654723342297, 64u8);
+        };
+        if abs_tick & 65536i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 696457651847595233, 64u8);
+        };
+        if abs_tick & 131072i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 26294789957452057, 64u8);
+        };
+        if abs_tick & 262144i32 != 0 {
+            ratio = full_math_u128::mul_shr(ratio, 37481735321082, 64u8);
+        };
+
+        ratio
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::uniswap_v3_pool::math_tick::MIN_TICK_INDEX;
+
+        #[test]
+        fn test_sqrt_price_from_tick_index_at_max() {
+            let r = tick_index_from_sqrt_price(MAX_SQRT_PRICE_X64);
+            assert!(r == MAX_TICK_INDEX);
+        }
+    
+        #[test]
+        fn test_sqrt_price_from_tick_index_at_min() {
+            let r = tick_index_from_sqrt_price(MIN_SQRT_PRICE_X64);
+            assert!(r == MIN_TICK_INDEX);
+        }
+    
+        #[test]
+        fn test_sqrt_price_from_tick_index_at_max_add_one() {
+            let sqrt_price_x64_max_add_one = MAX_SQRT_PRICE_X64 + 1;
+            let tick_from_max_add_one = tick_index_from_sqrt_price(sqrt_price_x64_max_add_one);
+            let sqrt_price_x64_max = MAX_SQRT_PRICE_X64;
+            let tick_from_max = tick_index_from_sqrt_price(sqrt_price_x64_max);
+    
+            // We don't care about accuracy over the limit. We just care about it's equality properties.
+            assert!(tick_from_max_add_one == tick_from_max);
+        }
+
+        #[test]
+        #[should_panic]
+        fn test_tick_exceed_max() {
+            let sqrt_price_from_max_tick_add_one = sqrt_price_from_tick_index(MAX_TICK_INDEX + 1);
+            let sqrt_price_from_max_tick = sqrt_price_from_tick_index(MAX_TICK_INDEX);
+            assert!(sqrt_price_from_max_tick_add_one > sqrt_price_from_max_tick);
+        }
+    
+        #[test]
+        fn test_tick_below_min() {
+            let sqrt_price_from_min_tick_sub_one = sqrt_price_from_tick_index(MIN_TICK_INDEX - 1);
+            let sqrt_price_from_min_tick = sqrt_price_from_tick_index(MIN_TICK_INDEX);
+
+            assert!(sqrt_price_from_min_tick_sub_one < sqrt_price_from_min_tick);
+        }
+    
+        #[test]
+        fn test_tick_at_max() {
+            let r = sqrt_price_from_tick_index(MAX_TICK_INDEX);
+            assert!(r == MAX_SQRT_PRICE_X64);
+        }
+    
+        #[test]
+        fn test_tick_at_min() {
+            let r = sqrt_price_from_tick_index(MIN_TICK_INDEX);
+            assert!(r == MIN_SQRT_PRICE_X64);
+        }
+    
+        #[test]
+        fn test_get_min_tick_10() {
+            let min_tick = get_min_tick(10);
+            let max_tick = get_max_tick(10);
+            assert!(min_tick == -443630, "min_tick");
+            assert!(max_tick == 443630, "max_tick");
+        }
+
+        #[test]
+        fn test_get_min_tick_300() {
+            let min_tick = get_min_tick(200);
+            let max_tick = get_max_tick(200);
+            assert!(min_tick == -443600, "min_tick");
+            assert!(max_tick == 443600, "max_tick");
+        }
+    
+        #[test]
+        fn test_get_min_tick_max() {
+            let min_tick = get_min_tick(16383);
+            let max_tick = get_max_tick(16383);
+            assert!(min_tick == -442341, "min_tick");
+            assert!(max_tick == 442341, "max_tick");
+        }
+    }
+
+}
+
 mod math_u256 {
     use ethnum::U256;
     pub fn div_round(num: U256, denom: U256, round_up: bool) -> U256  {
@@ -557,11 +1140,11 @@ mod math_u256 {
 }
 
 mod full_math_u128 {
-    use std::ops::Shr;
+    // use std::ops::Shr;
     use ethnum::U256;
 
     pub fn mul_div_round(a: u128, b: u128, denom: u128) -> u128 {
-        let r: U256 = (full_mul(a, b) + U256::from(denom).shr(1)) / U256::from(denom);
+        let r: U256 = (full_mul(a, b) + (U256::from(denom) >> 1)) / U256::from(denom);
         r.as_u128()
     }
 
@@ -573,6 +1156,16 @@ mod full_math_u128 {
     pub fn mul_div_ceil(a: u128, b: u128, denom: u128) -> u128 {
         let r = (full_mul(a, b) + (U256::from(denom) - U256::from(1_u8))) / U256::from(denom);
         r.as_u128()
+    }
+
+    pub fn mul_shr(a: u128, b: u128, shift: u8) -> u128 {
+        let product = full_mul(a, b) >> shift;
+        product.as_u128()
+    }
+
+    pub fn mul_shl(a: u128, b: u128, shift: u8) -> u128 {
+        let product = full_mul(a, b) << shift;
+        product.as_u128()
     }
 
     pub fn full_mul(a: u128, b: u128) -> U256 {
@@ -595,5 +1188,40 @@ mod math_u128 {
         };
 
         quotient
+    }
+
+    pub fn leading_zeros(a: u128) -> u8 {
+        if a == 0 {
+            return 128
+        }
+
+        let a1 = a & 0xFFFFFFFFFFFFFFFF;
+        let a2 = a >> 64;
+
+        if a2 == 0 {
+            let mut bit = 64;
+
+            while bit >= 1 {
+                let b = (a1 >> (bit - 1)) & 1;
+                if b != 0 {
+                    break
+                };
+
+                bit = bit - 1;
+            };
+
+            return (64 - bit) + 64
+        } else {
+            let mut bit = 128;
+            while bit >= 1 {
+                let b = (a >> (bit - 1)) & 1;
+                if b != 0 {
+                    break
+                };
+                bit = bit - 1;
+            };
+
+            return 128 - bit
+        }
     }
 }

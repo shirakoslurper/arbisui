@@ -1,0 +1,241 @@
+next_initialized_tick_within_one_word<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: I32, Arg2: bool): I32 * bool {
+L0:	loc3: I32
+L1:	loc4: I32
+L2:	loc5: u8
+L3:	loc6: u8
+L4:	loc7: I32
+L5:	loc8: bool
+L6:	loc9: u256
+L7:	loc10: u256
+L8:	loc11: u256
+L9:	loc12: u256
+L10:	loc13: I32
+L11:	loc14: u256
+L12:	loc15: u256
+L13:	loc16: I32
+L14:	loc17: I32
+B0:
+	0: CopyLoc[1](Arg1: I32)
+	1: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	2: ImmBorrowFieldGeneric[13](Pool.tick_spacing: u32)
+	3: ReadRef
+	4: Call i32::from(u32): I32
+	5: Call i32::div(I32, I32): I32
+	6: StLoc[10](loc7: I32)
+	7: CopyLoc[1](Arg1: I32)
+	8: Call i32::zero(): I32
+	9: Call i32::lt(I32, I32): bool
+	10: BrFalse(21)
+B1:
+	11: MoveLoc[1](Arg1: I32)
+	12: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	13: ImmBorrowFieldGeneric[13](Pool.tick_spacing: u32)
+	14: ReadRef
+	15: Call i32::mod_euclidean(I32, u32): I32
+	16: Call i32::zero(): I32
+	17: Call i32::eq(I32, I32): bool
+	18: Not
+	19: StLoc[3](loc0: bool)
+	20: Branch(23)
+B2:
+	21: LdFalse
+	22: StLoc[3](loc0: bool)
+B3:
+	23: MoveLoc[3](loc0: bool)
+	24: BrFalse(30)
+B4:
+	25: MoveLoc[10](loc7: I32)
+	26: LdU32(1)
+	27: Call i32::from(u32): I32
+	28: Call i32::sub(I32, I32): I32
+	29: StLoc[10](loc7: I32)
+B5:
+	30: MoveLoc[2](Arg2: bool)
+	31: BrFalse(95)
+B6:
+	32: CopyLoc[10](loc7: I32)
+	33: Call position_tick(I32): I32 * u8
+	34: StLoc[8](loc5: u8)
+	35: StLoc[19](loc16: I32)
+	36: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	37: CopyLoc[19](loc16: I32)
+	38: Call try_init_tick_word<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32)
+	39: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	40: MoveLoc[19](loc16: I32)
+	41: StLoc[4](loc1: I32)
+	42: FreezeRef
+	43: MoveLoc[4](loc1: I32)
+	44: Call get_tick_word<Ty0, Ty1, Ty2>(&Pool<Ty0, Ty1, Ty2>, I32): u256
+	45: StLoc[17](loc14: u256)
+	46: LdU256(1)
+	47: CopyLoc[8](loc5: u8)
+	48: Shl
+	49: LdU256(1)
+	50: Sub
+	51: LdU256(1)
+	52: CopyLoc[8](loc5: u8)
+	53: Shl
+	54: Add
+	55: StLoc[12](loc9: u256)
+	56: MoveLoc[17](loc14: u256)
+	57: MoveLoc[12](loc9: u256)
+	58: BitAnd
+	59: StLoc[14](loc11: u256)
+	60: CopyLoc[14](loc11: u256)
+	61: LdU256(0)
+	62: Neq
+	63: StLoc[11](loc8: bool)
+	64: CopyLoc[11](loc8: bool)
+	65: BrFalse(81)
+B7:
+	66: MoveLoc[10](loc7: I32)
+	67: MoveLoc[8](loc5: u8)
+	68: MoveLoc[14](loc11: u256)
+	69: Call math_bit::most_significant_bit(u256): u8
+	70: Sub
+	71: CastU32
+	72: Call i32::from(u32): I32
+	73: Call i32::sub(I32, I32): I32
+	74: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	75: ImmBorrowFieldGeneric[13](Pool.tick_spacing: u32)
+	76: ReadRef
+	77: Call i32::from(u32): I32
+	78: Call i32::mul(I32, I32): I32
+	79: StLoc[5](loc2: I32)
+	80: Branch(92)
+B8:
+	81: MoveLoc[10](loc7: I32)
+	82: MoveLoc[8](loc5: u8)
+	83: CastU32
+	84: Call i32::from(u32): I32
+	85: Call i32::sub(I32, I32): I32
+	86: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	87: ImmBorrowFieldGeneric[13](Pool.tick_spacing: u32)
+	88: ReadRef
+	89: Call i32::from(u32): I32
+	90: Call i32::mul(I32, I32): I32
+	91: StLoc[5](loc2: I32)
+B9:
+	92: MoveLoc[5](loc2: I32)
+	93: StLoc[16](loc13: I32)
+	94: Branch(168)
+B10:
+	95: CopyLoc[10](loc7: I32)
+	96: LdU32(1)
+	97: Call i32::from(u32): I32
+	98: Call i32::add(I32, I32): I32
+	99: Call position_tick(I32): I32 * u8
+	100: StLoc[9](loc6: u8)
+	101: StLoc[20](loc17: I32)
+	102: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	103: CopyLoc[20](loc17: I32)
+	104: Call try_init_tick_word<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32)
+	105: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	106: MoveLoc[20](loc17: I32)
+	107: StLoc[6](loc3: I32)
+	108: FreezeRef
+	109: MoveLoc[6](loc3: I32)
+	110: Call get_tick_word<Ty0, Ty1, Ty2>(&Pool<Ty0, Ty1, Ty2>, I32): u256
+	111: StLoc[18](loc15: u256)
+	112: LdU256(1)
+	113: CopyLoc[9](loc6: u8)
+	114: Shl
+	115: LdU256(1)
+	116: Sub
+	117: LdU256(115792089237316195423570985008687907853269984665640564039457584007913129639935)
+	118: Xor
+	119: StLoc[13](loc10: u256)
+	120: MoveLoc[18](loc15: u256)
+	121: MoveLoc[13](loc10: u256)
+	122: BitAnd
+	123: StLoc[15](loc12: u256)
+	124: CopyLoc[15](loc12: u256)
+	125: LdU256(0)
+	126: Neq
+	127: StLoc[11](loc8: bool)
+	128: CopyLoc[11](loc8: bool)
+	129: BrFalse(150)
+B11:
+	130: MoveLoc[10](loc7: I32)
+	131: LdU32(1)
+	132: Call i32::from(u32): I32
+	133: Call i32::add(I32, I32): I32
+	134: MoveLoc[15](loc12: u256)
+	135: Call math_bit::least_significant_bit(u256): u8
+	136: CastU32
+	137: Call i32::from(u32): I32
+	138: MoveLoc[9](loc6: u8)
+	139: CastU32
+	140: Call i32::from(u32): I32
+	141: Call i32::sub(I32, I32): I32
+	142: Call i32::add(I32, I32): I32
+	143: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	144: ImmBorrowFieldGeneric[13](Pool.tick_spacing: u32)
+	145: ReadRef
+	146: Call i32::from(u32): I32
+	147: Call i32::mul(I32, I32): I32
+	148: StLoc[7](loc4: I32)
+	149: Branch(166)
+B12:
+	150: MoveLoc[10](loc7: I32)
+	151: LdU32(1)
+	152: Call i32::from(u32): I32
+	153: Call i32::add(I32, I32): I32
+	154: LdU8(255)
+	155: MoveLoc[9](loc6: u8)
+	156: Sub
+	157: CastU32
+	158: Call i32::from(u32): I32
+	159: Call i32::add(I32, I32): I32
+	160: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	161: ImmBorrowFieldGeneric[13](Pool.tick_spacing: u32)
+	162: ReadRef
+	163: Call i32::from(u32): I32
+	164: Call i32::mul(I32, I32): I32
+	165: StLoc[7](loc4: I32)
+B13:
+	166: MoveLoc[7](loc4: I32)
+	167: StLoc[16](loc13: I32)
+B14:
+	168: MoveLoc[16](loc13: I32)
+	169: MoveLoc[11](loc8: bool)
+	170: Ret
+}
+public position_tick(Arg0: I32): I32 * u8 {
+L0:	loc1: I32
+B0:
+	0: CopyLoc[0](Arg0: I32)
+	1: LdU8(8)
+	2: Call i32::shr(I32, u8): I32
+	3: StLoc[2](loc1: I32)
+	4: MoveLoc[0](Arg0: I32)
+	5: LdU32(256)
+	6: Call i32::mod_euclidean(I32, u32): I32
+	7: Call i32::abs_u32(I32): u32
+	8: CastU8
+	9: StLoc[1](loc0: u8)
+	10: MoveLoc[2](loc1: I32)
+	11: MoveLoc[1](loc0: u8)
+	12: Ret
+}
+try_init_tick_word<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: I32) {
+B0:
+	0: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	1: ImmBorrowFieldGeneric[14](Pool.tick_map: Table<I32, u256>)
+	2: CopyLoc[1](Arg1: I32)
+	3: Call table::contains<I32, u256>(&Table<I32, u256>, I32): bool
+	4: Not
+	5: BrFalse(12)
+B1:
+	6: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	7: MutBorrowFieldGeneric[14](Pool.tick_map: Table<I32, u256>)
+	8: MoveLoc[1](Arg1: I32)
+	9: LdU256(0)
+	10: Call table::add<I32, u256>(&mut Table<I32, u256>, I32, u256)
+	11: Branch(14)
+B2:
+	12: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	13: Pop
+B3:
+	14: Ret
+}

@@ -1,0 +1,135 @@
+next_pool_reward_infos<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: u64): vector<u128> {
+L0:	loc2: vector<u128>
+L1:	loc3: u64
+L2:	loc4: u64
+L3:	loc5: u64
+L4:	loc6: u128
+L5:	loc7: &mut PoolRewardInfo
+L6:	loc8: u64
+B0:
+	0: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	1: ImmBorrowFieldGeneric[12](Pool.reward_last_updated_time_ms: u64)
+	2: ReadRef
+	3: StLoc[3](loc1: u64)
+	4: CopyLoc[1](Arg1: u64)
+	5: CopyLoc[3](loc1: u64)
+	6: Ge
+	7: BrFalse(9)
+B1:
+	8: Branch(13)
+B2:
+	9: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	10: Pop
+	11: LdConst[15](U64: [15, 0, 0, 0, 0, 0, 0, 0])
+	12: Abort
+B3:
+	13: VecPack(56, 0)
+	14: StLoc[4](loc2: vector<u128>)
+	15: CopyLoc[1](Arg1: u64)
+	16: MoveLoc[3](loc1: u64)
+	17: Sub
+	18: LdU64(1000)
+	19: Div
+	20: StLoc[10](loc8: u64)
+	21: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	22: ImmBorrowFieldGeneric[10](Pool.reward_infos: vector<PoolRewardInfo>)
+	23: VecLen(81)
+	24: StLoc[7](loc5: u64)
+	25: LdU64(0)
+	26: StLoc[5](loc3: u64)
+B4:
+	27: CopyLoc[5](loc3: u64)
+	28: CopyLoc[7](loc5: u64)
+	29: Lt
+	30: BrFalse(86)
+B5:
+	31: Branch(32)
+B6:
+	32: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	33: ImmBorrowFieldGeneric[5](Pool.liquidity: u128)
+	34: ReadRef
+	35: LdU128(0)
+	36: Eq
+	37: BrFalse(41)
+B7:
+	38: LdTrue
+	39: StLoc[2](loc0: bool)
+	40: Branch(45)
+B8:
+	41: CopyLoc[10](loc8: u64)
+	42: LdU64(0)
+	43: Eq
+	44: StLoc[2](loc0: bool)
+B9:
+	45: MoveLoc[2](loc0: bool)
+	46: BrFalse(52)
+B10:
+	47: MutBorrowLoc[4](loc2: vector<u128>)
+	48: LdU128(0)
+	49: CopyLoc[5](loc3: u64)
+	50: Call vector::insert<u128>(&mut vector<u128>, u128, u64)
+	51: Branch(81)
+B11:
+	52: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	53: MutBorrowFieldGeneric[10](Pool.reward_infos: vector<PoolRewardInfo>)
+	54: CopyLoc[5](loc3: u64)
+	55: VecMutBorrow(81)
+	56: StLoc[9](loc7: &mut PoolRewardInfo)
+	57: CopyLoc[10](loc8: u64)
+	58: CastU128
+	59: CopyLoc[9](loc7: &mut PoolRewardInfo)
+	60: ImmBorrowField[25](PoolRewardInfo.emissions_per_second: u128)
+	61: ReadRef
+	62: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	63: ImmBorrowFieldGeneric[5](Pool.liquidity: u128)
+	64: ReadRef
+	65: Call full_math_u128::mul_div_floor(u128, u128, u128): u128
+	66: StLoc[8](loc6: u128)
+	67: CopyLoc[9](loc7: &mut PoolRewardInfo)
+	68: ImmBorrowField[31](PoolRewardInfo.growth_global: u128)
+	69: ReadRef
+	70: MoveLoc[8](loc6: u128)
+	71: Call math_u128::wrapping_add(u128, u128): u128
+	72: CopyLoc[9](loc7: &mut PoolRewardInfo)
+	73: MutBorrowField[31](PoolRewardInfo.growth_global: u128)
+	74: WriteRef
+	75: MutBorrowLoc[4](loc2: vector<u128>)
+	76: MoveLoc[9](loc7: &mut PoolRewardInfo)
+	77: ImmBorrowField[31](PoolRewardInfo.growth_global: u128)
+	78: ReadRef
+	79: CopyLoc[5](loc3: u64)
+	80: Call vector::insert<u128>(&mut vector<u128>, u128, u64)
+B12:
+	81: MoveLoc[5](loc3: u64)
+	82: LdU64(1)
+	83: Add
+	84: StLoc[5](loc3: u64)
+	85: Branch(27)
+B13:
+	86: ImmBorrowLoc[4](loc2: vector<u128>)
+	87: VecLen(56)
+	88: StLoc[6](loc4: u64)
+B14:
+	89: CopyLoc[6](loc4: u64)
+	90: LdConst[3](U64: [3, 0, 0, 0, 0, 0, 0, 0])
+	91: Lt
+	92: BrFalse(102)
+B15:
+	93: Branch(94)
+B16:
+	94: MutBorrowLoc[4](loc2: vector<u128>)
+	95: LdU128(0)
+	96: VecPushBack(56)
+	97: MoveLoc[6](loc4: u64)
+	98: LdU64(1)
+	99: Add
+	100: StLoc[6](loc4: u64)
+	101: Branch(89)
+B17:
+	102: MoveLoc[1](Arg1: u64)
+	103: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	104: MutBorrowFieldGeneric[12](Pool.reward_last_updated_time_ms: u64)
+	105: WriteRef
+	106: MoveLoc[4](loc2: vector<u128>)
+	107: Ret
+}

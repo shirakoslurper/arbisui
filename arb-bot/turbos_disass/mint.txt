@@ -1,0 +1,98 @@
+public(friend) mint<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: address, Arg2: I32, Arg3: I32, Arg4: u128, Arg5: &Clock, Arg6: &mut TxContext): u64 * u64 {
+B0:
+	0: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	1: ImmBorrowFieldGeneric[0](Pool.unlocked: bool)
+	2: ReadRef
+	3: BrFalse(5)
+B1:
+	4: Branch(13)
+B2:
+	5: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	6: Pop
+	7: MoveLoc[6](Arg6: &mut TxContext)
+	8: Pop
+	9: MoveLoc[5](Arg5: &Clock)
+	10: Pop
+	11: LdConst[8](U64: [8, 0, 0, 0, 0, 0, 0, 0])
+	12: Abort
+B3:
+	13: CopyLoc[4](Arg4: u128)
+	14: LdU128(0)
+	15: Gt
+	16: BrFalse(18)
+B4:
+	17: Branch(26)
+B5:
+	18: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	19: Pop
+	20: MoveLoc[6](Arg6: &mut TxContext)
+	21: Pop
+	22: MoveLoc[5](Arg5: &Clock)
+	23: Pop
+	24: LdConst[0](U64: [1, 0, 0, 0, 0, 0, 0, 0])
+	25: Abort
+B6:
+	26: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	27: CopyLoc[1](Arg1: address)
+	28: CopyLoc[2](Arg2: I32)
+	29: CopyLoc[3](Arg3: I32)
+	30: CopyLoc[6](Arg6: &mut TxContext)
+	31: Call try_init_position<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, address, I32, I32, &mut TxContext)
+	32: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	33: CopyLoc[1](Arg1: address)
+	34: CopyLoc[2](Arg2: I32)
+	35: CopyLoc[3](Arg3: I32)
+	36: CopyLoc[4](Arg4: u128)
+	37: Call i128::from(u128): I128
+	38: MoveLoc[5](Arg5: &Clock)
+	39: MoveLoc[6](Arg6: &mut TxContext)
+	40: Call modify_position<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, address, I32, I32, I128, &Clock, &mut TxContext): I128 * I128
+	41: StLoc[10](loc3: I128)
+	42: StLoc[8](loc1: I128)
+	43: CopyLoc[8](loc1: I128)
+	44: Call i128::is_neg(I128): bool
+	45: Not
+	46: BrFalse(52)
+B7:
+	47: CopyLoc[10](loc3: I128)
+	48: Call i128::is_neg(I128): bool
+	49: Not
+	50: StLoc[7](loc0: bool)
+	51: Branch(54)
+B8:
+	52: LdFalse
+	53: StLoc[7](loc0: bool)
+B9:
+	54: MoveLoc[7](loc0: bool)
+	55: BrFalse(57)
+B10:
+	56: Branch(61)
+B11:
+	57: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	58: Pop
+	59: LdConst[3](U64: [3, 0, 0, 0, 0, 0, 0, 0])
+	60: Abort
+B12:
+	61: MoveLoc[8](loc1: I128)
+	62: Call i128::abs_u128(I128): u128
+	63: CastU64
+	64: MoveLoc[10](loc3: I128)
+	65: Call i128::abs_u128(I128): u128
+	66: CastU64
+	67: StLoc[11](loc4: u64)
+	68: StLoc[9](loc2: u64)
+	69: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	70: FreezeRef
+	71: Call object::id<Pool<Ty0, Ty1, Ty2>>(&Pool<Ty0, Ty1, Ty2>): ID
+	72: MoveLoc[1](Arg1: address)
+	73: MoveLoc[2](Arg2: I32)
+	74: MoveLoc[3](Arg3: I32)
+	75: CopyLoc[9](loc2: u64)
+	76: CopyLoc[11](loc4: u64)
+	77: MoveLoc[4](Arg4: u128)
+	78: Pack[9](MintEvent)
+	79: Call event::emit<MintEvent>(MintEvent)
+	80: MoveLoc[9](loc2: u64)
+	81: MoveLoc[11](loc4: u64)
+	82: Ret
+}
