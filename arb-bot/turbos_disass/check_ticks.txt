@@ -1,0 +1,36 @@
+check_ticks(Arg0: I32, Arg1: I32) {
+B0:
+	0: CopyLoc[0](Arg0: I32)
+	1: CopyLoc[1](Arg1: I32)
+	2: Call i32::lt(I32, I32): bool
+	3: BrFalse(5)
+B1:
+	4: Branch(7)
+B2:
+	5: LdConst[5](U64: [5, 0, 0, 0, 0, 0, 0, 0])
+	6: Abort
+B3:
+	7: MoveLoc[0](Arg0: I32)
+	8: LdConst[25](U32: [244, 196, 6, 0])
+	9: Call i32::neg_from(u32): I32
+	10: Call i32::gte(I32, I32): bool
+	11: BrFalse(13)
+B4:
+	12: Branch(15)
+B5:
+	13: LdConst[5](U64: [5, 0, 0, 0, 0, 0, 0, 0])
+	14: Abort
+B6:
+	15: MoveLoc[1](Arg1: I32)
+	16: LdConst[25](U32: [244, 196, 6, 0])
+	17: Call i32::from(u32): I32
+	18: Call i32::lte(I32, I32): bool
+	19: BrFalse(21)
+B7:
+	20: Branch(23)
+B8:
+	21: LdConst[5](U64: [5, 0, 0, 0, 0, 0, 0, 0])
+	22: Abort
+B9:
+	23: Ret
+}

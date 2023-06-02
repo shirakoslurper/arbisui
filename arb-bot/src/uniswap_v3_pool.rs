@@ -22,7 +22,7 @@ mod pool {
         liquidity_net: i128,
         fee_growth_outside_a: u128,
 		fee_growth_outside_b: u128,
-        reward_growths_outside: Vec<u128>,
+        // reward_growths_outside: Vec<u128>,
         initialized: bool,
     }
 
@@ -33,7 +33,7 @@ mod pool {
         protocol_fees_a: u64,
         protocol_fees_b: u64,
         sqrt_price: u128,
-        tick_current_index: u32,
+        tick_current_index: i32,
         tick_spacing: u32,
         max_liquidity_per_tick: u128,
         fee: u32,
@@ -43,8 +43,7 @@ mod pool {
         fee_growth_global_b: u128,
         liquidity: u128,
         initialized_ticks: BTreeMap<i32, Tick> ,//new
-        tick_map: BTreeMap<i32, U256> //new
-		// tick_map: Table<i32, U256>,
+        tick_map: BTreeMap<i32, U256> // Move: Table<i32, U256>,
         // deploy_time_ms: u64,
         // reward_infos: vector<PoolRewardInfo>,
         // reward_last_updated_time_ms: u64,
@@ -63,27 +62,6 @@ mod pool {
         liquidity: u128,
         fee_amount: u128,
     }
-
-    // pub fn swap(
-    //     pool: &mut Pool,
-    //     // recipient
-    //     a_to_b: bool,
-    //     amount_specified: u128,
-    //     amount_specified_is_input: bool,
-    //     sqrt_price_limit: u128,
-    //     // clock 
-    //     // context
-    // ) -> (u128, u128) {
-    //     let compute_swap_result = compute_swap_result(
-    //         pool,
-    //         a_to_b,
-    //         amount_specified,
-    //         amount_specified_is_input,
-    //         sqrt_price_limit
-    //     );
-
-    //     (compute_swap_result.amount_a, compute_swap_result.amount_b)
-    // }
 
     // Seems that this does most of the work in swap()
     pub fn compute_swap_result(
@@ -106,7 +84,7 @@ mod pool {
         );
 
         // TODO: When we're doing backruns & whatnot. L2 orderbook style client side delta application.
-        let next_pool_reward_infos = vec![]; // next_pool_reward_infos()
+        // let next_pool_reward_infos = vec![]; // next_pool_reward_infos()
 
         let tick_current_index = pool.tick_current_index as i32;
         let sqrt_price = pool.sqrt_price;
@@ -206,7 +184,7 @@ mod pool {
                         } else {
                             compute_swap_state.fee_growth_global
                         },
-                        &next_pool_reward_infos,
+                        // &next_pool_reward_infos,
                         simulating
                     );
 
@@ -312,7 +290,7 @@ mod pool {
         tick_next_index: i32,
         fee_growth_global_a: u128,
         fee_growth_global_b: u128,
-        next_pool_reward_infos: &[u128],
+        // next_pool_reward_infos: &[u128],
         simulating: bool,  // determines whether we 
     ) -> i128 {
         let tick_next = pool
@@ -325,7 +303,7 @@ mod pool {
                     liquidity_net: 0,
                     fee_growth_outside_a: 0,
                     fee_growth_outside_b: 0,
-                    reward_growths_outside: vec![],
+                    // reward_growths_outside: vec![],
                     initialized: false,
                 }
             );
@@ -334,17 +312,102 @@ mod pool {
             tick_next.fee_growth_outside_a = (Wrapping(fee_growth_global_a) - Wrapping(tick_next.fee_growth_outside_a)).0;
             tick_next.fee_growth_outside_b = (Wrapping(fee_growth_global_b) - Wrapping(tick_next.fee_growth_outside_b)).0;
 
-            for i in 0..next_pool_reward_infos.len() {
-                tick_next.reward_growths_outside[i] = (Wrapping(next_pool_reward_infos[i]) - Wrapping(tick_next.reward_growths_outside[i])).0;
-            }
+            // for i in 0..next_pool_reward_infos.len() {
+            //     tick_next.reward_growths_outside[i] = (Wrapping(next_pool_reward_infos[i]) - Wrapping(tick_next.reward_growths_outside[i])).0;
+            // }
         }
 
         tick_next.liquidity_net
     }
 
-    // pub fn deploy_pool(
-    //     sqrt_price
-    // )
+    pub fn deploy_pool(
+        fee: u32,
+        tick_spacing: u32,
+        sqrt_price: u128,
+        fee_protocol: u32
+    ) -> Pool {
+        let tick_current_index = math_tick::tick_index_from_sqrt_price(sqrt_price);
+        let max_liquidity_per_tick = math_tick::max_liquidity_per_tick(tick_spacing);
+
+        Pool {
+            protocol_fees_a: 0,
+            protocol_fees_b: 0,
+            sqrt_price,
+            tick_current_index,
+            tick_spacing,
+            max_liquidity_per_tick,
+            fee,
+            fee_protocol,
+            unlocked: true,
+            fee_growth_global_a: 0,
+            fee_growth_global_b: 0,
+            liquidity: 0,
+            initialized_ticks: BTreeMap::new(),
+            tick_map: BTreeMap::new()
+        }
+    }
+
+    pub fn update_tick(
+        pool: &mut Pool,
+        tick_index: i32,
+        tick_current_index: i32,
+        liquidity_delta: i128,
+        upper: bool,
+        // reward growths
+    ) {
+
+        let fee_growth_global_a = pool.fee_growth_global_a;
+        let fee_growth_global_b = pool.fee_growth_global_b;
+        let max_liquidity_per_tick = pool.max_liquidity_per_tick;
+
+        let tick = pool
+            .initialized_ticks
+            .entry(tick_index)
+            .or_insert(
+                Tick {
+                    liquidity_gross: 0,
+                    liquidity_net: 0,
+                    fee_growth_outside_a: 0,
+                    fee_growth_outside_b: 0,
+                    // reward_growths_outside: vec![],
+                    initialized: false,
+                }
+            );
+        
+        let liquidity_gross_before = tick.liquidity_gross;
+        let liquidity_gross_after = math_liquidity::add_delta(liquidity_gross_before, liquidity_delta);
+
+        assert!(liquidity_gross_after <= max_liquidity_per_tick);
+
+        let flipped = (liquidity_gross_after == 0) != (liquidity_gross_before == 0);
+
+        if liquidity_gross_before == 0 {
+            if tick_index < tick_current_index {
+                tick.fee_growth_outside_a = fee_growth_global_a;
+                tick.fee_growth_outside_b = fee_growth_global_b;
+                // omitting liquidity mining information
+            }
+            tick.initialized = true;
+        }
+
+        tick.liquidity_gross = liquidity_gross_after;
+
+        tick.liquidity_net = if upper {
+            tick.liquidity_net - liquidity_delta
+        } else {
+            tick.liquidity_net + liquidity_delta
+        };
+
+    }
+
+    pub fn check_ticks(
+        tick_lower: i32,
+        tick_upper: i32
+    ) {
+        assert!(tick_lower < tick_upper, "tick_lower > tick upper");
+        assert!(tick_lower >= math_tick::MIN_TICK_INDEX, "tick_lower < MIN_TICK_INDEX");
+        assert!(tick_upper <= math_tick::MAX_TICK_INDEX, "tick_lower > MAX_TICK_INDEX");
+    }
 
     #[cfg(test)]
     mod tests {
@@ -352,23 +415,6 @@ mod pool {
 
         // #[test]
         // fn test_compute_swap_result_one_price_range() {
-        //     // let pool =     pub struct Pool {
-        //     //     protocol_fees_a: u64,
-        //     //     protocol_fees_b: u64,
-        //     //     sqrt_price: u128,
-        //     //     tick_current_index: u32,
-        //     //     tick_spacing: u32,
-        //     //     max_liquidity_per_tick: u128,
-        //     //     fee: u32,
-        //     //     fee_protocol: u32,
-        //     //     unlocked: bool,
-        //     //     fee_growth_global_a: u128,
-        //     //     fee_growth_global_b: u128,
-        //     //     liquidity: u128,
-        //     //     initialized_ticks: BTreeMap<i32, Tick> ,//new
-        //     //     tick_map: BTreeMap<i32, U256> //new
-        //     // }
-
         //     println!(
         //         "{:#?}",
         //         compute_swap_result(
@@ -827,6 +873,8 @@ mod math_tick {
         math_u128
     };
 
+    pub const MAX_U64: u64 = 0xffffffffffffffff;
+    pub const MAX_U128: u128 = 0xffffffffffffffffffffffffffffffff;
     pub const MAX_SQRT_PRICE_X64: u128 = 79226673515401279992447579055;
     pub const MIN_SQRT_PRICE_X64: u128 = 4295048016;
     pub const MAX_TICK_INDEX: i32 = 443636;
@@ -896,6 +944,18 @@ mod math_tick {
     ) -> i32 {
         let tick_spacing = tick_spacing as i32;
         MAX_TICK_INDEX / tick_spacing * tick_spacing
+    }
+
+    pub fn max_liquidity_per_tick(
+        tick_spacing: u32
+    ) -> u128 {
+        let min_tick_index = get_min_tick(tick_spacing);
+        let max_tick_index = get_max_tick(tick_spacing);
+
+        let num_ticks = ((max_tick_index - min_tick_index) / tick_spacing as i32).abs() as u32 + 1;
+        let liquidity = MAX_U128 / (num_ticks as u128);
+
+        liquidity
     }
 
     pub fn sqrt_price_from_tick_index(

@@ -1,0 +1,121 @@
+update_position<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: address, Arg2: I32, Arg3: I32, Arg4: I128, Arg5: &Clock, Arg6: &mut TxContext) {
+B0:
+	0: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	1: ImmBorrowFieldGeneric[2](Pool.tick_current_index: I32)
+	2: ReadRef
+	3: StLoc[13](loc6: I32)
+	4: LdFalse
+	5: StLoc[9](loc2: bool)
+	6: LdFalse
+	7: StLoc[10](loc3: bool)
+	8: CopyLoc[4](Arg4: I128)
+	9: Call i128::zero(): I128
+	10: Call i128::eq(I128, I128): bool
+	11: Not
+	12: BrFalse(49)
+B1:
+	13: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	14: MoveLoc[5](Arg5: &Clock)
+	15: Call clock::timestamp_ms(&Clock): u64
+	16: Call next_pool_reward_infos<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, u64): vector<u128>
+	17: StLoc[11](loc4: vector<u128>)
+	18: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	19: CopyLoc[2](Arg2: I32)
+	20: CopyLoc[13](loc6: I32)
+	21: CopyLoc[4](Arg4: I128)
+	22: LdFalse
+	23: CopyLoc[11](loc4: vector<u128>)
+	24: CopyLoc[6](Arg6: &mut TxContext)
+	25: Call update_tick<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, I32, I128, bool, vector<u128>, &mut TxContext): bool
+	26: StLoc[9](loc2: bool)
+	27: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	28: CopyLoc[3](Arg3: I32)
+	29: CopyLoc[13](loc6: I32)
+	30: CopyLoc[4](Arg4: I128)
+	31: LdTrue
+	32: MoveLoc[11](loc4: vector<u128>)
+	33: CopyLoc[6](Arg6: &mut TxContext)
+	34: Call update_tick<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, I32, I128, bool, vector<u128>, &mut TxContext): bool
+	35: StLoc[10](loc3: bool)
+	36: CopyLoc[9](loc2: bool)
+	37: BrFalse(42)
+B2:
+	38: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	39: CopyLoc[2](Arg2: I32)
+	40: CopyLoc[6](Arg6: &mut TxContext)
+	41: Call flip_tick<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, &mut TxContext)
+B3:
+	42: CopyLoc[10](loc3: bool)
+	43: BrFalse(48)
+B4:
+	44: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	45: CopyLoc[3](Arg3: I32)
+	46: CopyLoc[6](Arg6: &mut TxContext)
+	47: Call flip_tick<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, &mut TxContext)
+B5:
+	48: Branch(51)
+B6:
+	49: MoveLoc[5](Arg5: &Clock)
+	50: Pop
+B7:
+	51: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	52: CopyLoc[2](Arg2: I32)
+	53: CopyLoc[3](Arg3: I32)
+	54: CopyLoc[13](loc6: I32)
+	55: CopyLoc[6](Arg6: &mut TxContext)
+	56: Call next_fee_growth_inside<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, I32, I32, &mut TxContext): u128 * u128
+	57: StLoc[8](loc1: u128)
+	58: StLoc[7](loc0: u128)
+	59: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	60: CopyLoc[2](Arg2: I32)
+	61: CopyLoc[3](Arg3: I32)
+	62: MoveLoc[13](loc6: I32)
+	63: CopyLoc[6](Arg6: &mut TxContext)
+	64: Call next_reward_growths_inside<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, I32, I32, &mut TxContext): vector<u128>
+	65: StLoc[12](loc5: vector<u128>)
+	66: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	67: MoveLoc[1](Arg1: address)
+	68: CopyLoc[2](Arg2: I32)
+	69: CopyLoc[3](Arg3: I32)
+	70: Call get_position_key(address, I32, I32): String
+	71: CopyLoc[4](Arg4: I128)
+	72: MoveLoc[7](loc0: u128)
+	73: MoveLoc[8](loc1: u128)
+	74: MoveLoc[12](loc5: vector<u128>)
+	75: CopyLoc[6](Arg6: &mut TxContext)
+	76: Call update_position_metadata<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, String, I128, u128, u128, vector<u128>, &mut TxContext)
+	77: MoveLoc[4](Arg4: I128)
+	78: Call i128::is_neg(I128): bool
+	79: BrFalse(98)
+B8:
+	80: MoveLoc[9](loc2: bool)
+	81: BrFalse(86)
+B9:
+	82: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	83: MoveLoc[2](Arg2: I32)
+	84: CopyLoc[6](Arg6: &mut TxContext)
+	85: Call clear_tick<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, &mut TxContext)
+B10:
+	86: MoveLoc[10](loc3: bool)
+	87: BrFalse(93)
+B11:
+	88: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	89: MoveLoc[3](Arg3: I32)
+	90: MoveLoc[6](Arg6: &mut TxContext)
+	91: Call clear_tick<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, &mut TxContext)
+	92: Branch(97)
+B12:
+	93: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	94: Pop
+	95: MoveLoc[6](Arg6: &mut TxContext)
+	96: Pop
+B13:
+	97: Branch(102)
+B14:
+	98: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	99: Pop
+	100: MoveLoc[6](Arg6: &mut TxContext)
+	101: Pop
+B15:
+	102: Ret
+}
