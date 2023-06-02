@@ -354,7 +354,7 @@ mod pool {
         liquidity_delta: i128,
         upper: bool,
         // reward growths
-    ) {
+    ) -> bool {
 
         let fee_growth_global_a = pool.fee_growth_global_a;
         let fee_growth_global_b = pool.fee_growth_global_b;
@@ -398,6 +398,7 @@ mod pool {
             tick.liquidity_net + liquidity_delta
         };
 
+        flipped
     }
 
     pub fn check_ticks(
