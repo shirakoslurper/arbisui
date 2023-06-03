@@ -86,25 +86,8 @@ impl <'data> MarketGraph<'data> {
     // We'll need to identify the vertex pairs in the parameters we pass
     // Make more sense to iterate through all edges
     // But markets fields to edges is one to many
-    pub fn update_markets_with_fields(&mut self, pool_id_to_object_response: &HashMap<ObjectID, SuiObjectResponse>) -> Result<(), anyhow::Error> {
-        self
-            .graph
-            .all_edges_mut()
-            .try_for_each(|(_, _, markets_infos)| {
-                markets_infos
-                    .iter_mut()
-                    .try_for_each(|market_info| {
-                        let pool_id = *market_info.market.pool_id();
-                        let object_response = pool_id_to_object_response.get(&pool_id).context("Missing fields for pool.")?;
-                        market_info.market.update_with_object_response(object_response)?;
-                        Ok::<(),  anyhow::Error>(())
-                    })?;
-                Ok::<(),  anyhow::Error>(())
-            })?;
-        Ok(())
-    }
 
-    pub fn update_markets_with_responses(&mut self, pool_id_to_object_response: &HashMap<ObjectID, SuiObjectResponse>) -> Result<(), anyhow::Error> {
+    pub fn update_markets_with_object_responses(&mut self, pool_id_to_object_response: &HashMap<ObjectID, SuiObjectResponse>) -> Result<(), anyhow::Error> {
         self
             .graph
             .all_edges_mut()

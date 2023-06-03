@@ -123,7 +123,7 @@ impl Exchange for Cetus {
             })
             .collect::<Vec<ObjectID>>();
 
-        sui_sdk_utils::get_pool_ids_to_object_response(sui_client, &pool_ids).await
+        sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await
     }
 }
 

@@ -301,7 +301,7 @@ impl Exchange for Turbos {
             .collect::<Result<Vec<ObjectID>, anyhow::Error>>()?;
 
 
-        let pool_id_to_object_response = sui_sdk_utils::get_pool_ids_to_object_response(sui_client, &pool_ids).await?;
+        let pool_id_to_object_response = sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await?;
 
         let markets = pool_id_to_object_response
             .into_iter()
@@ -350,7 +350,7 @@ impl Exchange for Turbos {
             })
             .collect::<Vec<ObjectID>>();
 
-        sui_sdk_utils::get_pool_ids_to_object_response(sui_client, &pool_ids).await
+        sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await
     }
 }
 #[derive(Debug, Clone)]

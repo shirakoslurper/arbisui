@@ -89,44 +89,40 @@ pub async fn get_object_responses(
         .collect::<Vec<SuiObjectResponse>>();
 
     Ok(object_responses)
-
 }
 
-pub async fn get_pool_ids_to_object_response(
+pub async fn get_object_id_to_object_response(
     sui_client: &SuiClient, 
-    pool_ids: &[ObjectID]
+    object_ids: &[ObjectID]
 ) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
-    let chunked_pool_id_to_object_response = future::try_join_all(
-        pool_ids
+    let chunked_object_responses = future::try_join_all(
+        object_ids
         .chunks(OBJECT_REQUEST_LIMIT)
-        .map(|pool_ids| {
+        .map(|object_ids| {
             async {
                 let object_responses = sui_client
                     .read_api()
                     .multi_get_object_with_options(
-                        pool_ids.to_vec(),
+                        object_ids.to_vec(),
                         SuiObjectDataOptions::full_content()
                     )
                     .await?;
 
-                let pool_id_to_object_response = pool_ids
-                    .iter()
-                    .cloned()
-                    .zip(object_responses.into_iter())
-                    .collect::<HashMap<ObjectID, SuiObjectResponse>>();
-
-                Ok::<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error>(pool_id_to_object_response)
+                Ok::<Vec<SuiObjectResponse>, anyhow::Error>(object_responses)
             }
         })
     )
     .await?;
 
-    let pool_id_to_object_response = chunked_pool_id_to_object_response
+    let object_id_to_object_responses = chunked_object_responses
         .into_iter()
         .flatten()
-        .collect::<HashMap<ObjectID, SuiObjectResponse>>();
+        .map(|object_response| {
+            Ok((object_response.object_id()?, object_response))
+        })
+        .collect::<Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error>>()?;
 
-    Ok(pool_id_to_object_response)
+    Ok(object_id_to_object_responses)
 }
 
 pub mod sui_move_value {
