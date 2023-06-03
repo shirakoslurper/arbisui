@@ -52,16 +52,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // println!("{:#?}", turbos_dynamic_fields);
 
-    let turbos_tick = run_data
-        .sui_client
-        .read_api()
-        .get_object_with_options(
-            ObjectID::from_str("0xb5fed30450f21fb4df0c9881eb645be2dd583b41551ad47161a547c467bf7efd")?,
-            SuiObjectDataOptions::full_content()
-        )
-        .await?;
+    // let turbos_tick = run_data
+    //     .sui_client
+    //     .read_api()
+    //     .get_object_with_options(
+    //         ObjectID::from_str("0xb5fed30450f21fb4df0c9881eb645be2dd583b41551ad47161a547c467bf7efd")?,
+    //         SuiObjectDataOptions::full_content()
+    //     )
+    //     .await?;
 
-    println!("turbos_tick: {:#?}", turbos_tick);
+    // println!("turbos_tick: {:#?}", turbos_tick);
 
     // let turbos_tick_word = run_data
     //     .sui_client
@@ -86,8 +86,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // println!("turbos_tick_map: {:#?}", turbos_tick_map);
 
-    
-
     // let exchanges = vec![cetus];
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
     
@@ -100,17 +98,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     println!("markets.len(): {}", markets.len());
 
-    // /// TEST
-    // let pool_ids = markets.iter().map(|market| market.pool_id().clone()).collect::<Vec<ObjectID>>();
-    // let pool_id_to_object_response = sui_sdk_utils::get_pool_ids_to_object_response(&run_data.sui_client, &pool_ids).await?;
-    // pool_id_to_object_response
-    //     .iter()
-    //     .try_for_each(|(pool_id, object_response)| {
-    //         println!("{:#?}", turbos.tickless_pool_from_fields(&sui_sdk_utils::get_fields_from_object_response(object_response)?)?);
-    //         Ok::<(), anyhow::Error>(())
-    //     });
-
-    // // END TEST
+    /// TEST
+    let pool_ids = markets.iter().map(|market| market.pool_id().clone()).collect::<Vec<ObjectID>>();
+    let pool_id_to_object_response = sui_sdk_utils::get_pool_ids_to_object_response(&run_data.sui_client, &pool_ids).await?;
+    for (pool_id, object_response) in pool_id_to_object_response.iter() {
+        println!("{:#?}", turbos.pool_from_object_response(&run_data.sui_client, object_response).await?);
+    }
+    // END TEST
 
     let coin_to_metadata = future::try_join_all(
         markets
@@ -152,7 +146,7 @@ async fn main() -> Result<(), anyhow::Error> {
             Ok(
                 (
                     pool_id.clone(),
-                    sui_sdk_utils::get_fields_from_object_response(object_response)?
+                    sui_sdk_utils::get_fields_from_object_response(object_response).context("missing fields")?
                 )
             )
         })
@@ -166,7 +160,7 @@ async fn main() -> Result<(), anyhow::Error> {
             Ok(
                 (
                     pool_id.clone(),
-                    sui_sdk_utils::get_fields_from_object_response(object_response)?
+                    sui_sdk_utils::get_fields_from_object_response(object_response).context("missing fields")?
                 )
             )
         })

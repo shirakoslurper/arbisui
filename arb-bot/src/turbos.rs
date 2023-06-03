@@ -17,7 +17,7 @@ use custom_sui_sdk::{
     }
 };
 
-use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError, ObjectType};
+use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError, ObjectType}, object::Object};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiObjectDataOptions};
  
@@ -53,8 +53,10 @@ impl FromStr for Turbos {
 }
 
 impl Turbos {
-    pub async fn pool_from_fields(&self, sui_client: &SuiClient, fields: &BTreeMap<String, SuiMoveValue>) -> Result<turbos_pool::Pool, anyhow::Error> {
+    pub async fn pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<turbos_pool::Pool, anyhow::Error> {
         // println!("{#?}")
+        let fields = sui_sdk_utils::get_fields_from_object_response(response).context("missing fields")?;
+
         let protocol_fees_a = u64::from_str(
             if let SuiMoveValue::String(str_value) = fields
                 .get("protocol_fees_a")
@@ -177,13 +179,11 @@ impl Turbos {
                 return Err(anyhow!("tick_current_index field does not match SuiMoveValue::String value."));
             };
 
-        let initialized_ticks = BTreeMap::new();
+        let initialized_ticks = self.get_initialized_ticks(sui_client, &response.object_id()?).await?;
 
         let tick_map_id = if let SuiMoveValue::Struct(struct_value) = fields
             .get("tick_map")
             .context("Missing field tick_map.")? {
-                // format!("0x{}", struct_value.address)
-                // println!("tick_current_index: {:#?}", struct_value);
                 if let SuiMoveStruct::WithTypes{ type_, fields } = struct_value {
                     if let SuiMoveValue::UID{ id } = fields
                         .get("id")
@@ -252,35 +252,33 @@ impl Turbos {
         let word_pos_to_word = word_object_responses
             .into_iter()
             .map(|word_object_response| {
-                let fields = get_fields_from_object_response(&word_object_response)?;
+                let fields = sui_sdk_utils::read_fields_from_object_response(&word_object_response).context("Mising fields from word_object_response.")?;
                 let word_pos = if let SuiMoveValue::Struct(struct_value) = fields
-                    .get("name")
+                    .read_dynamic_field_value("name")
                     .context("Missing field name.")? {
-                        // format!("0x{}", struct_value.address)
-                        // println!("tick_current_index: {:#?}", struct_value);
                         if let SuiMoveStruct::WithTypes{ type_, fields } = struct_value {
                             if let SuiMoveValue::Number(num_value) = fields
                                 .get("bits")
                                 .context("Missing field bits.")? {
                                     *num_value as i32
                                 } else {
-                                    return Err(anyhow!("bits field does not match MoveValue::Number value."));
+                                    return Err(anyhow!("bits field does not match MoveValue::Number variant."));
                                 }
                         } else {
-                            return Err(anyhow!("struct_value does not match SuiMoveStruct::WithTypes value."));
+                            return Err(anyhow!("struct_value does not match SuiMoveStruct::WithTypes variant."));
                         }
                     } else {
-                        return Err(anyhow!("name field does not match SuiMoveValue::String value."));
+                        return Err(anyhow!("name field does not match SuiMoveValue::String variant."));
                     };
 
                 // Moving the casts/conversions to outside the if let makes this more modular
                 let word = U256::from_str(
-                    if let SuiMoveValue::String(str_value) = fields
-                        .get("value")
+                    & if let SuiMoveValue::String(str_value) = fields
+                        .read_dynamic_field_value("value")
                         .context("Missing field value.")? {
                             str_value
                         } else {
-                            return Err(anyhow!("value field does not match SuiMoveValue::String value."));
+                            return Err(anyhow!("value field does not match SuiMoveValue::String variant."));
                         }
                 )?;
 
@@ -291,12 +289,12 @@ impl Turbos {
         Ok(word_pos_to_word)
     }
 
-    pub async fn get_initialized_ticks(&self, sui_client: &SuiClient) -> Result<(), anyhow::Error>{
+    pub async fn get_initialized_ticks(&self, sui_client: &SuiClient, pool_id: &ObjectID) -> Result<BTreeMap<i32, turbos_pool::Tick>, anyhow::Error>{
         let pool_dynamic_field_infos = sui_client
             .read_api()
             .pages(
                 GetDynamicFieldsRequest {
-                    object_id:self.package_id.clone(), // We can make this consuming if it saves time
+                    object_id: pool_id.clone(),
                     cursor: None,
                     limit: None,
                 }
@@ -304,6 +302,8 @@ impl Turbos {
             .items()
             .try_collect::<Vec<DynamicFieldInfo>>()
             .await?;
+
+        println!("Len pool dynamic fields: {}", pool_dynamic_field_infos.len());
 
         let tick_object_type = format!("{}::pool::Tick", self.package_id);
 
@@ -317,90 +317,106 @@ impl Turbos {
             })
             .collect::<Vec<ObjectID>>();
 
-        let tick_object_responses = sui_sdk_utils::get_object_responses(sui_client, tick_object_ids).await?;
+        let tick_object_responses = sui_sdk_utils::get_object_responses(sui_client, &tick_object_ids).await?;
 
-        // let tick_index_to_tick = tick_object_responses
-        //     .into_iter()
-        //     .map(|tick_object_response| {
-        //         let fields = get_fields_from_object_response(&tick_object_response)?;
-        //         let tick_move_struct = 
+        let tick_index_to_tick = tick_object_responses
+            .into_iter()
+            .map(|tick_object_response| {
+                let fields = sui_sdk_utils::read_fields_from_object_response(&tick_object_response).context("Missing fields")?;
 
-        //         let tick_index = if let SuiMoveValue::Struct(struct_value) = fields
-        //             .get("name")
-        //             .context("Missing field name.")? {
-        //                 // format!("0x{}", struct_value.address)
-        //                 // println!("tick_current_index: {:#?}", struct_value);
-        //                 if let SuiMoveStruct::WithTypes{ type_, fields } = struct_value {
-        //                     if let SuiMoveValue::Number(num_value) = fields
-        //                         .get("bits")
-        //                         .context("Missing field bits.")? {
-        //                             *num_value as i32
-        //                         } else {
-        //                             return Err(anyhow!("bits field does not match MoveValue::Number value."));
-        //                         }
-        //                 } else {
-        //                     return Err(anyhow!("struct_value does not match SuiMoveStruct::WithTypes value."));
-        //                 }
-        //             } else {
-        //                 return Err(anyhow!("name field does not match SuiMoveValue::String value."));
-        //             };
+                let tick_index = if let SuiMoveValue::Struct(struct_value) = fields
+                    .read_dynamic_field_value("name")
+                    .context("Missing field name.")? {
+                        if let SuiMoveValue::Struct(struct_value) = fields
+                            .read_dynamic_field_value("name")
+                            .context("Missing field name.")? {
+                                if let SuiMoveValue::Number(num_value) = struct_value
+                                    .read_dynamic_field_value("bits")
+                                    .context("Missing field bits.")? {
+                                        num_value as i32
+                                    } else {
+                                        return Err(anyhow!("bits field does not match SuiMoveValue::Number variant."));
+                                    }
+                            } else {
+                                return Err(anyhow!("name field does not match SuiMoveValue::Struct variant."));
+                            }
+                    } else {
+                        return Err(anyhow!("name field does not match SuiMoveValue::Struct variant."));
+                    };
 
-        //         let tick_fields = if let SuiMoveValue::Struct(struct_value) = fields
-        //             .get("value")
-        //             .context("Missing field value.")? {
-        //                 // format!("0x{}", struct_value.address)
-        //                 // println!("tick_current_index: {:#?}", struct_value);
-        //                 if let SuiMoveStruct::WithTypes{ type_, fields } = struct_value {
-        //                     fields
-        //                 } else {
-        //                     return Err(anyhow!("struct_value does not match SuiMoveStruct::WithTypes value."));
-        //                 }
-        //             } else {
-        //                 return Err(anyhow!("name field does not match SuiMoveValue::String value."));
-        //             };
+                let tick_fields = if let SuiMoveValue::Struct(struct_value) = fields
+                    .read_dynamic_field_value("value")
+                    .context("Missing field value.")? {
+                        struct_value
+                    } else {
+                        return Err(anyhow!("name field does not match SuiMoveValue::String variant."));
+                    };
 
+                let liquidity_gross = if let SuiMoveValue::String(str_value) = tick_fields
+                    .read_dynamic_field_value("liquidity_gross")
+                    .context("Missing field liquidity_gross.")? {
+                        u128::from_str(&str_value).context("liquidity_gross")?
+                    } else {
+                        // println!("{:#?}", tick_fields
+                        // .read_dynamic_field_value("liquidity_gross")
+                        // .context("Missing field liquidity_gross.")?);
+                        return Err(anyhow!("liquidity_gross field does not match SuiMoveValue::String variant."));
+                    };
 
-        //         // Moving the casts/conversions to outside the if let makes this more modular
-        //         let fee_growth_outside_a = u128::from_str(
-        //             if let SuiMoveValue::String(str_value) = tick_fields
-        //                 .get("fee_growth_outside_a")
-        //                 .context("Missing field fee_growth_outside_a.")? {
-        //                     str_value
-        //                 } else {
-        //                     return Err(anyhow!("fee_growth_outside_a field does not match SuiMoveValue::String value."));
-        //                 }
-        //         );
+                let liquidity_net = if let SuiMoveValue::Struct(struct_value) = tick_fields
+                    .read_dynamic_field_value("liquidity_net")
+                    .context("Missing field liquidity_net.")? {
+                        if let SuiMoveValue::String(str_value) = struct_value
+                            .read_dynamic_field_value("bits")
+                            .context("Missing field bits.")? {
+                                // Avoid the "this number can't fit" error
+                                u128::from_str(&str_value).context("liquidity_net")? as i128
+                            } else {
+                                return Err(anyhow!("bits field does not match SuiMoveValue::String variant."));
+                            }
+                    } else {
+                        return Err(anyhow!("liquidity_net field does not match SuiMoveValue::Struct variant."));
+                    };
 
-        //         // Moving the casts/conversions to outside the if let makes this more modular
-        //         let fee_growth_outside_b = u128::from_str(
-        //             if let SuiMoveValue::String(str_value) = tick_fields
-        //                 .get("fee_growth_outside_b")
-        //                 .context("Missing field fee_growth_outside_b.")? {
-        //                     str_value
-        //                 } else {
-        //                     return Err(anyhow!("fee_growth_outside_b field does not match SuiMoveValue::String value."));
-        //                 }
-        //         );
+                // Moving the casts/conversions to outside the if let makes this more modular
+                let fee_growth_outside_a = if let SuiMoveValue::String(str_value) = tick_fields
+                    .read_dynamic_field_value("fee_growth_outside_a")
+                    .context("Missing field fee_growth_outside_a.")? {
+                        u128::from_str(&str_value).context("fee_growth_outside_a")?
+                    } else {
+                        return Err(anyhow!("fee_growth_outside_a field does not match SuiMoveValue::String variant."));
+                    };
 
-        //         // Moving the casts/conversions to outside the if let makes this more modular
-        //         let liquidity_gross = u128::from_str(
-        //             if let SuiMoveValue::String(str_value) = tick_fields
-        //                 .get("liquidity_gross")
-        //                 .context("Missing field liquidity_gross.")? {
-        //                     str_value
-        //                 } else {
-        //                     return Err(anyhow!("liquidity_gross field does not match SuiMoveValue::String value."));
-        //                 }
-        //         );
+                // Moving the casts/conversions to outside the if let would make this more modular
+                let fee_growth_outside_b = if let SuiMoveValue::String(str_value) = tick_fields
+                    .read_dynamic_field_value("fee_growth_outside_b")
+                    .context("Missing field fee_growth_outside_b.")? {
+                        u128::from_str(&str_value).context("fee_growth_outside_b")?
+                    } else {
+                        return Err(anyhow!("fee_growth_outside_b field does not match SuiMoveValue::String variant."));
+                    };
+                
+                let initialized = if let SuiMoveValue::Bool(bool_value) = tick_fields
+                    .read_dynamic_field_value("initialized")
+                    .context("Missing field initialized.")? {
+                        bool_value
+                    } else {
+                        return Err(anyhow!("initialized field does not match SuiMoveValue::String variant."));
+                    };
 
+                let tick = turbos_pool::Tick {
+                    liquidity_gross,
+                    liquidity_net,
+                    fee_growth_outside_a,
+                    fee_growth_outside_b,
+                    initialized,
+                };
 
+                Ok((tick_index, tick))
+            })
+            .collect::<Result<BTreeMap<i32, turbos_pool::Tick>, anyhow::Error>>()?;
 
-        //         Ok((tick_index, word))
-        //     })
-        //     .collect::<Result<BTreeMap<i32, turbos_pool::Tick>, anyhow::Error>>()?;
-
-
-        Ok(())
+        Ok(tick_index_to_tick)
     }
 
 }
@@ -451,15 +467,16 @@ impl Exchange for Turbos {
             .map(|(pool_id, object_response)| {
                 // println!("{:#?}", object_response);
 
-                let fields = sui_sdk_utils::get_fields_from_object_response(&object_response)?;
+                let fields = sui_sdk_utils::read_fields_from_object_response(&object_response).context(format!("Missing fields for pool {}.", pool_id))?;
+
                 let (coin_x, coin_y) = get_coin_pair_from_object_response(&object_response)?;
 
                 let coin_x_sqrt_price = U64F64::from_bits(
                     u128::from_str(
-                        if let SuiMoveValue::String(str_value) = fields
-                            .get("sqrt_price")
-                            .context("Missing field sqrt_price.")? {
-                                &str_value
+                        & if let SuiMoveValue::String(str_value) = fields
+                            .read_dynamic_field_value("sqrt_price")
+                            .context(format!("Missing field sqrt_price for coin {}", coin_x))? {
+                                str_value
                             } else {
                                 return Err(anyhow!("sqrt_price field does not match SuiMoveValue::String value."));
                             }
@@ -538,7 +555,7 @@ impl Market for TurbosMarket {
                     .context("Missing field sqrt_price.")? {
                         str_value
                     } else {
-                        return Err(anyhow!("sqrt_price field does not match SuiMoveValue::String value."));
+                        return Err(anyhow!("sqrt_price field does not match SuiMoveValue::String variant."));
                     }
             )?
         );

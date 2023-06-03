@@ -16,47 +16,47 @@ use crate::constants::OBJECT_REQUEST_LIMIT;
 // Should return Option - would be more intuitive...
 pub fn get_fields_from_object_response(
     response: &SuiObjectResponse
-) -> Result<BTreeMap<String, SuiMoveValue>, anyhow::Error> {
+) -> Option<BTreeMap<String, SuiMoveValue>> {
     if let Some(object_data) = response.clone().data {
         if let Some(parsed_data) = object_data.content {
             if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
                 if let SuiMoveStruct::WithFields(field_map) = parsed_move_object.fields {
-                    Ok(field_map)
+                    Some(field_map)
                 } else {
-                    Err(anyhow!("Does not match the SuiMoveStruct::WithFields variant"))
+                    None
                 }
             } else {
-                Err(anyhow!("Does not match the SuiParsedData::MoveObject variant"))
+                None
             }
         } else {
-            Err(anyhow!("Expected Some"))
+            None
         }
     } else {
-        Err(anyhow!("Expected Some"))
+        None
     }
 }
 
-pub fn get_sui_move_struct_from_object_response(
+// Switching to this just makes things little more flexible than the above
+// Can choose when to throw an error
+// Works for SuiMoveStruct::WithTypes as well
+// Instead of get() we call read_dynamic_field_value() which returns a value (not reference). 
+// Otherwise nearly identical.
+// If the additional clones prove to be detrimental than it is a simple switch back
+pub fn read_fields_from_object_response(
     response: &SuiObjectResponse
-) -> Result<BTreeMap<String, SuiMoveValue>, anyhow::Error> {
+) -> Option<SuiMoveStruct> {
     if let Some(object_data) = response.clone().data {
         if let Some(parsed_data) = object_data.content {
             if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
-                match
-
-                if let SuiMoveStruct::WithFields(_) = parsed_move_object.fields {
-                    Ok(parsed_move_object.fields)
-                } else {
-                    Err(anyhow!("Does not match the SuiMoveStruct::WithFields variant"))
-                }
+                Some(parsed_move_object.fields)
             } else {
-                Err(anyhow!("Does not match the SuiParsedData::MoveObject variant"))
+                None
             }
         } else {
-            Err(anyhow!("Expected Some"))
+            None
         }
     } else {
-        Err(anyhow!("Expected Some"))
+        None
     }
 }
 
@@ -129,23 +129,23 @@ pub async fn get_pool_ids_to_object_response(
     Ok(pool_id_to_object_response)
 }
 
-pub fn fields_from_pool_id_to_object_response(
-    pool_id_to_object_response: HashMap<ObjectID, SuiObjectResponse>
-) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
-    let pool_id_to_fields = pool_id_to_object_response
-        .iter()
-        .map(|(pool_id, object_response)| {
-            Ok(
-                (
-                    pool_id.clone(), 
-                    get_fields_from_object_response(object_response)?
-                )
-            )
-        })
-        .collect::<Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
+// pub fn fields_from_pool_id_to_object_response(
+//     pool_id_to_object_response: HashMap<ObjectID, SuiObjectResponse>
+// ) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
+//     let pool_id_to_fields = pool_id_to_object_response
+//         .iter()
+//         .map(|(pool_id, object_response)| {
+//             Ok(
+//                 (
+//                     pool_id.clone(), 
+//                     get_fields_from_object_response(object_response)?
+//                 )
+//             )
+//         })
+//         .collect::<Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
 
-    Ok(pool_id_to_fields)
-}
+//     Ok(pool_id_to_fields)
+// }
 
 // pub async fn get_pool_id_to_fields(
 //     sui_client: &SuiClient, 
