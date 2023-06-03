@@ -6,6 +6,7 @@ use arb_bot::*;
 use anyhow::Context;
 
 use futures::future;
+use sui_sdk::types::object::{Object, self};
 
 use std::cmp;
 use std::collections::{BTreeMap, HashMap};
@@ -19,6 +20,8 @@ use move_core_types::language_storage::TypeTag;
 use fixed::types::U64F64;
 
 use petgraph::algo::all_simple_paths;
+
+use crate::sui_sdk_utils;
 
 const CETUS_EXCHANGE_ADDRESS: &str = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb";
 const TURBOS_EXCHANGE_ADDRESS: &str = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1";
@@ -83,6 +86,18 @@ async fn main() -> Result<(), anyhow::Error> {
     markets.extend(turbos_markets.clone());
 
     println!("markets.len(): {}", markets.len());
+
+    // /// TEST
+    // let pool_ids = markets.iter().map(|market| market.pool_id().clone()).collect::<Vec<ObjectID>>();
+    // let pool_id_to_object_response = sui_sdk_utils::get_pool_ids_to_object_response(&run_data.sui_client, &pool_ids).await?;
+    // pool_id_to_object_response
+    //     .iter()
+    //     .try_for_each(|(pool_id, object_response)| {
+    //         println!("{:#?}", turbos.tickless_pool_from_fields(&sui_sdk_utils::get_fields_from_object_response(object_response)?)?);
+    //         Ok::<(), anyhow::Error>(())
+    //     });
+
+    // // END TEST
 
     let coin_to_metadata = future::try_join_all(
         markets
@@ -150,68 +165,68 @@ async fn main() -> Result<(), anyhow::Error> {
 
     println!("pool_id_to_fields.keys().len(): {}", pool_id_to_fields.keys().len());
 
-    market_graph.update_markets_with_fields(&pool_id_to_fields)?;
+    // market_graph.update_markets_with_fields(&pool_id_to_fields)?;
 
-    all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7))
-        .for_each(|path: Vec<&TypeTag>| {
-            // println!("SIMPLE CYCLE ({} HOP) ", path.len() - 1);
-            // path
-            //     .iter()
-            //     .for_each(|coin| {
-            //         println!("{}", *coin);
-            //     });
+    // all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7))
+    //     .for_each(|path: Vec<&TypeTag>| {
+    //         // println!("SIMPLE CYCLE ({} HOP) ", path.len() - 1);
+    //         // path
+    //         //     .iter()
+    //         //     .for_each(|coin| {
+    //         //         println!("{}", *coin);
+    //         //     });
 
-            let mut best_path_rate = U64F64::from_num(1);
+    //         let mut best_path_rate = U64F64::from_num(1);
 
-            for pair in path[..].windows(2) {
-                let orig = pair[0];
-                let dest = pair[1];
+    //         for pair in path[..].windows(2) {
+    //             let orig = pair[0];
+    //             let dest = pair[1];
 
-                // Decimals for human readability (rates we would see on exchanges)
-                let orig_decimals = coin_to_metadata.get(orig).unwrap().decimals as i32;
-                let dest_decimals = coin_to_metadata.get(dest).unwrap().decimals as i32;
+    //             // Decimals for human readability (rates we would see on exchanges)
+    //             let orig_decimals = coin_to_metadata.get(orig).unwrap().decimals as i32;
+    //             let dest_decimals = coin_to_metadata.get(dest).unwrap().decimals as i32;
 
 
-                // let ten =  U64F64::from_num(10);
-                let adj = U64F64::from_num(10_f64.powi(dest_decimals - orig_decimals));
+    //             // let ten =  U64F64::from_num(10);
+    //             let adj = U64F64::from_num(10_f64.powi(dest_decimals - orig_decimals));
 
-                let markets = market_graph
-                    .graph
-                    .edge_weight(orig, dest)
-                    .context("Missing edge weight")
-                    .unwrap();
+    //             let markets = market_graph
+    //                 .graph
+    //                 .edge_weight(orig, dest)
+    //                 .context("Missing edge weight")
+    //                 .unwrap();
 
-                let directional_rates = markets
-                    .iter()
-                    .map(|market_info| {
-                        let coin_x = market_info.market.coin_x();
-                        let coin_y = market_info.market.coin_y();
-                        if (coin_x, coin_y) == (orig, dest) {
-                            market_info.market.coin_x_price().unwrap()
-                        } else if (coin_y, coin_x) == (orig, dest){
-                            market_info.market.coin_y_price().unwrap()
-                        } else {
-                            panic!("coin pair does not match");
-                        }
-                    });
+    //             let directional_rates = markets
+    //                 .iter()
+    //                 .map(|market_info| {
+    //                     let coin_x = market_info.market.coin_x();
+    //                     let coin_y = market_info.market.coin_y();
+    //                     if (coin_x, coin_y) == (orig, dest) {
+    //                         market_info.market.coin_x_price().unwrap()
+    //                     } else if (coin_y, coin_x) == (orig, dest){
+    //                         market_info.market.coin_y_price().unwrap()
+    //                     } else {
+    //                         panic!("coin pair does not match");
+    //                     }
+    //                 });
 
-                let best_leg_rate = directional_rates
-                    .fold(U64F64::from_num(0), |max, current| {
-                        cmp::max(max, current)
-                    });
+    //             let best_leg_rate = directional_rates
+    //                 .fold(U64F64::from_num(0), |max, current| {
+    //                     cmp::max(max, current)
+    //                 });
 
-                println!("    {}: {} decimals", orig, orig_decimals);
-                println!("    -> {}: {} decimals", dest, dest_decimals);
-                // Using decimals for human readability
-                println!("        leg rate: {}", best_leg_rate / adj);
+    //             println!("    {}: {} decimals", orig, orig_decimals);
+    //             println!("    -> {}: {} decimals", dest, dest_decimals);
+    //             // Using decimals for human readability
+    //             println!("        leg rate: {}", best_leg_rate / adj);
 
-                best_path_rate *= best_leg_rate;
-            }
+    //             best_path_rate *= best_leg_rate;
+    //         }
 
-            println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
+    //         println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
 
-            // println!("\n");
-        });
+    //         // println!("\n");
+    //     });
     
     // loop_blocks(run_data, vec![&flameswap]).await?;
 

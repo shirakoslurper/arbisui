@@ -10,7 +10,7 @@ pub mod cetus;
 pub mod turbos;
 pub mod constants;
 pub mod sui_sdk_utils;
-pub mod uniswap_v3_pool;
+pub mod turbos_pool;
 pub use crate::markets::*;
 pub use crate::market_graph::*;
 pub use crate::cetus::*;
