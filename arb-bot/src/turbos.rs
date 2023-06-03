@@ -2,6 +2,8 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use anyhow::{anyhow, Context};
 
+use ethnum::U256;
+
 use futures::{future, TryStreamExt};
 use page_turner::PageTurner;
 use serde_json::Value;
@@ -9,10 +11,14 @@ use fixed::types::U64F64;
 
 use custom_sui_sdk::{
     SuiClient,
-    apis::QueryEventsRequest
+    apis::{
+        QueryEventsRequest,
+        GetDynamicFieldsRequest
+    }
 };
 
 use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError, ObjectType};
+use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiObjectDataOptions};
  
 use move_core_types::language_storage::{StructTag, TypeTag};
@@ -184,14 +190,15 @@ impl Turbos {
                         .context("Missing field id.")? {
                             id.clone()
                         } else {
-                            return Err(anyhow!("id field does not match MoveValue::Number value."));
+                            return Err(anyhow!("id field does not match MoveValue::UID value."));
                         }
                 } else {
                     return Err(anyhow!("struct_value does not match SuiMoveStruct::WithTypes value."));
                 }
             } else {
-                return Err(anyhow!("tick_current_index field does not match SuiMoveValue::String value."));
+                return Err(anyhow!("tick_map_id field does not match SuiMoveValue::String value."));
             };
+
         let tick_map = BTreeMap::new();
 
         Ok(
@@ -214,9 +221,89 @@ impl Turbos {
         )
     }
 
-    // pub fn get_tick_map_for_pool(&self, pool_id: &ObjectID) {
+    pub async fn get_tick_map_with_id(
+        &self, 
+        sui_client: &SuiClient, 
+        tick_map_id: &ObjectID
+    ) -> Result<(), anyhow::Error> {
+        let tick_map_dynamic_field_infos = sui_client
+            .read_api()
+            .pages(
+                GetDynamicFieldsRequest {
+                    object_id: tick_map_id.clone(), // We can make this consuming if it saves time
+                    cursor: None,
+                    limit: None,
+                }
+            )
+            .items()
+            .try_collect::<Vec<DynamicFieldInfo>>()
+            .await?;
+        
+        let word_pos_and_word_ids = tick_map_dynamic_field_infos
+            .iter()
+            .map(|dynamic_field_info| {
 
-    // }
+                // word_pos is available! name field is of type i32
+                let word_pos_field = dynamic_field_info
+                    .name
+                    .value
+                    .get("bits")
+                    .context("Missing field bits.")?;
+
+                let word_pos = if let Value::Number(num_value) = word_pos_field {
+                        num_value.as_i64().context("failed to cast num_value to i64")? as i32
+                    } else {
+                        return Err(anyhow!("bits field does not match MoveValue::Number value."));
+                    };
+
+                let word_id = dynamic_field_info.object_id;
+
+                Ok((word_pos, word_id))
+            })
+            .collect::<Result<Vec<(i32, ObjectID)>, anyhow::Error>>()?;
+
+        let chunked_word_pos_to_word = future::try_join_all(
+            word_pos_and_word_ids
+                    .chunks()
+                    .iter()
+                    .map(|word_pos_and_word_ids| {
+                        async {
+                            // let (word_poss, word_ids): (Vec<i32>, Vec<>) = word_pos_and_word_ids
+                            //     .iter()
+                            //     .cloned()
+                            //     .unzip();
+
+                            // let object_responses = sui_client
+                            //     .read_api()
+                            //     .multi_get_object_with_options(
+                            //         pool_ids.to_vec(),
+                            //         SuiObjectDataOptions::full_content()
+                            //     )
+                            //     .await?;
+
+                            // AW FUCK HUGE ISSUE
+                            // CAN'T GUARANTEE THAT ZIPPING
+                            // WORKS PROPERLY - RPC must send in same order as request or
+                            // we're fucked
+                            // It seems to have been the case but could be dumb to rely on this
+                            // Am sure the object ID is part of the Response
+
+                            let pool_id_to_object_response = pool_ids
+                                .iter()
+                                .cloned()
+                                .zip(object_responses.into_iter())
+                                .collect::<HashMap<ObjectID, SuiObjectResponse>>();
+
+                            Ok::<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error>(pool_id_to_object_response)
+                        }
+                    })
+
+        )
+
+        Ok(())
+    }
+
+
 }
 
 #[async_trait]
@@ -377,7 +464,7 @@ impl Market for TurbosMarket {
 fn get_coin_pair_from_object_response (
     response: &SuiObjectResponse
 ) -> Result<(TypeTag, TypeTag), anyhow::Error> {
-    println!("{:#?}", response);
+    // println!("{:#?}", response);
     if let Some(data) = response.clone().data {
         if let Some(type_) = data.type_ {
             if let ObjectType::Struct(move_object_type) = type_ {

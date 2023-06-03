@@ -75,6 +75,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // println!("turbos_tick_map: {:#?}", turbos_tick_map);
 
+    turbos.get_tick_map_with_id(&run_data.sui_client, ObjectID::from_str(TURBOS_TICK_MAP));
+
     // let exchanges = vec![cetus];
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
     
