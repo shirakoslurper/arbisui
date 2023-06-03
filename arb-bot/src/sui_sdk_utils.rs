@@ -15,9 +15,9 @@ use crate::constants::OBJECT_REQUEST_LIMIT;
 
 // Should return Option - would be more intuitive...
 pub fn get_fields_from_object_response(
-    response: &SuiObjectResponse
+    object_response: &SuiObjectResponse
 ) -> Option<BTreeMap<String, SuiMoveValue>> {
-    if let Some(object_data) = response.clone().data {
+    if let Some(object_data) = object_response.clone().data {
         if let Some(parsed_data) = object_data.content {
             if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
                 if let SuiMoveStruct::WithFields(field_map) = parsed_move_object.fields {
@@ -129,65 +129,60 @@ pub async fn get_pool_ids_to_object_response(
     Ok(pool_id_to_object_response)
 }
 
-// pub fn fields_from_pool_id_to_object_response(
-//     pool_id_to_object_response: HashMap<ObjectID, SuiObjectResponse>
-// ) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
-//     let pool_id_to_fields = pool_id_to_object_response
-//         .iter()
-//         .map(|(pool_id, object_response)| {
-//             Ok(
-//                 (
-//                     pool_id.clone(), 
-//                     get_fields_from_object_response(object_response)?
-//                 )
-//             )
-//         })
-//         .collect::<Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
+pub mod sui_move_value {
+    use super::*;
+    pub fn get_number(sui_move_struct: &SuiMoveStruct, field: &str) -> Result<u32, anyhow::Error> {
+        if let SuiMoveValue::Number(num_value) = sui_move_struct
+            .read_dynamic_field_value(field)
+            .context(format!("Missing field '{}'.", field))? {
+                Ok(num_value)
+            } else {
+                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::Number variant.", field)))
+            }
+    }
 
-//     Ok(pool_id_to_fields)
-// }
+    pub fn get_string(sui_move_struct: &SuiMoveStruct, field: &str) -> Result<String, anyhow::Error> {
+        if let SuiMoveValue::String(str_value) = sui_move_struct
+            .read_dynamic_field_value(field)
+            .context(format!("Missing field '{}'.", field))? {
+                Ok(str_value)
+            } else {
+                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::String variant.", field)))
+            }
+    }
 
-// pub async fn get_pool_id_to_fields(
-//     sui_client: &SuiClient, 
-//     pool_ids: &[ObjectID]
-// ) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error> {
-//     let chunked_pool_id_to_fields = future::try_join_all(
-//         pool_ids
-//         .chunks(OBJECT_REQUEST_LIMIT)
-//         .map(|pool_ids| {
-//             async {
-//                 let pool_object_responses = sui_client
-//                     .read_api()
-//                     .multi_get_object_with_options(
-//                         pool_ids.to_vec(),
-//                         SuiObjectDataOptions::full_content()
-//                     )
-//                     .await?;
+    pub fn get_bool(sui_move_struct: &SuiMoveStruct, field: &str) -> Result<bool, anyhow::Error> {
+        if let SuiMoveValue::Bool(bool_value) = sui_move_struct
+            .read_dynamic_field_value(field)
+            .context(format!("Missing field '{}'.", field))? {
+                Ok(bool_value)
+            } else {
+                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::Bool variant.", field)))
+            }
+    }
 
-//                 let fields = pool_object_responses
-//                     .into_iter()
-//                     .map(|pool_object_response| {
-//                         get_fields_from_object_response(&pool_object_response)
-//                     })
-//                     .collect::<Result<Vec<BTreeMap<String, SuiMoveValue>>, anyhow::Error>>()?;
+    pub fn get_struct(sui_move_struct: &SuiMoveStruct, field: &str) -> Result<SuiMoveStruct, anyhow::Error> {
+        if let SuiMoveValue::Struct(struct_value) = sui_move_struct
+            .read_dynamic_field_value(field)
+            .context(format!("Missing field '{}'.", field))? {
+                Ok(struct_value)
+            } else {
+                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::Bool variant.", field)))
+            }
+    }
 
-//                 let pool_id_to_fields = pool_ids
-//                     .iter()
-//                     .cloned()
-//                     .zip(fields.into_iter())
-//                     .collect::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>>();
+    pub fn get_uid(sui_move_struct: &SuiMoveStruct, field: &str) -> Result<ObjectID, anyhow::Error> {
+        if let SuiMoveValue::UID{ id }= sui_move_struct
+            .read_dynamic_field_value(field)
+            .context(format!("Missing field '{}'.", field))? {
+                Ok(id)
+            } else {
+                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::Bool variant.", field)))
+            }
+    }
 
-//                 Ok::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>(pool_id_to_fields)
-//             }
-//         })
-//     )
-//     .await?;
 
-//     let pool_id_to_fields = chunked_pool_id_to_fields
-//         .into_iter()
-//         .flatten()
-//         .collect::<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>>();
 
-//     Ok(pool_id_to_fields)
-// }
+   
 
+}

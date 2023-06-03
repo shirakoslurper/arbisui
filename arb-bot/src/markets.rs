@@ -1,5 +1,5 @@
 use move_core_types::language_storage::TypeTag;
-use sui_sdk::types::base_types::ObjectID;
+use sui_sdk::{types::base_types::ObjectID};
 use custom_sui_sdk::SuiClient;
 use async_trait::async_trait;
 
@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use fixed::types::U64F64;
 
-use sui_sdk::rpc_types::{SuiMoveValue, SuiObjectResponse};
+use sui_sdk::rpc_types::{SuiMoveValue, SuiMoveStruct, SuiObjectResponse};
 use dyn_clone::DynClone;
 
 #[async_trait]
@@ -23,7 +23,7 @@ pub trait Market: Send + Sync + DynClone {
     fn coin_y(&self) -> &TypeTag;
     fn coin_x_price(&self) -> Option<U64F64>;
     fn coin_y_price(&self) -> Option<U64F64>;
-    fn update_with_fields(&mut self, fields: &BTreeMap<String, SuiMoveValue>) -> Result<(), anyhow::Error>;
+    fn update_with_object_response(&mut self, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error>;
     fn pool_id(&self) -> &ObjectID;
 }
 
