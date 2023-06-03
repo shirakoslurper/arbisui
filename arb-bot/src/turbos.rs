@@ -24,7 +24,7 @@ use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData
 use move_core_types::language_storage::{StructTag, TypeTag};
 use std::collections::{BTreeMap, HashMap};
 
-use crate::markets::{Exchange, Market};
+use crate::{markets::{Exchange, Market}, sui_sdk_utils::get_fields_from_object_response};
 use crate::sui_sdk_utils;
 use crate::turbos_pool;
 
@@ -53,7 +53,7 @@ impl FromStr for Turbos {
 }
 
 impl Turbos {
-    pub fn tickless_pool_from_fields(&self, fields: &BTreeMap<String, SuiMoveValue>) -> Result<turbos_pool::Pool, anyhow::Error> {
+    pub async fn pool_from_fields(&self, sui_client: &SuiClient, fields: &BTreeMap<String, SuiMoveValue>) -> Result<turbos_pool::Pool, anyhow::Error> {
         // println!("{#?}")
         let protocol_fees_a = u64::from_str(
             if let SuiMoveValue::String(str_value) = fields
@@ -199,7 +199,7 @@ impl Turbos {
                 return Err(anyhow!("tick_map_id field does not match SuiMoveValue::String value."));
             };
 
-        let tick_map = BTreeMap::new();
+        let tick_map = Self::get_tick_map(sui_client, &tick_map_id).await?;
 
         Ok(
             turbos_pool::Pool {
@@ -221,11 +221,10 @@ impl Turbos {
         )
     }
 
-    pub async fn get_tick_map_with_id(
-        &self, 
+    pub async fn get_tick_map(
         sui_client: &SuiClient, 
         tick_map_id: &ObjectID
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<BTreeMap<i32, U256>, anyhow::Error> {
         let tick_map_dynamic_field_infos = sui_client
             .read_api()
             .pages(
@@ -239,70 +238,170 @@ impl Turbos {
             .try_collect::<Vec<DynamicFieldInfo>>()
             .await?;
         
-        let word_pos_and_word_ids = tick_map_dynamic_field_infos
+        let word_ids = tick_map_dynamic_field_infos
             .iter()
             .map(|dynamic_field_info| {
+                Ok(dynamic_field_info.object_id)
+            })
+            .collect::<Result<Vec<ObjectID>, anyhow::Error>>()?;
 
-                // word_pos is available! name field is of type i32
-                let word_pos_field = dynamic_field_info
-                    .name
-                    .value
-                    .get("bits")
-                    .context("Missing field bits.")?;
+        // The dynamic field object also holds word_pos in the field "name"
+        // Tomorrow we'll refactor to work with a Vector SuiObjectResponses 
+        let word_object_responses = sui_sdk_utils::get_object_responses(sui_client, &word_ids).await?;
 
-                let word_pos = if let Value::Number(num_value) = word_pos_field {
-                        num_value.as_i64().context("failed to cast num_value to i64")? as i32
+        let word_pos_to_word = word_object_responses
+            .into_iter()
+            .map(|word_object_response| {
+                let fields = get_fields_from_object_response(&word_object_response)?;
+                let word_pos = if let SuiMoveValue::Struct(struct_value) = fields
+                    .get("name")
+                    .context("Missing field name.")? {
+                        // format!("0x{}", struct_value.address)
+                        // println!("tick_current_index: {:#?}", struct_value);
+                        if let SuiMoveStruct::WithTypes{ type_, fields } = struct_value {
+                            if let SuiMoveValue::Number(num_value) = fields
+                                .get("bits")
+                                .context("Missing field bits.")? {
+                                    *num_value as i32
+                                } else {
+                                    return Err(anyhow!("bits field does not match MoveValue::Number value."));
+                                }
+                        } else {
+                            return Err(anyhow!("struct_value does not match SuiMoveStruct::WithTypes value."));
+                        }
                     } else {
-                        return Err(anyhow!("bits field does not match MoveValue::Number value."));
+                        return Err(anyhow!("name field does not match SuiMoveValue::String value."));
                     };
 
-                let word_id = dynamic_field_info.object_id;
-
-                Ok((word_pos, word_id))
-            })
-            .collect::<Result<Vec<(i32, ObjectID)>, anyhow::Error>>()?;
-
-        let chunked_word_pos_to_word = future::try_join_all(
-            word_pos_and_word_ids
-                    .chunks()
-                    .iter()
-                    .map(|word_pos_and_word_ids| {
-                        async {
-                            // let (word_poss, word_ids): (Vec<i32>, Vec<>) = word_pos_and_word_ids
-                            //     .iter()
-                            //     .cloned()
-                            //     .unzip();
-
-                            // let object_responses = sui_client
-                            //     .read_api()
-                            //     .multi_get_object_with_options(
-                            //         pool_ids.to_vec(),
-                            //         SuiObjectDataOptions::full_content()
-                            //     )
-                            //     .await?;
-
-                            // AW FUCK HUGE ISSUE
-                            // CAN'T GUARANTEE THAT ZIPPING
-                            // WORKS PROPERLY - RPC must send in same order as request or
-                            // we're fucked
-                            // It seems to have been the case but could be dumb to rely on this
-                            // Am sure the object ID is part of the Response
-
-                            let pool_id_to_object_response = pool_ids
-                                .iter()
-                                .cloned()
-                                .zip(object_responses.into_iter())
-                                .collect::<HashMap<ObjectID, SuiObjectResponse>>();
-
-                            Ok::<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error>(pool_id_to_object_response)
+                // Moving the casts/conversions to outside the if let makes this more modular
+                let word = U256::from_str(
+                    if let SuiMoveValue::String(str_value) = fields
+                        .get("value")
+                        .context("Missing field value.")? {
+                            str_value
+                        } else {
+                            return Err(anyhow!("value field does not match SuiMoveValue::String value."));
                         }
-                    })
+                )?;
 
-        )
+                Ok((word_pos, word))
+            })
+            .collect::<Result<BTreeMap<i32, U256>, anyhow::Error>>()?;
+
+        Ok(word_pos_to_word)
+    }
+
+    pub async fn get_initialized_ticks(&self, sui_client: &SuiClient) -> Result<(), anyhow::Error>{
+        let pool_dynamic_field_infos = sui_client
+            .read_api()
+            .pages(
+                GetDynamicFieldsRequest {
+                    object_id:self.package_id.clone(), // We can make this consuming if it saves time
+                    cursor: None,
+                    limit: None,
+                }
+            )
+            .items()
+            .try_collect::<Vec<DynamicFieldInfo>>()
+            .await?;
+
+        let tick_object_type = format!("{}::pool::Tick", self.package_id);
+
+        let tick_object_ids = pool_dynamic_field_infos
+            .into_iter()
+            .filter(|dynamic_field_info| {
+                tick_object_type == dynamic_field_info.object_type
+            })
+            .map(|tick_dynamic_field_info| {
+                tick_dynamic_field_info.object_id
+            })
+            .collect::<Vec<ObjectID>>();
+
+        let tick_object_responses = sui_sdk_utils::get_object_responses(sui_client, tick_object_ids).await?;
+
+        // let tick_index_to_tick = tick_object_responses
+        //     .into_iter()
+        //     .map(|tick_object_response| {
+        //         let fields = get_fields_from_object_response(&tick_object_response)?;
+        //         let tick_move_struct = 
+
+        //         let tick_index = if let SuiMoveValue::Struct(struct_value) = fields
+        //             .get("name")
+        //             .context("Missing field name.")? {
+        //                 // format!("0x{}", struct_value.address)
+        //                 // println!("tick_current_index: {:#?}", struct_value);
+        //                 if let SuiMoveStruct::WithTypes{ type_, fields } = struct_value {
+        //                     if let SuiMoveValue::Number(num_value) = fields
+        //                         .get("bits")
+        //                         .context("Missing field bits.")? {
+        //                             *num_value as i32
+        //                         } else {
+        //                             return Err(anyhow!("bits field does not match MoveValue::Number value."));
+        //                         }
+        //                 } else {
+        //                     return Err(anyhow!("struct_value does not match SuiMoveStruct::WithTypes value."));
+        //                 }
+        //             } else {
+        //                 return Err(anyhow!("name field does not match SuiMoveValue::String value."));
+        //             };
+
+        //         let tick_fields = if let SuiMoveValue::Struct(struct_value) = fields
+        //             .get("value")
+        //             .context("Missing field value.")? {
+        //                 // format!("0x{}", struct_value.address)
+        //                 // println!("tick_current_index: {:#?}", struct_value);
+        //                 if let SuiMoveStruct::WithTypes{ type_, fields } = struct_value {
+        //                     fields
+        //                 } else {
+        //                     return Err(anyhow!("struct_value does not match SuiMoveStruct::WithTypes value."));
+        //                 }
+        //             } else {
+        //                 return Err(anyhow!("name field does not match SuiMoveValue::String value."));
+        //             };
+
+
+        //         // Moving the casts/conversions to outside the if let makes this more modular
+        //         let fee_growth_outside_a = u128::from_str(
+        //             if let SuiMoveValue::String(str_value) = tick_fields
+        //                 .get("fee_growth_outside_a")
+        //                 .context("Missing field fee_growth_outside_a.")? {
+        //                     str_value
+        //                 } else {
+        //                     return Err(anyhow!("fee_growth_outside_a field does not match SuiMoveValue::String value."));
+        //                 }
+        //         );
+
+        //         // Moving the casts/conversions to outside the if let makes this more modular
+        //         let fee_growth_outside_b = u128::from_str(
+        //             if let SuiMoveValue::String(str_value) = tick_fields
+        //                 .get("fee_growth_outside_b")
+        //                 .context("Missing field fee_growth_outside_b.")? {
+        //                     str_value
+        //                 } else {
+        //                     return Err(anyhow!("fee_growth_outside_b field does not match SuiMoveValue::String value."));
+        //                 }
+        //         );
+
+        //         // Moving the casts/conversions to outside the if let makes this more modular
+        //         let liquidity_gross = u128::from_str(
+        //             if let SuiMoveValue::String(str_value) = tick_fields
+        //                 .get("liquidity_gross")
+        //                 .context("Missing field liquidity_gross.")? {
+        //                     str_value
+        //                 } else {
+        //                     return Err(anyhow!("liquidity_gross field does not match SuiMoveValue::String value."));
+        //                 }
+        //         );
+
+
+
+        //         Ok((tick_index, word))
+        //     })
+        //     .collect::<Result<BTreeMap<i32, turbos_pool::Tick>, anyhow::Error>>()?;
+
 
         Ok(())
     }
-
 
 }
 

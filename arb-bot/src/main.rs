@@ -52,16 +52,27 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // println!("{:#?}", turbos_dynamic_fields);
 
-    // let turbos_tick = run_data
+    let turbos_tick = run_data
+        .sui_client
+        .read_api()
+        .get_object_with_options(
+            ObjectID::from_str("0xb5fed30450f21fb4df0c9881eb645be2dd583b41551ad47161a547c467bf7efd")?,
+            SuiObjectDataOptions::full_content()
+        )
+        .await?;
+
+    println!("turbos_tick: {:#?}", turbos_tick);
+
+    // let turbos_tick_word = run_data
     //     .sui_client
     //     .read_api()
     //     .get_object_with_options(
-    //         ObjectID::from_str("0xb5fed30450f21fb4df0c9881eb645be2dd583b41551ad47161a547c467bf7efd")?,
+    //         ObjectID::from_str("0x7e90d1d4dc20d86ea40edab59eb1568f066f7e5fe74405ac45827a26ccc11127")?,
     //         SuiObjectDataOptions::full_content()
     //     )
     //     .await?;
 
-    // println!("turbos_tick: {:#?}", turbos_tick);
+    // println!("turbos_tick_word: {:#?}", turbos_tick_word);
 
     // let turbos_tick_map = run_data
     //     .sui_client
@@ -75,7 +86,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // println!("turbos_tick_map: {:#?}", turbos_tick_map);
 
-    turbos.get_tick_map_with_id(&run_data.sui_client, ObjectID::from_str(TURBOS_TICK_MAP));
+    
 
     // let exchanges = vec![cetus];
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;

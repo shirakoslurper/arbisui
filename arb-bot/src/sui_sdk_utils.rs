@@ -13,8 +13,7 @@ use sui_sdk::rpc_types::{SuiObjectResponse, SuiObjectDataOptions, SuiParsedData,
 
 use crate::constants::OBJECT_REQUEST_LIMIT;
 
-// We'll need to deal with the math on this side
-// Price is simple matter of ((current_sqrt_price / (2^64))^2) * (10^(a - b))
+// Should return Option - would be more intuitive...
 pub fn get_fields_from_object_response(
     response: &SuiObjectResponse
 ) -> Result<BTreeMap<String, SuiMoveValue>, anyhow::Error> {
@@ -35,6 +34,62 @@ pub fn get_fields_from_object_response(
     } else {
         Err(anyhow!("Expected Some"))
     }
+}
+
+pub fn get_sui_move_struct_from_object_response(
+    response: &SuiObjectResponse
+) -> Result<BTreeMap<String, SuiMoveValue>, anyhow::Error> {
+    if let Some(object_data) = response.clone().data {
+        if let Some(parsed_data) = object_data.content {
+            if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
+                match
+
+                if let SuiMoveStruct::WithFields(_) = parsed_move_object.fields {
+                    Ok(parsed_move_object.fields)
+                } else {
+                    Err(anyhow!("Does not match the SuiMoveStruct::WithFields variant"))
+                }
+            } else {
+                Err(anyhow!("Does not match the SuiParsedData::MoveObject variant"))
+            }
+        } else {
+            Err(anyhow!("Expected Some"))
+        }
+    } else {
+        Err(anyhow!("Expected Some"))
+    }
+}
+
+pub async fn get_object_responses(
+    sui_client: &SuiClient, 
+    object_ids: &[ObjectID]
+) -> Result<Vec<SuiObjectResponse>, anyhow::Error> {
+    let chunked_object_responses = future::try_join_all(
+        object_ids
+        .chunks(OBJECT_REQUEST_LIMIT)
+        .map(|object_ids| {
+            async {
+                let object_responses = sui_client
+                    .read_api()
+                    .multi_get_object_with_options(
+                        object_ids.to_vec(),
+                        SuiObjectDataOptions::full_content()
+                    )
+                    .await?;
+
+                Ok::<Vec<SuiObjectResponse>, anyhow::Error>(object_responses)
+            }
+        })
+    )
+    .await?;
+
+    let object_responses = chunked_object_responses
+        .into_iter()
+        .flatten()
+        .collect::<Vec<SuiObjectResponse>>();
+
+    Ok(object_responses)
+
 }
 
 pub async fn get_pool_ids_to_object_response(
