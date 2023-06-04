@@ -102,7 +102,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // // let pool_ids = markets.iter().map(|market| market.pool_id().clone()).collect::<Vec<ObjectID>>();
     // let pool_id_to_object_response = turbos.get_pool_id_to_object_response(&run_data.sui_client, &markets).await?;
     // for (pool_id, object_response) in pool_id_to_object_response.iter() {
-    //     println!("{:#?}", turbos.pool_from_object_response(&run_data.sui_client, object_response).await?);
+    //     println!("{:#?}", turbos.computing_pool_from_object_response(&run_data.sui_client, object_response).await?);
     // }
     // // END TEST
 
@@ -156,10 +156,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     println!("pool_id_to_fields.keys().len(): {}", pool_id_to_object_response.keys().len());
 
-    market_graph.update_markets_with_object_responses(&pool_id_to_object_response)?;
+    market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
 
-    all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7))
-        .for_each(|path: Vec<&TypeTag>| {
+    let paths = all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7)).collect::<Vec<Vec<&TypeTag>>>().clone();
+
+    paths
+        .iter()
+        .for_each(|path| {
             // println!("SIMPLE CYCLE ({} HOP) ", path.len() - 1);
             // path
             //     .iter()
@@ -169,6 +172,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let mut best_path_rate = U64F64::from_num(1);
 
+
+            let orig_decimals = coin_to_metadata.get(path[0]).unwrap().decimals as u32;
+            let orig_amount = 1 * 10_u128.pow(orig_decimals);
+            let mut amount_in = orig_amount;
+
             for pair in path[..].windows(2) {
                 let orig = pair[0];
                 let dest = pair[1];
@@ -177,24 +185,27 @@ async fn main() -> Result<(), anyhow::Error> {
                 let orig_decimals = coin_to_metadata.get(orig).unwrap().decimals as i32;
                 let dest_decimals = coin_to_metadata.get(dest).unwrap().decimals as i32;
 
-
                 // let ten =  U64F64::from_num(10);
                 let adj = U64F64::from_num(10_f64.powi(dest_decimals - orig_decimals));
 
                 let markets = market_graph
                     .graph
-                    .edge_weight(orig, dest)
+                    .edge_weight_mut(orig, dest)
                     .context("Missing edge weight")
                     .unwrap();
 
                 let directional_rates = markets
-                    .iter()
+                    .iter_mut()
                     .map(|market_info| {
                         let coin_x = market_info.market.coin_x();
                         let coin_y = market_info.market.coin_y();
                         if (coin_x, coin_y) == (orig, dest) {
+                            let (_, amount_y) = market_info.market.compute_swap_x_to_y(amount_in);
+                            amount_in = amount_y;
                             market_info.market.coin_x_price().unwrap()
                         } else if (coin_y, coin_x) == (orig, dest){
+                            let (amount_x, _) = market_info.market.compute_swap_y_to_x(amount_in);
+                            amount_in = amount_x;
                             market_info.market.coin_y_price().unwrap()
                         } else {
                             panic!("coin pair does not match");
@@ -211,8 +222,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 // Using decimals for human readability
                 println!("        leg rate: {}", best_leg_rate / adj);
 
-                best_path_rate *= best_leg_rate;
+                best_path_rate = best_path_rate * best_leg_rate;
             }
+
+            println!("PROFIT: {}", amount_in - orig_amount);
 
             println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
 

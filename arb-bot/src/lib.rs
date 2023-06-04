@@ -1,3 +1,5 @@
+// #![feature(async_fn_in_trait)]
+
 use anyhow::Result;
 use sui_sdk::rpc_types::EventFilter;
 use custom_sui_sdk::SuiClient;

@@ -136,6 +136,7 @@ struct CetusMarket {
     coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
 }
 
+#[async_trait]
 impl Market for CetusMarket {
     fn coin_x(&self) -> &TypeTag {
         &self.coin_x
@@ -161,7 +162,7 @@ impl Market for CetusMarket {
         }
     }
 
-    fn update_with_object_response(&mut self, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error> {
+    async fn update_with_object_response(&mut self, sui_client: &SuiClient, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error> {
         let fields = sui_sdk_utils::read_fields_from_object_response(object_response).context("Missing fields for object_response.")?;
         let coin_x_sqrt_price = U64F64::from_bits(
             u128::from_str(
@@ -183,4 +184,13 @@ impl Market for CetusMarket {
     fn pool_id(&self) -> &ObjectID {
         &self.pool_id
     }
+
+    fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128) {
+        (0, 0)
+    }
+
+    fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
+        (0, 0)
+    }
+
 }

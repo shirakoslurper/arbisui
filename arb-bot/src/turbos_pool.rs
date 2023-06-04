@@ -1,13 +1,10 @@
 use anyhow;
-use move_core_types::language_storage::TypeTag;
 use std::collections:: BTreeMap;
 use fixed::types::{U64F64, I64F64};
-use std::mem::transmute;
 use std::num::Wrapping;
 use ethnum::U256;
-use fixed::consts::E;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tick {
     // id: UID,
     pub liquidity_gross: u128,
@@ -18,7 +15,7 @@ pub struct Tick {
     pub initialized: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pool {
     // id: UID,
     // coin_a: Balance<CoinTypeA>,
@@ -44,16 +41,16 @@ pub struct Pool {
 
 #[derive(Clone, Debug)]
 pub struct ComputeSwapState {
-    amount_a: u128,
-    amount_b: u128, 
-    amount_specified_remaining: u128,
-    amount_calculated: u128,
-    sqrt_price: u128,
-    tick_current_index: i32,
-    fee_growth_global: u128,
-    protocol_fee: u128,
-    liquidity: u128,
-    fee_amount: u128,
+    pub amount_a: u128,
+    pub amount_b: u128, 
+    pub amount_specified_remaining: u128,
+    pub amount_calculated: u128,
+    pub sqrt_price: u128,
+    pub tick_current_index: i32,
+    pub fee_growth_global: u128,
+    pub protocol_fee: u128,
+    pub liquidity: u128,
+    pub fee_amount: u128,
 }
 
 // Seems that this does most of the work in swap()
@@ -98,12 +95,6 @@ pub fn compute_swap_result(
 
     while compute_swap_state.amount_specified_remaining > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
 
-        // // Debuggin
-        // if amount_specified <= 0 {
-        //     println!("css.sqrt_price: {}, sqrt_price_limit: {}", compute_swap_state.sqrt_price, sqrt_price_limit);
-        // } 
-        // println!("css.sqrt_price: {}, sqrt_price_limit: {}", compute_swap_state.sqrt_price, sqrt_price_limit);
-
         let sqrt_price_start = compute_swap_state.sqrt_price;
         let (mut tick_next, initialized) = next_initialized_tick_within_one_word(
             pool,
@@ -144,12 +135,12 @@ pub fn compute_swap_result(
             );
         
         if amount_specified_is_input {
-            println!("amount_specified_is_input == true: amount calc = {}, amount_in = {}, amount_out = {}", compute_swap_state.amount_calculated, amount_in, amount_out);
+            // println!("amount_specified_is_input == true: amount calc = {}, amount_in = {}, amount_out = {}", compute_swap_state.amount_calculated, amount_in, amount_out);
 
             compute_swap_state.amount_specified_remaining -= amount_in + fee_amount;
             compute_swap_state.amount_calculated += amount_out;
         } else {
-            println!("amount_specified_is_input == false: amount calc = {}, amount_out = {}", compute_swap_state.amount_calculated, amount_out);
+            // println!("amount_specified_is_input == false: amount calc = {}, amount_out = {}", compute_swap_state.amount_calculated, amount_out);
             compute_swap_state.amount_specified_remaining -= amount_out;
             compute_swap_state.amount_calculated += amount_in + fee_amount;
         }
@@ -241,10 +232,10 @@ pub fn compute_swap_result(
     }
 
     (compute_swap_state.amount_a, compute_swap_state.amount_b) = if a_to_b == amount_specified_is_input {
-        println!("branch 1");
+        // println!("branch 1");
         (amount_specified - compute_swap_state.amount_specified_remaining, compute_swap_state.amount_calculated)
     } else {
-        println!("branch 2");
+        // println!("branch 2");
         (compute_swap_state.amount_calculated, amount_specified - compute_swap_state.amount_specified_remaining)
     };
 
@@ -415,9 +406,6 @@ pub fn modify_position(
 
     if liquidity_delta != 0 {
         if pool.tick_current_index < tick_lower {
-            // println!("branch 1. tick_current_index: {}. tick_lower: {}.",
-            //     pool.tick_current_index, tick_lower);
-
             amount_a = math_sqrt_price::get_amount_a_delta(
                 math_tick::sqrt_price_from_tick_index(tick_lower), 
                 math_tick::sqrt_price_from_tick_index(tick_upper), 
@@ -425,8 +413,6 @@ pub fn modify_position(
             );
 
         } else if pool.tick_current_index < tick_upper {
-            // println!("branch 2");
-
             amount_a = math_sqrt_price::get_amount_a_delta(
                 pool.sqrt_price, 
                 math_tick::sqrt_price_from_tick_index(tick_upper), 
@@ -441,8 +427,6 @@ pub fn modify_position(
 
             pool.liquidity = math_liquidity::add_delta(pool.liquidity, liquidity_delta);
         } else {
-            // println!("branch 3");
-
             amount_b = math_sqrt_price::get_amount_a_delta(
                 math_tick::sqrt_price_from_tick_index(tick_lower), 
                 math_tick::sqrt_price_from_tick_index(tick_upper), 
@@ -606,7 +590,7 @@ pub fn check_ticks(
 
 #[cfg(test)]
 mod tests {
-    use super::{pool::{compute_swap_result, deploy_pool, mint}, math_sqrt_price};
+    // use super::{compute_swap_result, deploy_pool, mint, math_sqrt_price};
     use fixed::types::U64F64;
     use super::*;
 
@@ -930,7 +914,7 @@ mod math_swap {
             a_to_b,
         );
 
-        println!("amount_unfixed_delta = {}", amount_unfixed_delta);
+        // println!("amount_unfixed_delta = {}", amount_unfixed_delta);
 
         if !is_max_swap {
             amount_fixed_delta = get_amount_fixed_delta(
@@ -1004,7 +988,7 @@ mod math_swap {
                 !amount_specified_is_input,
             )
         } else {
-            println!("ASFFADf");
+            // println!("ASFFADf");
             math_sqrt_price::get_amount_a_delta_(
                 sqrt_price_current,
                 sqrt_price_target,
@@ -1219,7 +1203,7 @@ mod math_sqrt_price {
     }
 }
 
-mod math_tick {
+pub mod math_tick {
     use super::{
         full_math_u128,
         math_u128

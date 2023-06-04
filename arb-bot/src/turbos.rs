@@ -23,11 +23,13 @@ use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData
  
 use move_core_types::language_storage::{StructTag, TypeTag};
 use std::collections::{BTreeMap, HashMap};
+use std::time::{Duration, Instant};
 
 use crate::{markets::{Exchange, Market}, sui_sdk_utils::get_fields_from_object_response};
 use crate::sui_sdk_utils::{self, sui_move_value};
 use crate::turbos_pool;
 
+#[derive(Debug, Clone)]
 pub struct Turbos {
     package_id: ObjectID
 }
@@ -53,7 +55,100 @@ impl FromStr for Turbos {
 }
 
 impl Turbos {
-    pub async fn pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<turbos_pool::Pool, anyhow::Error> {
+    fn package_id(&self) -> &ObjectID {
+        &self.package_id
+    }
+
+    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
+        let pool_created_events = sui_client
+            .event_api()
+            .pages(
+                QueryEventsRequest {
+                    query: EventFilter::MoveEventType(
+                        StructTag::from_str(
+                            &format!("{}::pool_factory::PoolCreatedEvent", self.package_id)
+                        )?
+                    ),
+                    cursor: None,
+                    limit: None,
+                    descending_order: true,
+                }
+            )
+            .items()
+            .try_collect::<Vec<SuiEvent>>()
+            .await?;
+
+        let pool_ids = pool_created_events
+            .into_iter()
+            .map(|pool_created_event| {
+                let parsed_json = pool_created_event.parsed_json;
+                if let Value::String(pool_id_value) = parsed_json.get("pool").context("Failed to get pool_id for a CetusMarket")? {
+                    println!("pool_id: {}", pool_id_value);
+                    Ok(ObjectID::from_str(&format!("0x{}", pool_id_value))?)
+                } else {
+                    Err(anyhow!("Failed to match pattern."))
+                }
+            })
+            .collect::<Result<Vec<ObjectID>, anyhow::Error>>()?;
+
+        let pool_id_to_object_response = sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await?;
+
+        let markets = pool_id_to_object_response
+            .into_iter()
+            .map(|(pool_id, object_response)| {
+                // println!("{:#?}", object_response);
+                let fields = sui_sdk_utils::read_fields_from_object_response(&object_response).context(format!("Missing fields for pool {}.", pool_id))?;
+
+                let (coin_x, coin_y) = get_coin_pair_from_object_response(&object_response)?;
+
+                let coin_x_sqrt_price = U64F64::from_bits(
+                    u128::from_str(
+                        & if let SuiMoveValue::String(str_value) = fields
+                            .read_dynamic_field_value("sqrt_price")
+                            .context(format!("Missing field sqrt_price for coin {}", coin_x))? {
+                                str_value
+                            } else {
+                                return Err(anyhow!("sqrt_price field does not match SuiMoveValue::String value."));
+                            }
+                    )?
+                );
+        
+                let coin_y_sqrt_price = U64F64::from_num(1) / coin_x_sqrt_price;
+
+                Ok(
+                    Box::new(
+                        TurbosMarket {
+                            parent_exchange: self.clone(),  // reevaluate clone
+                            coin_x,
+                            coin_y,
+                            pool_id,
+                            coin_x_sqrt_price: Some(coin_x_sqrt_price),
+                            coin_y_sqrt_price: Some(coin_y_sqrt_price),
+                            computing_pool: None    // We'll grab this later so we don't have to deal with async stuff
+                        }
+                    ) as Box<dyn Market>
+                )
+            })
+            .collect::<Result<Vec<Box<dyn Market>>, anyhow::Error>>()?;
+
+        Ok(markets)
+    }
+
+    async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
+        let pool_ids = markets
+            .iter()
+            .map(|market| {
+                *market.pool_id()
+            })
+            .collect::<Vec<ObjectID>>();
+
+        sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await
+    }
+
+    // For all intents and purposes
+    // "pool" is an object that can perform the computations
+    pub async fn computing_pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<turbos_pool::Pool, anyhow::Error> {
+
         let fields = sui_sdk_utils::read_fields_from_object_response(response).context("missing fields")?;
 
         let protocol_fees_a = u64::from_str(
@@ -97,14 +192,22 @@ impl Turbos {
             "bits"
         )? as i32;
 
+        // let init_tick_start = Instant::now();
         let initialized_ticks = self.get_initialized_ticks(sui_client, &response.object_id()?).await?;
+        // let init_tick_duration = init_tick_start.elapsed();
+        // println!("get_initialized_ticks(): {:?}", init_tick_duration);
 
         let tick_map_id = sui_move_value::get_uid(
             &sui_move_value::get_struct(&fields, "tick_map")?,
             "id"
         )?;
 
+        // let tick_map_start = Instant::now();
         let tick_map = Self::get_tick_map(sui_client, &tick_map_id).await?;
+        // let tick_map_duration = tick_map_start.elapsed();
+        // println!("get_tick_map(): {:?}", tick_map_duration);
+
+        // println!("pool end!");
 
         Ok(
             turbos_pool::Pool {
@@ -189,7 +292,7 @@ impl Turbos {
             .try_collect::<Vec<DynamicFieldInfo>>()
             .await?;
 
-        println!("Len pool dynamic fields: {}", pool_dynamic_field_infos.len());
+        // println!("Len pool dynamic fields: {}", pool_dynamic_field_infos.len());
 
         let tick_object_type = format!("{}::pool::Tick", self.package_id);
 
@@ -265,104 +368,29 @@ impl Turbos {
 #[async_trait]
 impl Exchange for Turbos {
     fn package_id(&self) -> &ObjectID {
-        &self.package_id
+       self.package_id()
     }
 
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
-        let pool_created_events = sui_client
-            .event_api()
-            .pages(
-                QueryEventsRequest {
-                    query: EventFilter::MoveEventType(
-                        StructTag::from_str(
-                            &format!("{}::pool_factory::PoolCreatedEvent", self.package_id)
-                        )?
-                    ),
-                    cursor: None,
-                    limit: None,
-                    descending_order: true,
-                }
-            )
-            .items()
-            .try_collect::<Vec<SuiEvent>>()
-            .await?;
-
-        let pool_ids = pool_created_events
-            .into_iter()
-            .map(|pool_created_event| {
-                let parsed_json = pool_created_event.parsed_json;
-                if let Value::String(pool_id_value) = parsed_json.get("pool").context("Failed to get pool_id for a CetusMarket")? {
-                    println!("pool_id: {}", pool_id_value);
-                    Ok(ObjectID::from_str(&format!("0x{}", pool_id_value))?)
-                } else {
-                    Err(anyhow!("Failed to match pattern."))
-                }
-            })
-            .collect::<Result<Vec<ObjectID>, anyhow::Error>>()?;
-
-
-        let pool_id_to_object_response = sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await?;
-
-        let markets = pool_id_to_object_response
-            .into_iter()
-            .map(|(pool_id, object_response)| {
-                // println!("{:#?}", object_response);
-                let fields = sui_sdk_utils::read_fields_from_object_response(&object_response).context(format!("Missing fields for pool {}.", pool_id))?;
-
-                let (coin_x, coin_y) = get_coin_pair_from_object_response(&object_response)?;
-
-                let coin_x_sqrt_price = U64F64::from_bits(
-                    u128::from_str(
-                        & if let SuiMoveValue::String(str_value) = fields
-                            .read_dynamic_field_value("sqrt_price")
-                            .context(format!("Missing field sqrt_price for coin {}", coin_x))? {
-                                str_value
-                            } else {
-                                return Err(anyhow!("sqrt_price field does not match SuiMoveValue::String value."));
-                            }
-                    )?
-                );
-        
-                let coin_y_sqrt_price = U64F64::from_num(1) / coin_x_sqrt_price;
-
-                Ok(
-                    Box::new(
-                        TurbosMarket {
-                            coin_x,
-                            coin_y,
-                            pool_id,
-                            coin_x_sqrt_price: Some(coin_x_sqrt_price),
-                            coin_y_sqrt_price: Some(coin_y_sqrt_price),
-                        }
-                    ) as Box<dyn Market>
-                )
-            })
-            .collect::<Result<Vec<Box<dyn Market>>, anyhow::Error>>()?;
-
-        Ok(markets)
+        self.get_all_markets(sui_client).await
     }
 
     async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
-        let pool_ids = markets
-            .iter()
-            .map(|market| {
-                *market.pool_id()
-            })
-            .collect::<Vec<ObjectID>>();
-
-        sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await
+        self.get_pool_id_to_object_response(sui_client, markets).await
     }
 }
 #[derive(Debug, Clone)]
 struct TurbosMarket {
+    parent_exchange: Turbos,
     coin_x: TypeTag,
     coin_y: TypeTag,
     pool_id: ObjectID,
     coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
     coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
+    computing_pool: Option<turbos_pool::Pool>
 }
 
-impl Market for TurbosMarket {
+impl TurbosMarket {
     fn coin_x(&self) -> &TypeTag {
         &self.coin_x
     }
@@ -387,7 +415,9 @@ impl Market for TurbosMarket {
         }
     }
 
-    fn update_with_object_response(&mut self, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error> {
+    // rename to "..pool_object_response"
+    // recall that we 
+    async fn update_with_object_response(&mut self, sui_client: &SuiClient, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error> {
         let fields = sui_sdk_utils::read_fields_from_object_response(object_response).context("Missing fields for object_response.")?;
         let coin_x_sqrt_price = U64F64::from_bits(
             u128::from_str(
@@ -400,11 +430,81 @@ impl Market for TurbosMarket {
         self.coin_x_sqrt_price = Some(coin_x_sqrt_price);
         self.coin_y_sqrt_price = Some(coin_y_sqrt_price);
 
+        // println!("sq then mult: {}", U64F64::from_num(1) * (coin_x_sqrt_price * coin_x_sqrt_price) * (coin_y_sqrt_price * coin_y_sqrt_price));
+        // println!("mult then sq: {}", U64F64::from_num(1) * (coin_x_sqrt_price * coin_y_sqrt_price) * (coin_x_sqrt_price * coin_y_sqrt_price));
+
+        // let start = Instant::now();
+        self.computing_pool = Some(self.parent_exchange.computing_pool_from_object_response(sui_client, object_response).await?);
+        // let duration = start.elapsed();
+        // println!("computing_pool_from_response(): {:?}", duration);
+
         Ok(())
     }
 
     fn pool_id(&self) -> &ObjectID {
         &self.pool_id
+    }
+
+    fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128) {
+        let swap_state = turbos_pool::compute_swap_result(
+            self.computing_pool.as_mut().unwrap(), 
+            true, 
+            amount_specified, 
+            true, 
+            turbos_pool::math_tick::MIN_SQRT_PRICE_X64 + 1, 
+            true
+        );
+
+        (swap_state.amount_a, swap_state.amount_b)
+    }
+
+    fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
+        let swap_state = turbos_pool::compute_swap_result(
+            self.computing_pool.as_mut().unwrap(), 
+            false, 
+            amount_specified, 
+            true, 
+            turbos_pool::math_tick::MAX_SQRT_PRICE_X64 - 1, 
+            true
+        );
+
+        (swap_state.amount_a, swap_state.amount_b)
+    }
+
+}
+
+#[async_trait]
+impl Market for TurbosMarket {
+    fn coin_x(&self) -> &TypeTag {
+        self.coin_x()
+    }
+
+    fn coin_y(&self) -> &TypeTag {
+        self.coin_y()
+    }
+
+    fn coin_x_price(&self) -> Option<U64F64> {
+        self.coin_x_price()
+    }
+
+    fn coin_y_price(&self) -> Option<U64F64> {
+        self.coin_y_price()
+    }
+
+    async fn update_with_object_response(&mut self, sui_client: &SuiClient, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error> {
+        self.update_with_object_response(sui_client, object_response).await
+    }
+
+    fn pool_id(&self) -> &ObjectID {
+        self.pool_id()
+    }
+
+    fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128) {
+        self.compute_swap_x_to_y(amount_specified)
+    }
+
+    fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
+        self.compute_swap_y_to_x(amount_specified)
     }
 
 }

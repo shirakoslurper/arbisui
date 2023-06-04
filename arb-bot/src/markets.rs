@@ -18,13 +18,16 @@ pub trait Exchange: Send + Sync {
     async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error>;
 }
 
+#[async_trait]
 pub trait Market: Send + Sync + DynClone {
     fn coin_x(&self) -> &TypeTag;
     fn coin_y(&self) -> &TypeTag;
     fn coin_x_price(&self) -> Option<U64F64>;
     fn coin_y_price(&self) -> Option<U64F64>;
-    fn update_with_object_response(&mut self, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error>;
+    async fn update_with_object_response(&mut self, sui_client: &SuiClient, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error>;
     fn pool_id(&self) -> &ObjectID;
+    fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128);
+    fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128);
 }
 
 dyn_clone::clone_trait_object!(Market);
