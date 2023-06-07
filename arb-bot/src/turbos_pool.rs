@@ -55,7 +55,8 @@ pub struct ComputeSwapState {
 
 // Checks that ticks are represented in the tick maps
 pub fn check_ticks_corr_tick_map(pool: &mut Pool) {
-    // let mut tick_count = 0;
+    let mut initialized_tick_count = 0;
+    let mut initialized_tick_in_tick_map_count = 0;
 
     let tick_spacing_i32 = pool.tick_spacing as i32;
     for (tick_index, tick) in pool.ticks.iter() {
@@ -69,58 +70,70 @@ pub fn check_ticks_corr_tick_map(pool: &mut Pool) {
 
         if tick.initialized && init_in_tick_map != U256::from(1_u8) {
             println!("tick in ticks (initialized) {} | ({}, {}) is not in tick_map", tick_index, word_pos, bit_pos);
+            initialized_tick_count += 1;
         } else if tick.initialized && init_in_tick_map == U256::from(1_u8) {
             println!("tick in ticks (initialized) {} | ({}, {}) is in tick_map", tick_index, word_pos, bit_pos);
+            initialized_tick_count += 1;
+            initialized_tick_in_tick_map_count += 1;
         } else  {
             println!("tick in ticks (uninitialized) {} | ({}, {})", tick_index, word_pos, bit_pos);
         }
         // assert!(tick.initialized && i != U256::from(1_u8), "tick in ticks {} is not in tick_map", tick_index);
     } 
 
-    // println!("Tick count: {}", tick_count);
+    println!("INITIALIZED TICKS IN TICK MAP / INITIALIZED TICKS: {}/{} ", initialized_tick_in_tick_map_count, initialized_tick_count);
 
 }
 
-// pub fn check_tick_map_corr_ticks(pool: &mut Pool) {
-//     let mut tick_count = 0;
+use std::collections::HashSet;
+pub fn count_init_ticks_in_tick_map(pool: &mut Pool) -> HashSet<i32> {
+    let mut tick_count = 0;
+    let tick_spacing_i32 = pool.tick_spacing as i32;
+    let mut tick_index_set = HashSet::new();
 
-//     for (word_pos, word) in pool.tick_map.iter() {
-//         // println!("word_pos << 8: {}", word_pos as u32 << 8) as i32);
-//         for bit_pos in 0..256 {
-//             let init_in_tick_map = (*word << (255 - bit_pos)) >> 255;
-//             // Suspectin some funky stuff with bit shifts and casting
-//             // The effect of + operations on unsigned vs signed may be different?
-//             let tick_index = (word_pos << 8) | if *word_pos < 0 {-bit_pos} else {bit_pos};
-//             // if tick_index < -2000 {
-//             // println!("tick_index: {}", tick_index);
-//             // }
-//             let tick = pool
-//                 .ticks
-//                 .entry(tick_index)
-//                 .or_insert(
-//                     Tick {
-//                         // id: UID,
-//                         liquidity_gross: 0,
-//                         liquidity_net: 0,
-//                         fee_growth_outside_a: 0,
-//                         fee_growth_outside_b: 0,
-//                         // reward_growths_outside: vec![],
-//                         initialized: false,
-//                     }
-//                 );
+    for (word_pos, word) in pool.tick_map.iter() {
+        for bit_pos in 0..256 {
+            if (*word >> bit_pos) & U256::from(1_u8) == U256::from(1_u8) {
+                tick_count += 1;
 
-//             if init_in_tick_map == U256::from(1_u8) {
-//                 tick_count += 1;
-//             }
+                let tick_index = (((*word_pos) << 8) | bit_pos) * tick_spacing_i32;
+                tick_index_set.insert(tick_index);
 
-//             if init_in_tick_map == U256::from(1_u8) && !tick.initialized {
-//                 println!("tick in tick_map {} is not in ticks", tick_index);
-//             }
-//         }
-//     }
+                // println!("TICK MAP: tick_index: {}", tick_index);
 
-//     println!("tick_map tick count: {}", tick_count);
-// }
+                println!("TICK_MAP: ({}, {})", word_pos, bit_pos);
+            }
+        }
+    }
+
+    println!("TICKS IN TICK MAP: {}", tick_count);
+    
+    tick_index_set
+}
+
+pub fn count_init_tick_in_ticks(pool: &mut Pool) -> HashSet<i32> {
+    let mut tick_count = 0;
+    let tick_spacing_i32 = pool.tick_spacing as i32;
+    let mut tick_index_set = HashSet::new();
+
+    for (tick_index, tick) in pool.ticks.iter() {
+        if tick.initialized {
+            tick_count += 1;
+
+            tick_index_set.insert(*tick_index);
+
+            // println!("TICKS: tick_index: {}", tick_index);
+
+            let compressed = tick_index / tick_spacing_i32;
+            println!("TICKS: {:?}", position_tick(compressed));
+            // I think theres a fuckign problem with position_tick;
+        }
+    } 
+
+    println!("TICKS IN TICKS: {}", tick_count);
+
+    tick_index_set
+}
 
 // Seems that this does most of the work in swap()
 pub fn compute_swap_result(
@@ -138,9 +151,14 @@ pub fn compute_swap_result(
     println!("SWAP POOL NUM WORDS KEYS: {:?}", pool.tick_map.keys());
     // println!("SWAP POOL TICK SPACING: {}", pool.tick_spacing);
 
-    /// TESTING
-    check_ticks_corr_tick_map(pool);
-    // check_tick_map_corr_ticks(pool);
+    // /// TESTING
+    // let tick_map_tick_index_set = count_init_ticks_in_tick_map(pool);
+    // let ticks_tick_index_set = count_init_tick_in_ticks(pool);
+
+    // println!("SETS ARE SAME: {}", tick_map_tick_index_set.difference(&ticks_tick_index_set).cloned().collect::<Vec<i32>>().len() == 0);
+
+    // // INDUCE FAILURE
+    // assert!(1 == 0);
 
     assert!(pool.unlocked);
     assert!(amount_specified != 0);
@@ -181,13 +199,23 @@ pub fn compute_swap_result(
             a_to_b
         );
 
-        // Check if the BTreeMap contains tha Tick if it says initialized
-        if initialized && !pool.ticks.contains_key(&tick_next) {
-            println!("ticks does not contain 'initialized' tick {}", tick_next);
-        } else if !initialized && pool.ticks.contains_key(&tick_next) {
+        // // Check if the BTreeMap contains tha Tick if it says initialized
+        // if initialized && !pool.ticks.get(&tick_next).unwrap().initialized {
+        //     println!("ticks does not contain 'initialized' tick {}", tick_next);
+        // } else if !initialized && pool.ticks.get(&tick_next).unwrap().initialized {
+        //     println!("ticks contains 'uninitialized' tick {}. initialized field: {}", tick_next, pool.ticks.get(&tick_next).unwrap().initialized);
+        // } else if initialized && pool.ticks.get(&tick_next).unwrap().initialized {
+        //     // CONTAINS ISN'T ENOUG
+        //     println!("ticks contains 'initialized' tick {}", tick_next);
+        // }
+
+        println!("tick_next: {}, initialized: {}", tick_next, initialized);
+        if initialized && pool.ticks.contains_key(&tick_next) && pool.ticks.get(&tick_next).unwrap().initialized {
+            println!("ticks contains 'initialized' tick {}", tick_next);
+        } else if initialized && pool.ticks.contains_key(&tick_next) && !pool.ticks.get(&tick_next).unwrap().initialized {
             println!("ticks contains 'uninitialized' tick {}. initialized field: {}", tick_next, pool.ticks.get(&tick_next).unwrap().initialized);
         } else if initialized && pool.ticks.contains_key(&tick_next) {
-            println!("ticks contains 'initialized' tick {}", tick_next);
+            println!("ticks does not contain 'initialized' tick {}", tick_next);
         }
 
         // println!("  next tick ({}) initialized: {}", tick_next, initialized);
@@ -354,13 +382,13 @@ pub fn next_initialized_tick_within_one_word(
         let (word_pos, bit_pos) = position_tick(compressed);
         let word = pool.tick_map.entry(word_pos).or_insert(U256::from(0_u8));
 
+        // only includes at and to the right of bit_pos
         let mask = (U256::from(1_u8) << bit_pos) - 1 + (U256::from(1_u8) << bit_pos);
         let masked = *word & mask;
 
-        let initialized = masked != 0;
+        let initialized = masked != U256::from(0_u8);
 
         let next = if initialized {
-            // ISSUE IS HERE !!!!
             (compressed - (bit_pos - math_bit::most_significant_bit(masked)) as i32) * tick_spacing_i32
         } else {
             (compressed - bit_pos as i32) * tick_spacing_i32
@@ -374,10 +402,11 @@ pub fn next_initialized_tick_within_one_word(
         let (word_pos, bit_pos) = position_tick(compressed + 1);
         let word = pool.tick_map.entry(word_pos).or_insert(U256::from(0_u8));
 
+        // only includes to the left 
         let mask = !((U256::from(1_u8) << bit_pos) - 1);
         let masked = *word & mask;
 
-        let initialized = masked != 0;
+        let initialized = masked != U256::from(0_u8);
 
         let next = if initialized {
             (compressed + 1 + (math_bit::least_significant_bit(masked) - bit_pos) as i32) * tick_spacing_i32
@@ -398,9 +427,18 @@ pub fn position_tick(
     tick: i32
 ) -> (i32, u8) {
     let word_pos = tick >> 8;   // Arithmetic right shift (on purpose!)
-    let bit_pos = (tick % 256).abs() as u8;
+    let bit_pos = mod_euclidean(tick, 256) as u8;
 
     (word_pos, bit_pos)
+}
+
+pub fn mod_euclidean(v: i32, n: i32) -> i32 {
+    let r = v % n;
+    if r < 0 {
+        r + n
+    } else {
+        r
+    }
 }
 
 pub fn cross_tick(
@@ -442,12 +480,12 @@ pub fn cross_tick(
         // }
     }
 
-    // // // Testing
-    // if !tick_next.initialized {
-    //     println!("    crossing uninitialized tick: {:#?}", tick_next);
-    // } else {
-    //     println!("    crossing initialized tick: {:#?}", tick_next);
-    // }
+    // // Testing
+    if !tick_next.initialized {
+        println!("    crossing uninitialized tick ({}): {:#?}", tick_next_index, tick_next);
+    } else {
+        println!("    crossing initialized tick ({}): {:#?}", tick_next_index, tick_next);
+    }
 
     tick_next.liquidity_net
 }
@@ -1072,6 +1110,14 @@ mod math_bit {
 
         r
     }
+
+    // #[cfg(test)]
+    // mod tests {
+    //     use super::*;
+
+    //     #[test]
+    //     fn test_most_significant_bit()
+    // }
 }
 
 mod math_liquidity {
