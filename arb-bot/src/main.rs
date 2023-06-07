@@ -5,6 +5,8 @@ use arb_bot::*;
 
 use anyhow::Context;
 
+use ethnum::I256;
+
 use futures::future;
 use sui_sdk::types::object::{Object, self};
 
@@ -174,7 +176,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
 
             let orig_decimals = coin_to_metadata.get(path[0]).unwrap().decimals as u32;
-            let orig_amount = 1 * 10_u128.pow(orig_decimals);
+            let orig_amount = 1 * 10_u128.pow(orig_decimals + 4);
             let mut amount_in = orig_amount;
 
             for pair in path[..].windows(2) {
@@ -225,7 +227,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 best_path_rate = best_path_rate * best_leg_rate;
             }
 
-            println!("PROFIT: {}", amount_in - orig_amount);
+            println!("PROFIT: {}", I256::from(amount_in) - I256::from(orig_amount));
 
             println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
 

@@ -32,7 +32,7 @@ pub struct Pool {
     pub fee_growth_global_a: u128,
     pub fee_growth_global_b: u128,
     pub liquidity: u128,
-    pub initialized_ticks: BTreeMap<i32, Tick> , // new
+    pub ticks: BTreeMap<i32, Tick> , // new
     pub tick_map: BTreeMap<i32, U256> // Move: Table<i32, U256>,
     // deploy_time_ms: u64,
     // reward_infos: vector<PoolRewardInfo>,
@@ -53,6 +53,75 @@ pub struct ComputeSwapState {
     pub fee_amount: u128,
 }
 
+// Checks that ticks are represented in the tick maps
+pub fn check_ticks_corr_tick_map(pool: &mut Pool) {
+    // let mut tick_count = 0;
+
+    let tick_spacing_i32 = pool.tick_spacing as i32;
+    for (tick_index, tick) in pool.ticks.iter() {
+        // tick_count += 1;
+        // println!("checking tick {}", tick_index);s
+        let compressed = tick_index / tick_spacing_i32;
+        let (word_pos, bit_pos) = position_tick(compressed);
+        let word = pool.tick_map.entry(word_pos).or_insert(U256::from(0_u8));
+
+        let init_in_tick_map = (*word & (U256::from(1_u8) << (bit_pos - 1))) >> (bit_pos - 1);
+
+        if tick.initialized && init_in_tick_map != U256::from(1_u8) {
+            println!("tick in ticks (initialized) {} | ({}, {}) is not in tick_map", tick_index, word_pos, bit_pos);
+        } else if tick.initialized && init_in_tick_map == U256::from(1_u8) {
+            println!("tick in ticks (initialized) {} | ({}, {}) is in tick_map", tick_index, word_pos, bit_pos);
+        } else  {
+            println!("tick in ticks (uninitialized) {} | ({}, {})", tick_index, word_pos, bit_pos);
+        }
+        // assert!(tick.initialized && i != U256::from(1_u8), "tick in ticks {} is not in tick_map", tick_index);
+    } 
+
+    // println!("Tick count: {}", tick_count);
+
+}
+
+// pub fn check_tick_map_corr_ticks(pool: &mut Pool) {
+//     let mut tick_count = 0;
+
+//     for (word_pos, word) in pool.tick_map.iter() {
+//         // println!("word_pos << 8: {}", word_pos as u32 << 8) as i32);
+//         for bit_pos in 0..256 {
+//             let init_in_tick_map = (*word << (255 - bit_pos)) >> 255;
+//             // Suspectin some funky stuff with bit shifts and casting
+//             // The effect of + operations on unsigned vs signed may be different?
+//             let tick_index = (word_pos << 8) | if *word_pos < 0 {-bit_pos} else {bit_pos};
+//             // if tick_index < -2000 {
+//             // println!("tick_index: {}", tick_index);
+//             // }
+//             let tick = pool
+//                 .ticks
+//                 .entry(tick_index)
+//                 .or_insert(
+//                     Tick {
+//                         // id: UID,
+//                         liquidity_gross: 0,
+//                         liquidity_net: 0,
+//                         fee_growth_outside_a: 0,
+//                         fee_growth_outside_b: 0,
+//                         // reward_growths_outside: vec![],
+//                         initialized: false,
+//                     }
+//                 );
+
+//             if init_in_tick_map == U256::from(1_u8) {
+//                 tick_count += 1;
+//             }
+
+//             if init_in_tick_map == U256::from(1_u8) && !tick.initialized {
+//                 println!("tick in tick_map {} is not in ticks", tick_index);
+//             }
+//         }
+//     }
+
+//     println!("tick_map tick count: {}", tick_count);
+// }
+
 // Seems that this does most of the work in swap()
 pub fn compute_swap_result(
     pool: &mut Pool,
@@ -62,7 +131,17 @@ pub fn compute_swap_result(
     sqrt_price_limit: u128,
     simulating: bool
 ) -> ComputeSwapState {
-    
+
+    // TEST 
+    println!("SWAP POOL NUM TICKS: {}", pool.ticks.keys().len());
+    println!("SWAP POOL NUM WORDS: {}", pool.tick_map.keys().len());
+    println!("SWAP POOL NUM WORDS KEYS: {:?}", pool.tick_map.keys());
+    // println!("SWAP POOL TICK SPACING: {}", pool.tick_spacing);
+
+    /// TESTING
+    check_ticks_corr_tick_map(pool);
+    // check_tick_map_corr_ticks(pool);
+
     assert!(pool.unlocked);
     assert!(amount_specified != 0);
     assert!(
@@ -101,6 +180,17 @@ pub fn compute_swap_result(
             compute_swap_state.tick_current_index,
             a_to_b
         );
+
+        // Check if the BTreeMap contains tha Tick if it says initialized
+        if initialized && !pool.ticks.contains_key(&tick_next) {
+            println!("ticks does not contain 'initialized' tick {}", tick_next);
+        } else if !initialized && pool.ticks.contains_key(&tick_next) {
+            println!("ticks contains 'uninitialized' tick {}. initialized field: {}", tick_next, pool.ticks.get(&tick_next).unwrap().initialized);
+        } else if initialized && pool.ticks.contains_key(&tick_next) {
+            println!("ticks contains 'initialized' tick {}", tick_next);
+        }
+
+        // println!("  next tick ({}) initialized: {}", tick_next, initialized);
 
         if tick_next < math_tick::MIN_TICK_INDEX {
             tick_next = math_tick::MIN_TICK_INDEX;
@@ -186,6 +276,9 @@ pub fn compute_swap_result(
                     liquidity_net = -liquidity_net;
                 }
 
+                // println!("liquidity: {}", compute_swap_state.liquidity);
+                // println!("liquidity_net: {}", liquidity_net);
+
                 compute_swap_state.liquidity = math_liquidity::add_delta(
                     compute_swap_state.liquidity,
                     liquidity_net
@@ -232,10 +325,8 @@ pub fn compute_swap_result(
     }
 
     (compute_swap_state.amount_a, compute_swap_state.amount_b) = if a_to_b == amount_specified_is_input {
-        // println!("branch 1");
         (amount_specified - compute_swap_state.amount_specified_remaining, compute_swap_state.amount_calculated)
     } else {
-        // println!("branch 2");
         (compute_swap_state.amount_calculated, amount_specified - compute_swap_state.amount_specified_remaining)
     };
 
@@ -254,12 +345,13 @@ pub fn next_initialized_tick_within_one_word(
 
     let mut compressed: i32 = tick / tick_spacing_i32;
 
+    // Sus this out
     if tick < 0 && tick % tick_spacing_i32 != 0 {
         compressed -= 1;
     }
 
     if lte {
-        let (word_pos, bit_pos) = position_tick(tick);
+        let (word_pos, bit_pos) = position_tick(compressed);
         let word = pool.tick_map.entry(word_pos).or_insert(U256::from(0_u8));
 
         let mask = (U256::from(1_u8) << bit_pos) - 1 + (U256::from(1_u8) << bit_pos);
@@ -268,10 +360,14 @@ pub fn next_initialized_tick_within_one_word(
         let initialized = masked != 0;
 
         let next = if initialized {
+            // ISSUE IS HERE !!!!
             (compressed - (bit_pos - math_bit::most_significant_bit(masked)) as i32) * tick_spacing_i32
         } else {
             (compressed - bit_pos as i32) * tick_spacing_i32
         };
+
+        // println!("  branch 1");
+        println!("  next_initialized_tick() branch 1:\n    tick (word_pos, bit_pos): ({}, {})", word_pos, bit_pos);
 
         (next, initialized)
     } else {
@@ -289,14 +385,19 @@ pub fn next_initialized_tick_within_one_word(
             (compressed + 1 + (u8::MAX - bit_pos) as i32) * tick_spacing_i32
         };
 
+        // println!("  branch 2");
+        println!("  next_initialized_tick() branch 2:\n    next_tick (word_pos, bit_pos): ({}, {})", word_pos, bit_pos);
+
         (next, initialized)
     }
+
+
 }
 
 pub fn position_tick(
     tick: i32
 ) -> (i32, u8) {
-    let word_pos = tick >> 8;
+    let word_pos = tick >> 8;   // Arithmetic right shift (on purpose!)
     let bit_pos = (tick % 256).abs() as u8;
 
     (word_pos, bit_pos)
@@ -310,8 +411,15 @@ pub fn cross_tick(
     // next_pool_reward_infos: &[u128],
     simulating: bool,  // determines whether we 
 ) -> i128 {
+
+    // Debugging
+    let tick_spacing_i32 = pool.tick_spacing as i32;
+    let mut compressed: i32 = tick_next_index / tick_spacing_i32;
+    // let (word_pos, bit_pos) = position_tick(compressed);
+    // println!("    cross_tick() tick_next_index ({}) (word_pos, bit_pos): ({}, {}). spacing: {})", tick_next_index, word_pos, bit_pos, tick_spacing_i32);
+
     let tick_next = pool
-        .initialized_ticks
+        .ticks
         .entry(tick_next_index)
         .or_insert(
             Tick {
@@ -333,6 +441,13 @@ pub fn cross_tick(
         //     tick_next.reward_growths_outside[i] = (Wrapping(next_pool_reward_infos[i]) - Wrapping(tick_next.reward_growths_outside[i])).0;
         // }
     }
+
+    // // // Testing
+    // if !tick_next.initialized {
+    //     println!("    crossing uninitialized tick: {:#?}", tick_next);
+    // } else {
+    //     println!("    crossing initialized tick: {:#?}", tick_next);
+    // }
 
     tick_next.liquidity_net
 }
@@ -359,7 +474,7 @@ pub fn deploy_pool(
         fee_growth_global_a: 0,
         fee_growth_global_b: 0,
         liquidity: 0,
-        initialized_ticks: BTreeMap::new(),
+        ticks: BTreeMap::new(),
         tick_map: BTreeMap::new()
     }
 }
@@ -402,7 +517,6 @@ pub fn modify_position(
     );
     let mut amount_a = 0;
     let mut amount_b = 0;
-
 
     if liquidity_delta != 0 {
         if pool.tick_current_index < tick_lower {
@@ -504,7 +618,7 @@ pub fn update_tick(
     let max_liquidity_per_tick = pool.max_liquidity_per_tick;
 
     let tick = pool
-        .initialized_ticks
+        .ticks
         .entry(tick_index)
         .or_insert(
             Tick {
@@ -550,7 +664,7 @@ pub fn clear_tick(
 ) {
     // Prevent redundant insertions
     pool
-        .initialized_ticks
+        .ticks
         .entry(tick_index)
         .and_modify(|tick| {
             tick.liquidity_gross = 0;
@@ -718,6 +832,137 @@ mod tests {
         println!("expected price: {}", U64F64::from_bits(5598789932670288701514545755210_u128 >> 32) * U64F64::from_bits(5604469350942327889444743441197_u128 >> 32));
         println!("expected liquidity: {}", 1517882343751509868544);
     }
+
+    fn setup_test_case_for_next_init_a_to_b() -> Pool {
+        let fee = 0;
+        // bit_pos initial is 0
+        let sqrt_price_x96 = 4700277097478614198912276234240;
+        let sqrt_price_x64 = sqrt_price_x96 >> 32;
+
+        println!("initial sqrt_price: {}", U64F64::from_bits(sqrt_price_x64));
+        println!("initial price: {}", U64F64::from_bits(sqrt_price_x64) * U64F64::from_bits(sqrt_price_x64));
+        println!("tick from initial sqrt_price: {}", math_tick::tick_index_from_sqrt_price(sqrt_price_x64));
+
+        let tick_spacing = 1;
+        let fee_protocol= 0;
+
+        let mut pool = deploy_pool(
+            fee, 
+            tick_spacing, 
+            sqrt_price_x64, 
+            fee_protocol
+        );
+
+        println!("initial tick: {}", pool.tick_current_index);
+
+        let tick_lower = 84222;
+        let tick_upper = 86129;
+        let amount = 1517882343751509868544;
+
+        println!("deployed pool");
+
+        mint(
+            &mut pool, 
+            tick_lower, 
+            tick_upper, 
+            amount
+        );
+
+        println!("initial liquidity: {}", pool.liquidity);
+
+        pool
+    }
+
+    fn setup_test_case_for_next_init_b_to_a() -> Pool {
+        let fee = 0;
+        // bit_pos initial is 255
+        let sqrt_price_x96 = 4760557097478614198912276234240;
+        let sqrt_price_x64 = sqrt_price_x96 >> 32;
+
+        println!("initial sqrt_price: {}", U64F64::from_bits(sqrt_price_x64));
+        println!("initial price: {}", U64F64::from_bits(sqrt_price_x64) * U64F64::from_bits(sqrt_price_x64));
+        println!("tick from initial sqrt_price: {}", math_tick::tick_index_from_sqrt_price(sqrt_price_x64));
+
+        let tick_spacing = 1;
+        let fee_protocol= 0;
+
+        let mut pool = deploy_pool(
+            fee, 
+            tick_spacing, 
+            sqrt_price_x64, 
+            fee_protocol
+        );
+
+        println!("initial tick: {}", pool.tick_current_index);
+
+        let tick_lower = 84222;
+        let tick_upper = 86129;
+        let amount = 1517882343751509868544;
+
+        println!("deployed pool");
+
+        mint(
+            &mut pool, 
+            tick_lower, 
+            tick_upper, 
+            amount
+        );
+
+        println!("initial liquidity: {}", pool.liquidity);
+
+        pool
+    }
+
+    #[test]
+    fn test_next_initialized_tick() {
+
+        // Setup
+        // let tick_lower = 84222;
+        // let tick_upper = 86129;
+
+        // From bit_pos = 255
+        for  i in 1..256 {
+            let mut pool = setup_test_case_for_next_init_b_to_a();
+            // Higher: b to a
+            let tick_current = pool.tick_current_index;
+            let tick_lower = pool.tick_current_index - i;
+            let tick_upper = 86220;
+            let amount = 1517882343751509868544u128;
+            println!("- {}", i);
+            println!("bit_pos current: {}", position_tick(tick_current).1);
+            // println!("bit_pos expected next: {}", position_tick(tick_lower).1);
+
+            // mint(&mut pool, tick_current -166, tick_upper, amount);
+            mint(&mut pool, tick_lower, tick_upper, amount);
+
+            println!("expected next: {}", tick_lower);
+            println!("{:#?}", next_initialized_tick_within_one_word(&mut pool, tick_current, true));
+
+            assert!((tick_lower, true) == next_initialized_tick_within_one_word(&mut pool, tick_current, true));
+        }
+
+        // From bit_pos = 0
+        for  i in 1..256 {
+            let mut pool = setup_test_case_for_next_init_a_to_b();
+            // Higher: b to a
+            let tick_current = pool.tick_current_index;
+            let tick_lower = pool.tick_current_index + i;
+            let tick_upper = 86220;
+            let amount = 1517882343751509868544u128;
+            println!("+ {}", i);
+            println!("bit_pos current: {}", position_tick(tick_current).1);
+            println!("bit_pos expected next: {}", position_tick(tick_lower).1);
+
+            // mint(&mut pool, tick_current -166, tick_upper, amount);
+            mint(&mut pool, tick_lower, tick_upper, amount);
+
+            println!("expected next: {}", tick_lower);
+            println!("{:#?}", next_initialized_tick_within_one_word(&mut pool, tick_current, false));
+
+            assert!((tick_lower, true) == next_initialized_tick_within_one_word(&mut pool, tick_current, false));
+        }
+
+    }
 }
 
 mod math_bit {
@@ -730,42 +975,42 @@ mod math_bit {
         assert!(x > 0, "x must be greater than 0.");
         let mut r = 0;
 
-        if x >= 0x10000000000000000000000000000000 {
+        if x >= U256::from_str_hex("0x100000000000000000000000000000000").unwrap() {
             x = x >> 128;
             r = r + 128;
         }
 
-        if x >= 0x10000000000000000 {
+        if x >= U256::from_str_hex("0x10000000000000000").unwrap() {
             x = x >> 64;
             r = r + 64;
         }
 
-        if x >= 0x100000000 {
+        if x >= U256::from_str_hex("0x100000000").unwrap() {
             x = x >> 32;
             r = r + 32;
         }
 
-        if x >= 0x10000 {
+        if x >= U256::from_str_hex("0x10000").unwrap() {
             x = x >> 16;
             r = r + 16;
         };
 
-        if x >= 0x100 {
+        if x >= U256::from_str_hex("0x100").unwrap() {
             x = x >> 8;
             r = r + 8;
         };
 
-        if x >= 0x10 {
+        if x >= U256::from_str_hex("0x10").unwrap() {
             x = x >> 4;
             r = r + 4;
         };
 
-        if x >= 0x4 {
+        if x >= U256::from_str_hex("0x4").unwrap() {
             x = x >> 2;
             r = r + 2;
         };
 
-        if x >= 0x2 {
+        if x >= U256::from_str_hex("0x2").unwrap() {
             r = r + 1;
         }
 
@@ -779,49 +1024,49 @@ mod math_bit {
 
         let mut r: u8 = 255;
 
-        if x & 0xffffffffffffffffffffffffffffffff > 0 {
+        if x & U256::from_str_hex("0xffffffffffffffffffffffffffffffff").unwrap() > 0 {
             r = r - 128;
         } else {
             x = x >> 128;
         };
 
-        if x & 0xffffffffffffffff > 0 {
+        if x & U256::from_str_hex("0xffffffffffffffff").unwrap() > 0 {
             r = r - 64;
         } else {
             x = x >> 64;
         };
 
-        if x & 0xffffffff > 0 {
+        if x & U256::from_str_hex("0xffffffff").unwrap() > 0 {
             r = r - 32;
         } else {
             x = x >> 32;
         };
 
-        if x & 0xffff > 0 {
+        if x & U256::from_str_hex("0xffff").unwrap() > 0 {
             r = r - 16;
         } else {
             x = x >> 16;
         };
 
-        if x & 0xff > 0 {
+        if x & U256::from_str_hex("0xff").unwrap() > 0 {
             r = r - 8;
         } else {
             x = x >> 8;
         };
 
-        if x & 0xf > 0 {
+        if x & U256::from_str_hex("0xf").unwrap() > 0 {
             r = r - 4;
         } else {
             x = x >> 4;
         };
 
-        if x & 0x3 > 0 {
+        if x & U256::from_str_hex("0x3").unwrap() > 0 {
             r = r - 2;
         } else {
             x = x >> 2;
         };
 
-        if x & 0x1 > 0 {
+        if x & U256::from_str_hex("0x1").unwrap() > 0 {
             r = r - 1;
         }
 
@@ -840,12 +1085,15 @@ mod math_liquidity {
         let mut z;
         let abs_y = y.abs() as u128;
 
+        // println!("x: {}", x);
+        // println!("y: {}", y);
+
         if y < 0 {
-            assert!(x >= abs_y, "add_delta: x < y.");
+            assert!(x >= abs_y, "add_delta: x < |y|.");
             z = x - abs_y;
         } else {
             z = x + abs_y;
-            assert!(z >= x, "add_delta: x < x");
+            assert!(z >= x, "add_delta: z < x");
         }
 
         z
@@ -1443,7 +1691,7 @@ pub mod math_tick {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use super::math_tick::MIN_TICK_INDEX;
+        // use super::math_tick::MIN_TICK_INDEX;
 
         #[test]
         fn test_sqrt_price_from_tick_index_at_max() {

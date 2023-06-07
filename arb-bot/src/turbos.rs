@@ -193,9 +193,9 @@ impl Turbos {
         )? as i32;
 
         // let init_tick_start = Instant::now();
-        let initialized_ticks = self.get_initialized_ticks(sui_client, &response.object_id()?).await?;
+        let ticks = self.get_ticks(sui_client, &response.object_id()?).await?;
         // let init_tick_duration = init_tick_start.elapsed();
-        // println!("get_initialized_ticks(): {:?}", init_tick_duration);
+        // println!("get_ticks(): {:?}", init_tick_duration);
 
         let tick_map_id = sui_move_value::get_uid(
             &sui_move_value::get_struct(&fields, "tick_map")?,
@@ -223,7 +223,7 @@ impl Turbos {
                 fee_growth_global_a,
                 fee_growth_global_b,
                 liquidity,
-                initialized_ticks, // new
+                ticks, // new
                 tick_map
             }
         )
@@ -256,6 +256,7 @@ impl Turbos {
         // The dynamic field object also holds word_pos in the field "name"
         // Tomorrow we'll refactor to work with a Vector SuiObjectResponses 
         let word_object_responses = sui_sdk_utils::get_object_responses(sui_client, &word_ids).await?;
+        // println!("    TICK_MAP {}\n        NUM RECEIVED WORD OBJECT IDS: {}\n        NUM RECEIVED WORD OBJECT RESPONSES: {}", tick_map_id, word_ids.len(), word_object_responses.len());
 
         let word_pos_to_word = word_object_responses
             .into_iter()
@@ -268,7 +269,7 @@ impl Turbos {
 
                 // Moving the casts/conversions to outside the if let makes this more modular
                 let word = U256::from_str(
-                    &sui_move_value::get_string(&fields, "value")? 
+                    &sui_move_value::get_string(&fields, "value")?
                 )?;
 
                 Ok((word_pos, word))
@@ -278,7 +279,7 @@ impl Turbos {
         Ok(word_pos_to_word)
     }
 
-    pub async fn get_initialized_ticks(&self, sui_client: &SuiClient, pool_id: &ObjectID) -> Result<BTreeMap<i32, turbos_pool::Tick>, anyhow::Error>{
+    pub async fn get_ticks(&self, sui_client: &SuiClient, pool_id: &ObjectID) -> Result<BTreeMap<i32, turbos_pool::Tick>, anyhow::Error>{
         let pool_dynamic_field_infos = sui_client
             .read_api()
             .pages(
@@ -308,6 +309,9 @@ impl Turbos {
 
         let tick_object_responses = sui_sdk_utils::get_object_responses(sui_client, &tick_object_ids).await?;
 
+        // println!("    POOL {}:\n        NUM RECEIVED TICK OBJECT IDS: {}\n        NUM RECEIVED TICK OBJECT RESPONSES: {}", pool_id, tick_object_ids.len(), tick_object_responses.len());
+        // Consider some checks to make sure we're gettin complete responses
+
         let tick_index_to_tick = tick_object_responses
             .into_iter()
             .map(|tick_object_response| {
@@ -326,7 +330,7 @@ impl Turbos {
                     &sui_move_value::get_string(&tick_fields, "liquidity_gross")?
                 )?;
 
-                let liquidity_net = u128::from_str(
+                let liquidity_net = u128 ::from_str(
                     &sui_move_value::get_string(
                         &sui_move_value::get_struct(
                             &tick_fields, 
