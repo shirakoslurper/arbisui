@@ -65,7 +65,7 @@ pub fn check_ticks_corr_tick_map(pool: &mut Pool) {
         let (word_pos, bit_pos) = position_tick(compressed);
         let word = pool.tick_map.entry(word_pos).or_insert(U256::from(0_u8));
 
-        let init_in_tick_map = (*word & (U256::from(1_u8) << (bit_pos - 1))) >> (bit_pos - 1);
+        let init_in_tick_map = (*word << (255 - bit_pos)) >> 255;
 
         if tick.initialized && init_in_tick_map != U256::from(1_u8) {
             println!("tick in ticks (initialized) {} | ({}, {}) is not in tick_map", tick_index, word_pos, bit_pos);

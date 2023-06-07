@@ -270,7 +270,7 @@ impl Turbos {
                 // Moving the casts/conversions to outside the if let makes this more modular
                 let word = U256::from_str(
                     &sui_move_value::get_string(&fields, "value")?
-                )?;
+                )?.swap_bytes();
 
                 Ok((word_pos, word))
             })
