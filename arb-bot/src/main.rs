@@ -13,6 +13,7 @@ use sui_sdk::types::object::{Object, self};
 use std::cmp;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+use std::time::Instant;
 
 use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata, SuiObjectResponse};
 use sui_sdk::types::base_types::ObjectID;
@@ -158,9 +159,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
     println!("pool_id_to_fields.keys().len(): {}", pool_id_to_object_response.keys().len());
 
-    market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
-
     let paths = all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7)).collect::<Vec<Vec<&TypeTag>>>().clone();
+
+    let now = Instant::now();
+
+    market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
 
     paths
         .iter()
@@ -174,9 +177,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let mut best_path_rate = U64F64::from_num(1);
 
-
             let orig_decimals = coin_to_metadata.get(path[0]).unwrap().decimals as u32;
-            let orig_amount = 1 * 10_u128.pow(orig_decimals + 4);
+            let orig_amount = 5 * 10_u128.pow(orig_decimals);
             let mut amount_in = orig_amount;
 
             for pair in path[..].windows(2) {
@@ -219,20 +221,23 @@ async fn main() -> Result<(), anyhow::Error> {
                         cmp::max(max, current)
                     });
 
-                println!("    {}: {} decimals", orig, orig_decimals);
-                println!("    -> {}: {} decimals", dest, dest_decimals);
-                // Using decimals for human readability
-                println!("        leg rate: {}", best_leg_rate / adj);
+                // println!("    {}: {} decimals", orig, orig_decimals);
+                // println!("    -> {}: {} decimals", dest, dest_decimals);
+                // // Using decimals for human readability
+                // println!("        leg rate: {}", best_leg_rate / adj);
 
                 best_path_rate = best_path_rate * best_leg_rate;
             }
 
             println!("PROFIT: {}", I256::from(amount_in) - I256::from(orig_amount));
 
-            println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
+            // println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
 
-            // println!("\n");
+            println!("\n");
         });
+
+        let elapsed = now.elapsed();
+        println!("Elasped: {:.2?}", elapsed);
     
     // loop_blocks(run_data, vec![&flameswap]).await?;
 

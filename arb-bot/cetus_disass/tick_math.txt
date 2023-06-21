@@ -1,0 +1,899 @@
+// Move bytecode v6
+module 1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb.tick_math {
+use 714a63a0dba6da4f017b42d5d0fb78867f18bcde904868e51d951a5a6f5b7f57::full_math_u128;
+use 714a63a0dba6da4f017b42d5d0fb78867f18bcde904868e51d951a5a6f5b7f57::i128;
+use 714a63a0dba6da4f017b42d5d0fb78867f18bcde904868e51d951a5a6f5b7f57::i32;
+
+
+
+
+public max_sqrt_price(): u128 {
+B0:
+	0: LdConst[1](U128: [175, 51, 27, 168, 50, 127, 187, 53, 177, 196, 254, 255, 0, 0, 0, 0])
+	1: Ret
+}
+public min_sqrt_price(): u128 {
+B0:
+	0: LdConst[2](U128: [80, 59, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+	1: Ret
+}
+public max_tick(): I32 {
+B0:
+	0: LdConst[0](U32: [244, 196, 6, 0])
+	1: Call i32::from(u32): I32
+	2: Ret
+}
+public min_tick(): I32 {
+B0:
+	0: LdConst[0](U32: [244, 196, 6, 0])
+	1: Call i32::neg_from(u32): I32
+	2: Ret
+}
+public tick_bound(): u32 {
+B0:
+	0: LdConst[0](U32: [244, 196, 6, 0])
+	1: Ret
+}
+public get_sqrt_price_at_tick(Arg0: I32): u128 {
+L0:	loc1: u128
+B0:
+	0: CopyLoc[0](Arg0: I32)
+	1: Call min_tick(): I32
+	2: Call i32::gte(I32, I32): bool
+	3: BrFalse(9)
+B1:
+	4: CopyLoc[0](Arg0: I32)
+	5: Call max_tick(): I32
+	6: Call i32::lte(I32, I32): bool
+	7: StLoc[1](loc0: bool)
+	8: Branch(11)
+B2:
+	9: LdFalse
+	10: StLoc[1](loc0: bool)
+B3:
+	11: MoveLoc[1](loc0: bool)
+	12: BrFalse(14)
+B4:
+	13: Branch(16)
+B5:
+	14: LdConst[3](U64: [1, 0, 0, 0, 0, 0, 0, 0])
+	15: Abort
+B6:
+	16: CopyLoc[0](Arg0: I32)
+	17: Call i32::is_neg(I32): bool
+	18: BrFalse(23)
+B7:
+	19: MoveLoc[0](Arg0: I32)
+	20: Call get_sqrt_price_at_negative_tick(I32): u128
+	21: StLoc[2](loc1: u128)
+	22: Branch(26)
+B8:
+	23: MoveLoc[0](Arg0: I32)
+	24: Call get_sqrt_price_at_positive_tick(I32): u128
+	25: StLoc[2](loc1: u128)
+B9:
+	26: MoveLoc[2](loc1: u128)
+	27: Ret
+}
+public is_valid_index(Arg0: I32, Arg1: u32): bool {
+B0:
+	0: CopyLoc[0](Arg0: I32)
+	1: Call min_tick(): I32
+	2: Call i32::gte(I32, I32): bool
+	3: BrFalse(9)
+B1:
+	4: CopyLoc[0](Arg0: I32)
+	5: Call max_tick(): I32
+	6: Call i32::lte(I32, I32): bool
+	7: StLoc[2](loc0: bool)
+	8: Branch(11)
+B2:
+	9: LdFalse
+	10: StLoc[2](loc0: bool)
+B3:
+	11: MoveLoc[2](loc0: bool)
+	12: BrFalse(22)
+B4:
+	13: MoveLoc[0](Arg0: I32)
+	14: MoveLoc[1](Arg1: u32)
+	15: Call i32::from(u32): I32
+	16: Call i32::mod(I32, I32): I32
+	17: LdU32(0)
+	18: Call i32::from(u32): I32
+	19: Eq
+	20: StLoc[3](loc1: bool)
+	21: Branch(24)
+B5:
+	22: LdFalse
+	23: StLoc[3](loc1: bool)
+B6:
+	24: MoveLoc[3](loc1: bool)
+	25: Ret
+}
+public get_tick_at_sqrt_price(Arg0: u128): I32 {
+L0:	loc1: u128
+L1:	loc2: u8
+L2:	loc3: I128
+L3:	loc4: I128
+L4:	loc5: u8
+L5:	loc6: u128
+L6:	loc7: u8
+L7:	loc8: I32
+L8:	loc9: I32
+B0:
+	0: CopyLoc[0](Arg0: u128)
+	1: LdConst[2](U128: [80, 59, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+	2: Ge
+	3: BrFalse(9)
+B1:
+	4: CopyLoc[0](Arg0: u128)
+	5: LdConst[1](U128: [175, 51, 27, 168, 50, 127, 187, 53, 177, 196, 254, 255, 0, 0, 0, 0])
+	6: Le
+	7: StLoc[1](loc0: bool)
+	8: Branch(11)
+B2:
+	9: LdFalse
+	10: StLoc[1](loc0: bool)
+B3:
+	11: MoveLoc[1](loc0: bool)
+	12: BrFalse(14)
+B4:
+	13: Branch(16)
+B5:
+	14: LdConst[4](U64: [2, 0, 0, 0, 0, 0, 0, 0])
+	15: Abort
+B6:
+	16: CopyLoc[0](Arg0: u128)
+	17: StLoc[7](loc6: u128)
+	18: LdU8(0)
+	19: StLoc[6](loc5: u8)
+	20: CopyLoc[7](loc6: u128)
+	21: LdU128(18446744073709551616)
+	22: Ge
+	23: Call as_u8(bool): u8
+	24: LdU8(6)
+	25: Shl
+	26: StLoc[3](loc2: u8)
+	27: MoveLoc[6](loc5: u8)
+	28: CopyLoc[3](loc2: u8)
+	29: BitOr
+	30: StLoc[6](loc5: u8)
+	31: MoveLoc[7](loc6: u128)
+	32: MoveLoc[3](loc2: u8)
+	33: Shr
+	34: StLoc[7](loc6: u128)
+	35: CopyLoc[7](loc6: u128)
+	36: LdU128(4294967296)
+	37: Ge
+	38: Call as_u8(bool): u8
+	39: LdU8(5)
+	40: Shl
+	41: StLoc[3](loc2: u8)
+	42: MoveLoc[6](loc5: u8)
+	43: CopyLoc[3](loc2: u8)
+	44: BitOr
+	45: StLoc[6](loc5: u8)
+	46: MoveLoc[7](loc6: u128)
+	47: MoveLoc[3](loc2: u8)
+	48: Shr
+	49: StLoc[7](loc6: u128)
+	50: CopyLoc[7](loc6: u128)
+	51: LdU128(65536)
+	52: Ge
+	53: Call as_u8(bool): u8
+	54: LdU8(4)
+	55: Shl
+	56: StLoc[3](loc2: u8)
+	57: MoveLoc[6](loc5: u8)
+	58: CopyLoc[3](loc2: u8)
+	59: BitOr
+	60: StLoc[6](loc5: u8)
+	61: MoveLoc[7](loc6: u128)
+	62: MoveLoc[3](loc2: u8)
+	63: Shr
+	64: StLoc[7](loc6: u128)
+	65: CopyLoc[7](loc6: u128)
+	66: LdU128(256)
+	67: Ge
+	68: Call as_u8(bool): u8
+	69: LdU8(3)
+	70: Shl
+	71: StLoc[3](loc2: u8)
+	72: MoveLoc[6](loc5: u8)
+	73: CopyLoc[3](loc2: u8)
+	74: BitOr
+	75: StLoc[6](loc5: u8)
+	76: MoveLoc[7](loc6: u128)
+	77: MoveLoc[3](loc2: u8)
+	78: Shr
+	79: StLoc[7](loc6: u128)
+	80: CopyLoc[7](loc6: u128)
+	81: LdU128(16)
+	82: Ge
+	83: Call as_u8(bool): u8
+	84: LdU8(2)
+	85: Shl
+	86: StLoc[3](loc2: u8)
+	87: MoveLoc[6](loc5: u8)
+	88: CopyLoc[3](loc2: u8)
+	89: BitOr
+	90: StLoc[6](loc5: u8)
+	91: MoveLoc[7](loc6: u128)
+	92: MoveLoc[3](loc2: u8)
+	93: Shr
+	94: StLoc[7](loc6: u128)
+	95: CopyLoc[7](loc6: u128)
+	96: LdU128(4)
+	97: Ge
+	98: Call as_u8(bool): u8
+	99: LdU8(1)
+	100: Shl
+	101: StLoc[3](loc2: u8)
+	102: MoveLoc[6](loc5: u8)
+	103: CopyLoc[3](loc2: u8)
+	104: BitOr
+	105: StLoc[6](loc5: u8)
+	106: MoveLoc[7](loc6: u128)
+	107: MoveLoc[3](loc2: u8)
+	108: Shr
+	109: LdU128(2)
+	110: Ge
+	111: Call as_u8(bool): u8
+	112: LdU8(0)
+	113: Shl
+	114: StLoc[3](loc2: u8)
+	115: MoveLoc[6](loc5: u8)
+	116: MoveLoc[3](loc2: u8)
+	117: BitOr
+	118: StLoc[6](loc5: u8)
+	119: CopyLoc[6](loc5: u8)
+	120: CastU128
+	121: Call i128::from(u128): I128
+	122: LdU128(64)
+	123: Call i128::from(u128): I128
+	124: Call i128::sub(I128, I128): I128
+	125: LdU8(32)
+	126: Call i128::shl(I128, u8): I128
+	127: StLoc[4](loc3: I128)
+	128: CopyLoc[6](loc5: u8)
+	129: LdU8(64)
+	130: Ge
+	131: BrFalse(139)
+B7:
+	132: CopyLoc[0](Arg0: u128)
+	133: MoveLoc[6](loc5: u8)
+	134: LdU8(63)
+	135: Sub
+	136: Shr
+	137: StLoc[2](loc1: u128)
+	138: Branch(145)
+B8:
+	139: CopyLoc[0](Arg0: u128)
+	140: LdU8(63)
+	141: MoveLoc[6](loc5: u8)
+	142: Sub
+	143: Shl
+	144: StLoc[2](loc1: u128)
+B9:
+	145: MoveLoc[2](loc1: u128)
+	146: StLoc[7](loc6: u128)
+	147: LdU8(31)
+	148: StLoc[8](loc7: u8)
+B10:
+	149: CopyLoc[8](loc7: u8)
+	150: LdU8(18)
+	151: Ge
+	152: BrFalse(182)
+B11:
+	153: Branch(154)
+B12:
+	154: CopyLoc[7](loc6: u128)
+	155: MoveLoc[7](loc6: u128)
+	156: Mul
+	157: LdU8(63)
+	158: Shr
+	159: StLoc[7](loc6: u128)
+	160: CopyLoc[7](loc6: u128)
+	161: LdU8(64)
+	162: Shr
+	163: CastU8
+	164: StLoc[3](loc2: u8)
+	165: MoveLoc[4](loc3: I128)
+	166: CopyLoc[3](loc2: u8)
+	167: CastU128
+	168: Call i128::from(u128): I128
+	169: CopyLoc[8](loc7: u8)
+	170: Call i128::shl(I128, u8): I128
+	171: Call i128::or(I128, I128): I128
+	172: StLoc[4](loc3: I128)
+	173: MoveLoc[7](loc6: u128)
+	174: MoveLoc[3](loc2: u8)
+	175: Shr
+	176: StLoc[7](loc6: u128)
+	177: MoveLoc[8](loc7: u8)
+	178: LdU8(1)
+	179: Sub
+	180: StLoc[8](loc7: u8)
+	181: Branch(149)
+B13:
+	182: MoveLoc[4](loc3: I128)
+	183: LdU128(59543866431366)
+	184: Call i128::from(u128): I128
+	185: Call i128::mul(I128, I128): I128
+	186: StLoc[5](loc4: I128)
+	187: CopyLoc[5](loc4: I128)
+	188: LdU128(184467440737095516)
+	189: Call i128::from(u128): I128
+	190: Call i128::sub(I128, I128): I128
+	191: LdU8(64)
+	192: Call i128::shr(I128, u8): I128
+	193: Call i128::as_i32(I128): I32
+	194: StLoc[10](loc9: I32)
+	195: MoveLoc[5](loc4: I128)
+	196: LdU128(15793534762490258745)
+	197: Call i128::from(u128): I128
+	198: Call i128::add(I128, I128): I128
+	199: LdU8(64)
+	200: Call i128::shr(I128, u8): I128
+	201: Call i128::as_i32(I128): I32
+	202: StLoc[9](loc8: I32)
+	203: CopyLoc[10](loc9: I32)
+	204: CopyLoc[9](loc8: I32)
+	205: Call i32::eq(I32, I32): bool
+	206: BrFalse(209)
+B14:
+	207: MoveLoc[10](loc9: I32)
+	208: Ret
+B15:
+	209: CopyLoc[9](loc8: I32)
+	210: Call get_sqrt_price_at_tick(I32): u128
+	211: MoveLoc[0](Arg0: u128)
+	212: Le
+	213: BrFalse(216)
+B16:
+	214: MoveLoc[9](loc8: I32)
+	215: Ret
+B17:
+	216: MoveLoc[10](loc9: I32)
+	217: Ret
+}
+as_u8(Arg0: bool): u8 {
+B0:
+	0: MoveLoc[0](Arg0: bool)
+	1: BrFalse(5)
+B1:
+	2: LdU8(1)
+	3: StLoc[1](loc0: u8)
+	4: Branch(7)
+B2:
+	5: LdU8(0)
+	6: StLoc[1](loc0: u8)
+B3:
+	7: MoveLoc[1](loc0: u8)
+	8: Ret
+}
+get_sqrt_price_at_negative_tick(Arg0: I32): u128 {
+L0:	loc1: u32
+L1:	loc2: u128
+B0:
+	0: MoveLoc[0](Arg0: I32)
+	1: Call i32::abs(I32): I32
+	2: Call i32::as_u32(I32): u32
+	3: StLoc[2](loc1: u32)
+	4: CopyLoc[2](loc1: u32)
+	5: LdU32(1)
+	6: BitAnd
+	7: LdU32(0)
+	8: Neq
+	9: BrFalse(13)
+B1:
+	10: LdU128(18445821805675392311)
+	11: StLoc[1](loc0: u128)
+	12: Branch(15)
+B2:
+	13: LdU128(18446744073709551616)
+	14: StLoc[1](loc0: u128)
+B3:
+	15: MoveLoc[1](loc0: u128)
+	16: StLoc[3](loc2: u128)
+	17: CopyLoc[2](loc1: u32)
+	18: LdU32(2)
+	19: BitAnd
+	20: LdU32(0)
+	21: Neq
+	22: BrFalse(28)
+B4:
+	23: MoveLoc[3](loc2: u128)
+	24: LdU128(18444899583751176498)
+	25: LdU8(64)
+	26: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	27: StLoc[3](loc2: u128)
+B5:
+	28: CopyLoc[2](loc1: u32)
+	29: LdU32(4)
+	30: BitAnd
+	31: LdU32(0)
+	32: Neq
+	33: BrFalse(39)
+B6:
+	34: MoveLoc[3](loc2: u128)
+	35: LdU128(18443055278223354162)
+	36: LdU8(64)
+	37: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	38: StLoc[3](loc2: u128)
+B7:
+	39: CopyLoc[2](loc1: u32)
+	40: LdU32(8)
+	41: BitAnd
+	42: LdU32(0)
+	43: Neq
+	44: BrFalse(50)
+B8:
+	45: MoveLoc[3](loc2: u128)
+	46: LdU128(18439367220385604838)
+	47: LdU8(64)
+	48: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	49: StLoc[3](loc2: u128)
+B9:
+	50: CopyLoc[2](loc1: u32)
+	51: LdU32(16)
+	52: BitAnd
+	53: LdU32(0)
+	54: Neq
+	55: BrFalse(61)
+B10:
+	56: MoveLoc[3](loc2: u128)
+	57: LdU128(18431993317065449817)
+	58: LdU8(64)
+	59: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	60: StLoc[3](loc2: u128)
+B11:
+	61: CopyLoc[2](loc1: u32)
+	62: LdU32(32)
+	63: BitAnd
+	64: LdU32(0)
+	65: Neq
+	66: BrFalse(72)
+B12:
+	67: MoveLoc[3](loc2: u128)
+	68: LdU128(18417254355718160513)
+	69: LdU8(64)
+	70: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	71: StLoc[3](loc2: u128)
+B13:
+	72: CopyLoc[2](loc1: u32)
+	73: LdU32(64)
+	74: BitAnd
+	75: LdU32(0)
+	76: Neq
+	77: BrFalse(83)
+B14:
+	78: MoveLoc[3](loc2: u128)
+	79: LdU128(18387811781193591352)
+	80: LdU8(64)
+	81: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	82: StLoc[3](loc2: u128)
+B15:
+	83: CopyLoc[2](loc1: u32)
+	84: LdU32(128)
+	85: BitAnd
+	86: LdU32(0)
+	87: Neq
+	88: BrFalse(94)
+B16:
+	89: MoveLoc[3](loc2: u128)
+	90: LdU128(18329067761203520168)
+	91: LdU8(64)
+	92: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	93: StLoc[3](loc2: u128)
+B17:
+	94: CopyLoc[2](loc1: u32)
+	95: LdU32(256)
+	96: BitAnd
+	97: LdU32(0)
+	98: Neq
+	99: BrFalse(105)
+B18:
+	100: MoveLoc[3](loc2: u128)
+	101: LdU128(18212142134806087854)
+	102: LdU8(64)
+	103: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	104: StLoc[3](loc2: u128)
+B19:
+	105: CopyLoc[2](loc1: u32)
+	106: LdU32(512)
+	107: BitAnd
+	108: LdU32(0)
+	109: Neq
+	110: BrFalse(116)
+B20:
+	111: MoveLoc[3](loc2: u128)
+	112: LdU128(17980523815641551639)
+	113: LdU8(64)
+	114: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	115: StLoc[3](loc2: u128)
+B21:
+	116: CopyLoc[2](loc1: u32)
+	117: LdU32(1024)
+	118: BitAnd
+	119: LdU32(0)
+	120: Neq
+	121: BrFalse(127)
+B22:
+	122: MoveLoc[3](loc2: u128)
+	123: LdU128(17526086738831147013)
+	124: LdU8(64)
+	125: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	126: StLoc[3](loc2: u128)
+B23:
+	127: CopyLoc[2](loc1: u32)
+	128: LdU32(2048)
+	129: BitAnd
+	130: LdU32(0)
+	131: Neq
+	132: BrFalse(138)
+B24:
+	133: MoveLoc[3](loc2: u128)
+	134: LdU128(16651378430235024244)
+	135: LdU8(64)
+	136: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	137: StLoc[3](loc2: u128)
+B25:
+	138: CopyLoc[2](loc1: u32)
+	139: LdU32(4096)
+	140: BitAnd
+	141: LdU32(0)
+	142: Neq
+	143: BrFalse(149)
+B26:
+	144: MoveLoc[3](loc2: u128)
+	145: LdU128(15030750278693429944)
+	146: LdU8(64)
+	147: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	148: StLoc[3](loc2: u128)
+B27:
+	149: CopyLoc[2](loc1: u32)
+	150: LdU32(8192)
+	151: BitAnd
+	152: LdU32(0)
+	153: Neq
+	154: BrFalse(160)
+B28:
+	155: MoveLoc[3](loc2: u128)
+	156: LdU128(12247334978882834399)
+	157: LdU8(64)
+	158: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	159: StLoc[3](loc2: u128)
+B29:
+	160: CopyLoc[2](loc1: u32)
+	161: LdU32(16384)
+	162: BitAnd
+	163: LdU32(0)
+	164: Neq
+	165: BrFalse(171)
+B30:
+	166: MoveLoc[3](loc2: u128)
+	167: LdU128(8131365268884726200)
+	168: LdU8(64)
+	169: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	170: StLoc[3](loc2: u128)
+B31:
+	171: CopyLoc[2](loc1: u32)
+	172: LdU32(32768)
+	173: BitAnd
+	174: LdU32(0)
+	175: Neq
+	176: BrFalse(182)
+B32:
+	177: MoveLoc[3](loc2: u128)
+	178: LdU128(3584323654723342297)
+	179: LdU8(64)
+	180: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	181: StLoc[3](loc2: u128)
+B33:
+	182: CopyLoc[2](loc1: u32)
+	183: LdU32(65536)
+	184: BitAnd
+	185: LdU32(0)
+	186: Neq
+	187: BrFalse(193)
+B34:
+	188: MoveLoc[3](loc2: u128)
+	189: LdU128(696457651847595233)
+	190: LdU8(64)
+	191: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	192: StLoc[3](loc2: u128)
+B35:
+	193: CopyLoc[2](loc1: u32)
+	194: LdU32(131072)
+	195: BitAnd
+	196: LdU32(0)
+	197: Neq
+	198: BrFalse(204)
+B36:
+	199: MoveLoc[3](loc2: u128)
+	200: LdU128(26294789957452057)
+	201: LdU8(64)
+	202: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	203: StLoc[3](loc2: u128)
+B37:
+	204: MoveLoc[2](loc1: u32)
+	205: LdU32(262144)
+	206: BitAnd
+	207: LdU32(0)
+	208: Neq
+	209: BrFalse(215)
+B38:
+	210: MoveLoc[3](loc2: u128)
+	211: LdU128(37481735321082)
+	212: LdU8(64)
+	213: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	214: StLoc[3](loc2: u128)
+B39:
+	215: MoveLoc[3](loc2: u128)
+	216: Ret
+}
+get_sqrt_price_at_positive_tick(Arg0: I32): u128 {
+L0:	loc1: u32
+L1:	loc2: u128
+B0:
+	0: MoveLoc[0](Arg0: I32)
+	1: Call i32::abs(I32): I32
+	2: Call i32::as_u32(I32): u32
+	3: StLoc[2](loc1: u32)
+	4: CopyLoc[2](loc1: u32)
+	5: LdU32(1)
+	6: BitAnd
+	7: LdU32(0)
+	8: Neq
+	9: BrFalse(13)
+B1:
+	10: LdU128(79232123823359799118286999567)
+	11: StLoc[1](loc0: u128)
+	12: Branch(15)
+B2:
+	13: LdU128(79228162514264337593543950336)
+	14: StLoc[1](loc0: u128)
+B3:
+	15: MoveLoc[1](loc0: u128)
+	16: StLoc[3](loc2: u128)
+	17: CopyLoc[2](loc1: u32)
+	18: LdU32(2)
+	19: BitAnd
+	20: LdU32(0)
+	21: Neq
+	22: BrFalse(28)
+B4:
+	23: MoveLoc[3](loc2: u128)
+	24: LdU128(79236085330515764027303304731)
+	25: LdU8(96)
+	26: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	27: StLoc[3](loc2: u128)
+B5:
+	28: CopyLoc[2](loc1: u32)
+	29: LdU32(4)
+	30: BitAnd
+	31: LdU32(0)
+	32: Neq
+	33: BrFalse(39)
+B6:
+	34: MoveLoc[3](loc2: u128)
+	35: LdU128(79244008939048815603706035061)
+	36: LdU8(96)
+	37: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	38: StLoc[3](loc2: u128)
+B7:
+	39: CopyLoc[2](loc1: u32)
+	40: LdU32(8)
+	41: BitAnd
+	42: LdU32(0)
+	43: Neq
+	44: BrFalse(50)
+B8:
+	45: MoveLoc[3](loc2: u128)
+	46: LdU128(79259858533276714757314932305)
+	47: LdU8(96)
+	48: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	49: StLoc[3](loc2: u128)
+B9:
+	50: CopyLoc[2](loc1: u32)
+	51: LdU32(16)
+	52: BitAnd
+	53: LdU32(0)
+	54: Neq
+	55: BrFalse(61)
+B10:
+	56: MoveLoc[3](loc2: u128)
+	57: LdU128(79291567232598584799939703904)
+	58: LdU8(96)
+	59: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	60: StLoc[3](loc2: u128)
+B11:
+	61: CopyLoc[2](loc1: u32)
+	62: LdU32(32)
+	63: BitAnd
+	64: LdU32(0)
+	65: Neq
+	66: BrFalse(72)
+B12:
+	67: MoveLoc[3](loc2: u128)
+	68: LdU128(79355022692464371645785046466)
+	69: LdU8(96)
+	70: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	71: StLoc[3](loc2: u128)
+B13:
+	72: CopyLoc[2](loc1: u32)
+	73: LdU32(64)
+	74: BitAnd
+	75: LdU32(0)
+	76: Neq
+	77: BrFalse(83)
+B14:
+	78: MoveLoc[3](loc2: u128)
+	79: LdU128(79482085999252804386437311141)
+	80: LdU8(96)
+	81: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	82: StLoc[3](loc2: u128)
+B15:
+	83: CopyLoc[2](loc1: u32)
+	84: LdU32(128)
+	85: BitAnd
+	86: LdU32(0)
+	87: Neq
+	88: BrFalse(94)
+B16:
+	89: MoveLoc[3](loc2: u128)
+	90: LdU128(79736823300114093921829183326)
+	91: LdU8(96)
+	92: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	93: StLoc[3](loc2: u128)
+B17:
+	94: CopyLoc[2](loc1: u32)
+	95: LdU32(256)
+	96: BitAnd
+	97: LdU32(0)
+	98: Neq
+	99: BrFalse(105)
+B18:
+	100: MoveLoc[3](loc2: u128)
+	101: LdU128(80248749790819932309965073892)
+	102: LdU8(96)
+	103: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	104: StLoc[3](loc2: u128)
+B19:
+	105: CopyLoc[2](loc1: u32)
+	106: LdU32(512)
+	107: BitAnd
+	108: LdU32(0)
+	109: Neq
+	110: BrFalse(116)
+B20:
+	111: MoveLoc[3](loc2: u128)
+	112: LdU128(81282483887344747381513967011)
+	113: LdU8(96)
+	114: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	115: StLoc[3](loc2: u128)
+B21:
+	116: CopyLoc[2](loc1: u32)
+	117: LdU32(1024)
+	118: BitAnd
+	119: LdU32(0)
+	120: Neq
+	121: BrFalse(127)
+B22:
+	122: MoveLoc[3](loc2: u128)
+	123: LdU128(83390072131320151908154831281)
+	124: LdU8(96)
+	125: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	126: StLoc[3](loc2: u128)
+B23:
+	127: CopyLoc[2](loc1: u32)
+	128: LdU32(2048)
+	129: BitAnd
+	130: LdU32(0)
+	131: Neq
+	132: BrFalse(138)
+B24:
+	133: MoveLoc[3](loc2: u128)
+	134: LdU128(87770609709833776024991924138)
+	135: LdU8(96)
+	136: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	137: StLoc[3](loc2: u128)
+B25:
+	138: CopyLoc[2](loc1: u32)
+	139: LdU32(4096)
+	140: BitAnd
+	141: LdU32(0)
+	142: Neq
+	143: BrFalse(149)
+B26:
+	144: MoveLoc[3](loc2: u128)
+	145: LdU128(97234110755111693312479820773)
+	146: LdU8(96)
+	147: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	148: StLoc[3](loc2: u128)
+B27:
+	149: CopyLoc[2](loc1: u32)
+	150: LdU32(8192)
+	151: BitAnd
+	152: LdU32(0)
+	153: Neq
+	154: BrFalse(160)
+B28:
+	155: MoveLoc[3](loc2: u128)
+	156: LdU128(119332217159966728226237229890)
+	157: LdU8(96)
+	158: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	159: StLoc[3](loc2: u128)
+B29:
+	160: CopyLoc[2](loc1: u32)
+	161: LdU32(16384)
+	162: BitAnd
+	163: LdU32(0)
+	164: Neq
+	165: BrFalse(171)
+B30:
+	166: MoveLoc[3](loc2: u128)
+	167: LdU128(179736315981702064433883588727)
+	168: LdU8(96)
+	169: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	170: StLoc[3](loc2: u128)
+B31:
+	171: CopyLoc[2](loc1: u32)
+	172: LdU32(32768)
+	173: BitAnd
+	174: LdU32(0)
+	175: Neq
+	176: BrFalse(182)
+B32:
+	177: MoveLoc[3](loc2: u128)
+	178: LdU128(407748233172238350107850275304)
+	179: LdU8(96)
+	180: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	181: StLoc[3](loc2: u128)
+B33:
+	182: CopyLoc[2](loc1: u32)
+	183: LdU32(65536)
+	184: BitAnd
+	185: LdU32(0)
+	186: Neq
+	187: BrFalse(193)
+B34:
+	188: MoveLoc[3](loc2: u128)
+	189: LdU128(2098478828474011932436660412517)
+	190: LdU8(96)
+	191: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	192: StLoc[3](loc2: u128)
+B35:
+	193: CopyLoc[2](loc1: u32)
+	194: LdU32(131072)
+	195: BitAnd
+	196: LdU32(0)
+	197: Neq
+	198: BrFalse(204)
+B36:
+	199: MoveLoc[3](loc2: u128)
+	200: LdU128(55581415166113811149459800483533)
+	201: LdU8(96)
+	202: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	203: StLoc[3](loc2: u128)
+B37:
+	204: MoveLoc[2](loc1: u32)
+	205: LdU32(262144)
+	206: BitAnd
+	207: LdU32(0)
+	208: Neq
+	209: BrFalse(215)
+B38:
+	210: MoveLoc[3](loc2: u128)
+	211: LdU128(38992368544603139932233054999993551)
+	212: LdU8(96)
+	213: Call full_math_u128::mul_shr(u128, u128, u8): u128
+	214: StLoc[3](loc2: u128)
+B39:
+	215: MoveLoc[3](loc2: u128)
+	216: LdU8(32)
+	217: Shr
+	218: Ret
+}
+}

@@ -53,38 +53,6 @@ pub struct ComputeSwapState {
     pub fee_amount: u128,
 }
 
-// Checks that ticks are represented in the tick maps
-pub fn check_ticks_corr_tick_map(pool: &mut Pool) {
-    let mut initialized_tick_count = 0;
-    let mut initialized_tick_in_tick_map_count = 0;
-
-    let tick_spacing_i32 = pool.tick_spacing as i32;
-    for (tick_index, tick) in pool.ticks.iter() {
-        // tick_count += 1;
-        // println!("checking tick {}", tick_index);s
-        let compressed = tick_index / tick_spacing_i32;
-        let (word_pos, bit_pos) = position_tick(compressed);
-        let word = pool.tick_map.entry(word_pos).or_insert(U256::from(0_u8));
-
-        let init_in_tick_map = (*word << (255 - bit_pos)) >> 255;
-
-        if tick.initialized && init_in_tick_map != U256::from(1_u8) {
-            println!("tick in ticks (initialized) {} | ({}, {}) is not in tick_map", tick_index, word_pos, bit_pos);
-            initialized_tick_count += 1;
-        } else if tick.initialized && init_in_tick_map == U256::from(1_u8) {
-            println!("tick in ticks (initialized) {} | ({}, {}) is in tick_map", tick_index, word_pos, bit_pos);
-            initialized_tick_count += 1;
-            initialized_tick_in_tick_map_count += 1;
-        } else  {
-            println!("tick in ticks (uninitialized) {} | ({}, {})", tick_index, word_pos, bit_pos);
-        }
-        // assert!(tick.initialized && i != U256::from(1_u8), "tick in ticks {} is not in tick_map", tick_index);
-    } 
-
-    println!("INITIALIZED TICKS IN TICK MAP / INITIALIZED TICKS: {}/{} ", initialized_tick_in_tick_map_count, initialized_tick_count);
-
-}
-
 use std::collections::HashSet;
 pub fn count_init_ticks_in_tick_map(pool: &mut Pool) -> HashSet<i32> {
     let mut tick_count = 0;
@@ -145,12 +113,6 @@ pub fn compute_swap_result(
     simulating: bool
 ) -> ComputeSwapState {
 
-    // TEST 
-    println!("SWAP POOL NUM TICKS: {}", pool.ticks.keys().len());
-    println!("SWAP POOL NUM WORDS: {}", pool.tick_map.keys().len());
-    println!("SWAP POOL NUM WORDS KEYS: {:?}", pool.tick_map.keys());
-    // println!("SWAP POOL TICK SPACING: {}", pool.tick_spacing);
-
     // /// TESTING
     // let tick_map_tick_index_set = count_init_ticks_in_tick_map(pool);
     // let ticks_tick_index_set = count_init_tick_in_ticks(pool);
@@ -199,27 +161,6 @@ pub fn compute_swap_result(
             a_to_b
         );
 
-        // // Check if the BTreeMap contains tha Tick if it says initialized
-        // if initialized && !pool.ticks.get(&tick_next).unwrap().initialized {
-        //     println!("ticks does not contain 'initialized' tick {}", tick_next);
-        // } else if !initialized && pool.ticks.get(&tick_next).unwrap().initialized {
-        //     println!("ticks contains 'uninitialized' tick {}. initialized field: {}", tick_next, pool.ticks.get(&tick_next).unwrap().initialized);
-        // } else if initialized && pool.ticks.get(&tick_next).unwrap().initialized {
-        //     // CONTAINS ISN'T ENOUG
-        //     println!("ticks contains 'initialized' tick {}", tick_next);
-        // }
-
-        println!("tick_next: {}, initialized: {}", tick_next, initialized);
-        if initialized && pool.ticks.contains_key(&tick_next) && pool.ticks.get(&tick_next).unwrap().initialized {
-            println!("ticks contains 'initialized' tick {}", tick_next);
-        } else if initialized && pool.ticks.contains_key(&tick_next) && !pool.ticks.get(&tick_next).unwrap().initialized {
-            println!("ticks contains 'uninitialized' tick {}. initialized field: {}", tick_next, pool.ticks.get(&tick_next).unwrap().initialized);
-        } else if initialized && pool.ticks.contains_key(&tick_next) {
-            println!("ticks does not contain 'initialized' tick {}", tick_next);
-        }
-
-        // println!("  next tick ({}) initialized: {}", tick_next, initialized);
-
         if tick_next < math_tick::MIN_TICK_INDEX {
             tick_next = math_tick::MIN_TICK_INDEX;
         } else if tick_next > math_tick::MAX_TICK_INDEX {
@@ -254,7 +195,6 @@ pub fn compute_swap_result(
         
         if amount_specified_is_input {
             // println!("amount_specified_is_input == true: amount calc = {}, amount_in = {}, amount_out = {}", compute_swap_state.amount_calculated, amount_in, amount_out);
-
             compute_swap_state.amount_specified_remaining -= amount_in + fee_amount;
             compute_swap_state.amount_calculated += amount_out;
         } else {
@@ -394,9 +334,6 @@ pub fn next_initialized_tick_within_one_word(
             (compressed - bit_pos as i32) * tick_spacing_i32
         };
 
-        // println!("  branch 1");
-        println!("  next_initialized_tick() branch 1:\n    tick (word_pos, bit_pos): ({}, {})", word_pos, bit_pos);
-
         (next, initialized)
     } else {
         let (word_pos, bit_pos) = position_tick(compressed + 1);
@@ -413,9 +350,6 @@ pub fn next_initialized_tick_within_one_word(
         } else {
             (compressed + 1 + (u8::MAX - bit_pos) as i32) * tick_spacing_i32
         };
-
-        // println!("  branch 2");
-        println!("  next_initialized_tick() branch 2:\n    next_tick (word_pos, bit_pos): ({}, {})", word_pos, bit_pos);
 
         (next, initialized)
     }
@@ -450,12 +384,6 @@ pub fn cross_tick(
     simulating: bool,  // determines whether we 
 ) -> i128 {
 
-    // Debugging
-    let tick_spacing_i32 = pool.tick_spacing as i32;
-    let mut compressed: i32 = tick_next_index / tick_spacing_i32;
-    // let (word_pos, bit_pos) = position_tick(compressed);
-    // println!("    cross_tick() tick_next_index ({}) (word_pos, bit_pos): ({}, {}). spacing: {})", tick_next_index, word_pos, bit_pos, tick_spacing_i32);
-
     let tick_next = pool
         .ticks
         .entry(tick_next_index)
@@ -480,12 +408,8 @@ pub fn cross_tick(
         // }
     }
 
-    // // Testing
-    if !tick_next.initialized {
-        println!("    crossing uninitialized tick ({}): {:#?}", tick_next_index, tick_next);
-    } else {
-        println!("    crossing initialized tick ({}): {:#?}", tick_next_index, tick_next);
-    }
+    // We should generally never cross into an uninitialized tick
+    assert!(tick_next.initialized, "crossing uninitialized tick ({}): {:#?}", tick_next_index, tick_next);
 
     tick_next.liquidity_net
 }
