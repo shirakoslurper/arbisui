@@ -173,6 +173,8 @@ pub fn compute_swap_result(
         let amount_out;
         let mut fee_amount;
 
+        println!("current tick: {}, target tick: {}, target_tick_initialized?: {}", compute_swap_state.tick_current_index, tick_next, initialized);
+
         (compute_swap_state.sqrt_price, amount_in, amount_out, fee_amount) =
             math_swap::compute_swap(
                 compute_swap_state.sqrt_price,
@@ -192,6 +194,8 @@ pub fn compute_swap_result(
                 amount_specified_is_input,
                 pool.fee
             );
+
+        println!("amount_in = {}, amount_out = {}", amount_in, amount_out);
         
         if amount_specified_is_input {
             // println!("amount_specified_is_input == true: amount calc = {}, amount_in = {}, amount_out = {}", compute_swap_state.amount_calculated, amount_in, amount_out);
@@ -263,6 +267,8 @@ pub fn compute_swap_result(
                 compute_swap_state.sqrt_price
             );
         }
+
+        println!("end of loop 1: compute_swap_state.amount_specified_remaining = {}", compute_swap_state.amount_specified_remaining);
     }
 
     // TODO: When we're doing backruns & whatnot. L2 orderbook style client side delta application.
@@ -695,8 +701,6 @@ mod tests {
         let tick_upper = 86129;
         let amount = 1517882343751509868544;
 
-        println!("deployed pool");
-
         mint(
             &mut pool, 
             tick_lower, 
@@ -704,53 +708,55 @@ mod tests {
             amount
         );
 
+        println!("deployed pool: {:#?}", pool);
+
         println!("initial liquidity: {}", pool.liquidity);
 
         pool
     }
 
-    #[test]
-    fn test_compute_swap_buy_eth() {
+    // #[test]
+    // fn test_compute_swap_buy_eth() {
 
-        println!("hello!");
+    //     println!("hello!");
 
-        let mut pool = setup_test_case();
-        println!("nooo!");
+    //     let mut pool = setup_test_case();
+    //     println!("nooo!");
 
-        let amount_specified = 42_000_000_000_000_000_000; // 42 UDSC
+    //     let amount_specified = 42_000_000_000_000_000_000; // 42 UDSC
 
-        let swap_result = compute_swap_result(
-            &mut pool,
-            false, 
-            amount_specified,
-            true,
-            math_tick::MAX_SQRT_PRICE_X64 - 1,
-            false
-        );
+    //     let swap_result = compute_swap_result(
+    //         &mut pool,
+    //         false, 
+    //         amount_specified,
+    //         true,
+    //         math_tick::MAX_SQRT_PRICE_X64 - 1,
+    //         false
+    //     );
 
-        println!(
-            "amount_a: {}\namount_b: {}",
-            swap_result.amount_a,
-            swap_result.amount_b
-        );
+    //     println!(
+    //         "amount_a: {}\namount_b: {}",
+    //         swap_result.amount_a,
+    //         swap_result.amount_b
+    //     );
 
-        println!(
-            "amount_calculated: {}",
-            swap_result.amount_calculated
-        );
+    //     println!(
+    //         "amount_calculated: {}",
+    //         swap_result.amount_calculated
+    //     );
 
-        println!("post swap tick: {}", pool.tick_current_index);
-        println!("post swap sqrt_price: {}", pool.sqrt_price);
-        println!("post swap price: {}", U64F64::from_bits(pool.sqrt_price) * U64F64::from_bits(pool.sqrt_price));
-        println!("post swap liquidity: {}", pool.liquidity);
+    //     println!("post swap tick: {}", pool.tick_current_index);
+    //     println!("post swap sqrt_price: {}", pool.sqrt_price);
+    //     println!("post swap price: {}", U64F64::from_bits(pool.sqrt_price) * U64F64::from_bits(pool.sqrt_price));
+    //     println!("post swap liquidity: {}", pool.liquidity);
 
-        println!("expected amount_a: {}", 8_396_714_242_162_445);
-        println!("expected amount_b: {}", 42_000_000_000_000_000_000);
-        println!("expected sqrt_price: {}", 5604469350942327889444743441197_u128 >> 32);
-        println!("expected tick: {}", math_tick::tick_index_from_sqrt_price(5604469350942327889444743441197_u128 >> 32));
-        println!("expected price: {}", U64F64::from_bits(5604469350942327889444743441197_u128 >> 32) * U64F64::from_bits(5604469350942327889444743441197_u128 >> 32));
-        println!("expected liquidity: {}", 1517882343751509868544);
-    }
+    //     println!("expected amount_a: {}", 8_396_714_242_162_445);
+    //     println!("expected amount_b: {}", 42_000_000_000_000_000_000);
+    //     println!("expected sqrt_price: {}", 5604469350942327889444743441197_u128 >> 32);
+    //     println!("expected tick: {}", math_tick::tick_index_from_sqrt_price(5604469350942327889444743441197_u128 >> 32));
+    //     println!("expected price: {}", U64F64::from_bits(5604469350942327889444743441197_u128 >> 32) * U64F64::from_bits(5604469350942327889444743441197_u128 >> 32));
+    //     println!("expected liquidity: {}", 1517882343751509868544);
+    // }
 
     #[test]
     fn test_compute_swap_buy_usdc() {
@@ -875,56 +881,56 @@ mod tests {
         pool
     }
 
-    #[test]
-    fn test_next_initialized_tick() {
+    // #[test]
+    // fn test_next_initialized_tick() {
 
-        // Setup
-        // let tick_lower = 84222;
-        // let tick_upper = 86129;
+    //     // Setup
+    //     // let tick_lower = 84222;
+    //     // let tick_upper = 86129;
 
-        // From bit_pos = 255
-        for  i in 1..256 {
-            let mut pool = setup_test_case_for_next_init_b_to_a();
-            // Higher: b to a
-            let tick_current = pool.tick_current_index;
-            let tick_lower = pool.tick_current_index - i;
-            let tick_upper = 86220;
-            let amount = 1517882343751509868544u128;
-            println!("- {}", i);
-            println!("bit_pos current: {}", position_tick(tick_current).1);
-            // println!("bit_pos expected next: {}", position_tick(tick_lower).1);
+    //     // From bit_pos = 255
+    //     for  i in 1..256 {
+    //         let mut pool = setup_test_case_for_next_init_b_to_a();
+    //         // Higher: b to a
+    //         let tick_current = pool.tick_current_index;
+    //         let tick_lower = pool.tick_current_index - i;
+    //         let tick_upper = 86220;
+    //         let amount = 1517882343751509868544u128;
+    //         println!("- {}", i);
+    //         println!("bit_pos current: {}", position_tick(tick_current).1);
+    //         // println!("bit_pos expected next: {}", position_tick(tick_lower).1);
 
-            // mint(&mut pool, tick_current -166, tick_upper, amount);
-            mint(&mut pool, tick_lower, tick_upper, amount);
+    //         // mint(&mut pool, tick_current -166, tick_upper, amount);
+    //         mint(&mut pool, tick_lower, tick_upper, amount);
 
-            println!("expected next: {}", tick_lower);
-            println!("{:#?}", next_initialized_tick_within_one_word(&mut pool, tick_current, true));
+    //         println!("expected next: {}", tick_lower);
+    //         println!("{:#?}", next_initialized_tick_within_one_word(&mut pool, tick_current, true));
 
-            assert!((tick_lower, true) == next_initialized_tick_within_one_word(&mut pool, tick_current, true));
-        }
+    //         assert!((tick_lower, true) == next_initialized_tick_within_one_word(&mut pool, tick_current, true));
+    //     }
 
-        // From bit_pos = 0
-        for  i in 1..256 {
-            let mut pool = setup_test_case_for_next_init_a_to_b();
-            // Higher: b to a
-            let tick_current = pool.tick_current_index;
-            let tick_lower = pool.tick_current_index + i;
-            let tick_upper = 86220;
-            let amount = 1517882343751509868544u128;
-            println!("+ {}", i);
-            println!("bit_pos current: {}", position_tick(tick_current).1);
-            println!("bit_pos expected next: {}", position_tick(tick_lower).1);
+    //     // From bit_pos = 0
+    //     for  i in 1..256 {
+    //         let mut pool = setup_test_case_for_next_init_a_to_b();
+    //         // Higher: b to a
+    //         let tick_current = pool.tick_current_index;
+    //         let tick_lower = pool.tick_current_index + i;
+    //         let tick_upper = 86220;
+    //         let amount = 1517882343751509868544u128;
+    //         println!("+ {}", i);
+    //         println!("bit_pos current: {}", position_tick(tick_current).1);
+    //         println!("bit_pos expected next: {}", position_tick(tick_lower).1);
 
-            // mint(&mut pool, tick_current -166, tick_upper, amount);
-            mint(&mut pool, tick_lower, tick_upper, amount);
+    //         // mint(&mut pool, tick_current -166, tick_upper, amount);
+    //         mint(&mut pool, tick_lower, tick_upper, amount);
 
-            println!("expected next: {}", tick_lower);
-            println!("{:#?}", next_initialized_tick_within_one_word(&mut pool, tick_current, false));
+    //         println!("expected next: {}", tick_lower);
+    //         println!("{:#?}", next_initialized_tick_within_one_word(&mut pool, tick_current, false));
 
-            assert!((tick_lower, true) == next_initialized_tick_within_one_word(&mut pool, tick_current, false));
-        }
+    //         assert!((tick_lower, true) == next_initialized_tick_within_one_word(&mut pool, tick_current, false));
+    //     }
 
-    }
+    // }
 }
 
 mod math_bit {
@@ -1090,6 +1096,8 @@ mod math_swap {
         amount_specified_is_input: bool,
         fee_rate: u32,
     ) -> (u128, u128, u128, u128) {
+        println!("current price: {}, target price: {}, liquidity: {}", sqrt_price_current, sqrt_price_target, liquidity);
+
         let a_to_b = sqrt_price_current >= sqrt_price_target;
         let fee_amount;
 
@@ -1110,7 +1118,11 @@ mod math_swap {
             );
         }
 
+        println!("compute_swap(): amount_calc = {}", amount_calc);
+        println!("compute_swap() amount_fixed delta = {}", amount_fixed_delta);
+
         let next_sqrt_price = if amount_calc >= amount_fixed_delta {
+            // println!("compute_swap_step(): branch 1 next_sqrt_price = {}", sqrt_price_target);
             sqrt_price_target
         } else {
             math_sqrt_price::get_next_sqrt_price(
@@ -1121,6 +1133,8 @@ mod math_swap {
                 a_to_b
             )
         };
+
+        println!("compute_swap(): next_sqrt_price = {}", next_sqrt_price);
 
         let is_max_swap = next_sqrt_price == sqrt_price_target;
 

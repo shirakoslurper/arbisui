@@ -221,10 +221,10 @@ async fn main() -> Result<(), anyhow::Error> {
                         cmp::max(max, current)
                     });
 
-                // println!("    {}: {} decimals", orig, orig_decimals);
-                // println!("    -> {}: {} decimals", dest, dest_decimals);
-                // // Using decimals for human readability
-                // println!("        leg rate: {}", best_leg_rate / adj);
+                println!("    {}: {} decimals", orig, orig_decimals);
+                println!("    -> {}: {} decimals", dest, dest_decimals);
+                // Using decimals for human readability
+                println!("        leg rate: {}", best_leg_rate / adj);
 
                 best_path_rate = best_path_rate * best_leg_rate;
             }
@@ -240,6 +240,9 @@ async fn main() -> Result<(), anyhow::Error> {
         println!("Elasped: {:.2?}", elapsed);
     
     // loop_blocks(run_data, vec![&flameswap]).await?;
+
+    let bytes = [16, 39, 0, 0, 0, 0, 0, 0];
+    println!("NUMBER: {}", u64::from_le_bytes(bytes));
 
     Ok(())
 }
