@@ -221,6 +221,69 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_compute_swap_buy_eth() {
+        let mut ticks = BTreeMap::new();
+        ticks.insert(
+            84222,
+            tick::Tick {
+                index: 84222,
+                sqrt_price: tick_math::sqrt_price_from_tick_index(84222),
+                liquidity_net: 1517882343751509868544,
+                liquidity_gross: 1517882343751509868544,
+                fee_growth_outside_a: 0,
+                fee_growth_outside_b: 0
+            }
+        );
+        ticks.insert(
+            86129,
+            tick::Tick {
+                index: 86129,
+                sqrt_price: tick_math::sqrt_price_from_tick_index(86129),
+                liquidity_net: -1517882343751509868544,
+                liquidity_gross: 1517882343751509868544,
+                fee_growth_outside_a: 0,
+                fee_growth_outside_b: 0
+            }
+        );
+
+        println!("ticks: {:#?}", ticks);
+
+        let tick_manager = tick::TickManager {
+            tick_spacing: 1,
+            ticks
+        };
+
+        let mut pool = Pool {
+            tick_spacing: 1,
+            fee_rate: 0,
+            liquidity: 1517882343751509868544,
+            current_sqrt_price: 1304381782533278269440,
+            current_tick_index: 85176,
+            fee_growth_global_a: 0,
+            fee_growth_global_b: 0,
+            fee_protocol_coin_a: 0,
+            fee_protocol_coin_b: 0,
+            tick_manager,
+            is_pause: false
+        };
+
+        let swap_result = swap_in_pool(
+            &mut pool,
+            false,
+            true,
+            tick_math::MAX_SQRT_PRICE_X64 + 1,
+            42_000_000_000_000_000,
+            0,
+            0,
+            false
+        );
+
+        println!("swap result: {:#?}", swap_result);
+        println!("expected amt out: 8399996712957");
+
+    }
+
+    #[test]
     fn test_compute_swap_buy_usdc() {
         let mut ticks = BTreeMap::new();
         ticks.insert(
@@ -272,15 +335,17 @@ mod tests {
             true,
             true,
             tick_math::MIN_SQRT_PRICE_X64 + 1,
-            13_370_000_000_000_000, // 42 USDC
+            13_370_000_000_000,
             0,
             0,
             false
         );
 
         println!("swap result: {:#?}", swap_result);
+        println!("expected amt out: 66849958362998925");
 
     }
+
 }
 
 mod tick {
@@ -479,9 +544,9 @@ mod clmm_math {
             );
 
             println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U256) = {}", amount_out);
-            println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U128) = {}", amount_out.as_u128());
-            println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U256) <= u64::MAX = {}", amount_out <= U256::from(u64::MAX));
-            println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U64) = {}", amount_out.as_u64());
+            // println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U128) = {}", amount_out.as_u128());
+            // println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U256) <= u64::MAX = {}", amount_out <= U256::from(u64::MAX));
+            // println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U64) = {}", amount_out.as_u64());
 
             (amount_in, amount_out.as_u64(), next_sqrt_price, fee_amount)
         } else {
@@ -514,15 +579,17 @@ mod clmm_math {
             next_sqrt_price,
                 liquidity,
                 a_to_b
-            ).as_u64();
+            );
+
+            println!("compute_swap_step() amount_specified_is_input == true .. amount_in (U256) = {}", amount_in);
 
             let fee_amount = full_math_u64::mul_div_ceil(
-                amount_in,
+                amount_in.as_u64(),
                 fee_rate,
                 1000000 - fee_rate
             );
 
-            (amount_in, amount_out, next_sqrt_price, fee_amount)
+            (amount_in.as_u64(), amount_out, next_sqrt_price, fee_amount)
         }
     }
 

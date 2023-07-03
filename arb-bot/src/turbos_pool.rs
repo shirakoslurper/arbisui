@@ -715,48 +715,48 @@ mod tests {
         pool
     }
 
-    // #[test]
-    // fn test_compute_swap_buy_eth() {
+    #[test]
+    fn test_compute_swap_buy_eth() {
 
-    //     println!("hello!");
+        println!("hello!");
 
-    //     let mut pool = setup_test_case();
-    //     println!("nooo!");
+        let mut pool = setup_test_case();
+        println!("nooo!");
 
-    //     let amount_specified = 42_000_000_000_000_000_000; // 42 UDSC
+        let amount_specified = 42_000_000_000_000_000_000; // 42 UDSC
 
-    //     let swap_result = compute_swap_result(
-    //         &mut pool,
-    //         false, 
-    //         amount_specified,
-    //         true,
-    //         math_tick::MAX_SQRT_PRICE_X64 - 1,
-    //         false
-    //     );
+        let swap_result = compute_swap_result(
+            &mut pool,
+            false, 
+            amount_specified,
+            true,
+            math_tick::MAX_SQRT_PRICE_X64 - 1,
+            false
+        );
 
-    //     println!(
-    //         "amount_a: {}\namount_b: {}",
-    //         swap_result.amount_a,
-    //         swap_result.amount_b
-    //     );
+        println!(
+            "amount_a: {}\namount_b: {}",
+            swap_result.amount_a,
+            swap_result.amount_b
+        );
 
-    //     println!(
-    //         "amount_calculated: {}",
-    //         swap_result.amount_calculated
-    //     );
+        println!(
+            "amount_calculated: {}",
+            swap_result.amount_calculated
+        );
 
-    //     println!("post swap tick: {}", pool.tick_current_index);
-    //     println!("post swap sqrt_price: {}", pool.sqrt_price);
-    //     println!("post swap price: {}", U64F64::from_bits(pool.sqrt_price) * U64F64::from_bits(pool.sqrt_price));
-    //     println!("post swap liquidity: {}", pool.liquidity);
+        println!("post swap tick: {}", pool.tick_current_index);
+        println!("post swap sqrt_price: {}", pool.sqrt_price);
+        println!("post swap price: {}", U64F64::from_bits(pool.sqrt_price) * U64F64::from_bits(pool.sqrt_price));
+        println!("post swap liquidity: {}", pool.liquidity);
 
-    //     println!("expected amount_a: {}", 8_396_714_242_162_445);
-    //     println!("expected amount_b: {}", 42_000_000_000_000_000_000);
-    //     println!("expected sqrt_price: {}", 5604469350942327889444743441197_u128 >> 32);
-    //     println!("expected tick: {}", math_tick::tick_index_from_sqrt_price(5604469350942327889444743441197_u128 >> 32));
-    //     println!("expected price: {}", U64F64::from_bits(5604469350942327889444743441197_u128 >> 32) * U64F64::from_bits(5604469350942327889444743441197_u128 >> 32));
-    //     println!("expected liquidity: {}", 1517882343751509868544);
-    // }
+        println!("expected amount_a: {}", 8_396_714_242_162_445);
+        println!("expected amount_b: {}", 42_000_000_000_000_000_000);
+        println!("expected sqrt_price: {}", 5604469350942327889444743441197_u128 >> 32);
+        println!("expected tick: {}", math_tick::tick_index_from_sqrt_price(5604469350942327889444743441197_u128 >> 32));
+        println!("expected price: {}", U64F64::from_bits(5604469350942327889444743441197_u128 >> 32) * U64F64::from_bits(5604469350942327889444743441197_u128 >> 32));
+        println!("expected liquidity: {}", 1517882343751509868544);
+    }
 
     #[test]
     fn test_compute_swap_buy_usdc() {
@@ -766,7 +766,7 @@ mod tests {
         let mut pool = setup_test_case();
         println!("nooo!");
 
-        let amount_specified = 13_370_000_000_000_000; // 42 UDSC
+        let amount_specified = 13_370_000_000_000; // 42 UDSC
 
         let swap_result = compute_swap_result(
             &mut pool,
