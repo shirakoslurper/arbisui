@@ -173,7 +173,7 @@ pub mod sui_move_value {
             .context(format!("Missing field '{}'.", field))? {
                 Ok(id)
             } else {
-                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::Bool variant.", field)))
+                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::ObjectID variant.", field)))
             }
     }
 

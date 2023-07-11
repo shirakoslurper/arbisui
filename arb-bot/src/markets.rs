@@ -28,6 +28,7 @@ pub trait Market: Send + Sync + DynClone {
     fn pool_id(&self) -> &ObjectID;
     fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128);
     fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128);
+    fn viable(&self) -> bool;
 }
 
 dyn_clone::clone_trait_object!(Market);

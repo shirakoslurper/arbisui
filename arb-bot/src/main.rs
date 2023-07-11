@@ -96,8 +96,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let turbos_markets = turbos.get_all_markets(&run_data.sui_client).await?;
 
     let mut markets = vec![];
-    // markets.extend(cetus_markets.clone());
-    markets.extend(turbos_markets.clone());
+    markets.extend(cetus_markets.clone());
+    // markets.extend(turbos_markets.clone());
 
     println!("markets.len(): {}", markets.len());
 
@@ -114,7 +114,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // OR storing coin data in nodes
     // But its for human reading only rly
     let coin_to_metadata = future::try_join_all(
-        markets
+        markets[..20]
             .iter()
             .map(|market| {
                 async {
@@ -143,7 +143,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .flatten()
         .collect::<HashMap<TypeTag, SuiCoinMetadata>>();
 
-    let mut market_graph = MarketGraph::new(&markets)?;
+    let mut market_graph = MarketGraph::new(&markets[..20])?;
 
     let cetus_pool_id_to_object_response = cetus
         .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
@@ -154,10 +154,17 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?;
 
     let mut pool_id_to_object_response = HashMap::new();
-    // pool_id_to_fields.extend(cetus_pool_id_to_fields);
-    pool_id_to_object_response.extend(turbos_pool_id_to_object_response);
+    pool_id_to_object_response.extend(cetus_pool_id_to_object_response);
+    // pool_id_to_object_response.extend(turbos_pool_id_to_object_response);
 
     println!("pool_id_to_fields.keys().len(): {}", pool_id_to_object_response.keys().len());
+
+    // let liquidity_filtered = petgraph::visit::EdgeFiltered::from_fn(
+    //     &market_graph.graph,
+    //     |(_, _, market)| {
+    //         market.viable()
+    //     }
+    // );
 
     let paths = all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7)).collect::<Vec<Vec<&TypeTag>>>().clone();
 
@@ -165,10 +172,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
 
+    let elapsed = now.elapsed();
+    println!("Elasped: {:.2?}", elapsed);
+
     paths
         .iter()
         .for_each(|path| {
-            // println!("SIMPLE CYCLE ({} HOP) ", path.len() - 1);
+            println!("SIMPLE CYCLE ({} HOP) ", path.len() - 1);
             // path
             //     .iter()
             //     .for_each(|coin| {
@@ -178,7 +188,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let mut best_path_rate = U64F64::from_num(1);
 
             let orig_decimals = coin_to_metadata.get(path[0]).unwrap().decimals as u32;
-            let orig_amount = 5 * 10_u128.pow(orig_decimals);
+            let orig_amount = 1 * 10_u128.pow(orig_decimals);
             let mut amount_in = orig_amount;
 
             for pair in path[..].windows(2) {
@@ -198,23 +208,40 @@ async fn main() -> Result<(), anyhow::Error> {
                     .context("Missing edge weight")
                     .unwrap();
 
+                // println!("AAAAA markets.len() = {}", markets.);
+
                 let directional_rates = markets
                     .iter_mut()
+                    .filter(|market_info| { // filter for viable markets only
+                        market_info.market.viable()
+                    })
                     .map(|market_info| {
                         let coin_x = market_info.market.coin_x();
                         let coin_y = market_info.market.coin_y();
+
+                        println!("coin_x: {:#?}\n coin_y: {:#?}", coin_x, coin_y);
+                        println!("orig: {:#?}\n dest: {:#?}", orig, dest);
+
+
                         if (coin_x, coin_y) == (orig, dest) {
+                            println!("AASS {}", market_info.market.coin_x_price().unwrap());
                             let (_, amount_y) = market_info.market.compute_swap_x_to_y(amount_in);
                             amount_in = amount_y;
                             market_info.market.coin_x_price().unwrap()
                         } else if (coin_y, coin_x) == (orig, dest){
+                            println!("AERE {}", market_info.market.coin_y_price().unwrap());
                             let (amount_x, _) = market_info.market.compute_swap_y_to_x(amount_in);
                             amount_in = amount_x;
                             market_info.market.coin_y_price().unwrap()
                         } else {
+                            println!("AADFFS");
                             panic!("coin pair does not match");
                         }
                     });
+
+                println!("BBBBB");
+
+                // println!("directional_rates: {:#?}", directional_rates);
 
                 let best_leg_rate = directional_rates
                     .fold(U64F64::from_num(0), |max, current| {
@@ -236,13 +263,10 @@ async fn main() -> Result<(), anyhow::Error> {
             println!("\n");
         });
 
-        let elapsed = now.elapsed();
-        println!("Elasped: {:.2?}", elapsed);
+        // let elapsed = now.elapsed();
+        // println!("Elasped: {:.2?}", elapsed);
     
     // loop_blocks(run_data, vec![&flameswap]).await?;
-
-    let bytes = [16, 39, 0, 0, 0, 0, 0, 0];
-    println!("NUMBER: {}", u64::from_le_bytes(bytes));
 
     Ok(())
 }

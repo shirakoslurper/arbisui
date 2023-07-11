@@ -4,26 +4,26 @@ use std::num::Wrapping;
 
 #[derive(Clone, Debug)]
 pub struct Pool {
-    tick_spacing: u32,
-    fee_rate: u64,
-    liquidity: u128,
-    current_sqrt_price: u128,
-    current_tick_index: i32,
-    fee_growth_global_a: u128,
-    fee_growth_global_b: u128,
-    fee_protocol_coin_a: u64,
-    fee_protocol_coin_b: u64,
-    tick_manager: tick::TickManager,
-    is_pause: bool
+    pub tick_spacing: u32,
+    pub fee_rate: u64,
+    pub liquidity: u128,
+    pub current_sqrt_price: u128,
+    pub current_tick_index: i32,
+    pub fee_growth_global_a: u128,
+    pub fee_growth_global_b: u128,
+    pub fee_protocol_coin_a: u64,
+    pub fee_protocol_coin_b: u64,
+    pub tick_manager: tick::TickManager,
+    pub is_pause: bool
 }
 
 #[derive(Clone, Debug)]
 pub struct SwapResult {
-    amount_in: u64,
-    amount_out: u64,
-    fee_amount: u64,
-    ref_fee_amount: u64,
-    steps: u64
+    pub amount_in: u64,
+    pub amount_out: u64,
+    pub fee_amount: u64,
+    pub ref_fee_amount: u64,
+    pub steps: u64
 }
 
 // First test then modify this function so it does NOT mutate the pool
@@ -81,46 +81,85 @@ pub fn swap_in_pool(
     );
 
     let mut amount_calculated = 0;
+    let mut loop_count = 0;
 
     while amount_remaining > 0 && compute_swap_state.current_sqrt_price != sqrt_price_limit {
+        println!("loop # {}:", loop_count);
+        loop_count += 1;
+
         // assert!(!current_score_and_tick.is_none());
-        
+        println!("amount_remaining = {}", amount_remaining);
+        println!("compute_swap_state.current_sqrt_price = {}\nsqrt_price_limit = {}", compute_swap_state.current_sqrt_price, sqrt_price_limit);
+
+        // println!("next_index_and_tick pre advance: {:#?}", next_index_and_tick);
+
         let (next_index, next_tick) = if let Some((index, tick)) = next_index_and_tick {
             (index.clone(), tick.clone())
         } else {
             panic!("current_score_and_tick is none")
         };
 
+        println!("next_index = {}, next_tick = {:#?}", next_index, next_tick);
+
         // In place of borrow tick for swap
         // We've already gotten the tick, we just need the score of the next tick
+        // Advance for next iteration
         next_index_and_tick = if a_to_b {
+            println!("a_to_b: true");
             pool.tick_manager.ticks.range(..next_index).map(|(score, tick)| (score.clone(), tick.clone())).next_back()
         } else {
-            pool.tick_manager.ticks.range(next_index..).map(|(score, tick)| (score.clone(), tick.clone())).next()
+            println!("a_to_b: false");
+            println!("{:#?}", pool.tick_manager.ticks.range(next_index+1..));
+            pool.tick_manager.ticks.range(next_index+1..).map(|(score, tick)| (score.clone(), tick.clone())).next()
         };
 
+        // println!("next_index_and_tick post advance: {:#?}", next_index_and_tick);
+        // panic!("HALT");
+
         let next_tick_index = next_tick.index;
+        // loc10
         let next_tick_sqrt_price = next_tick.sqrt_price;
 
-        let sqrt_price_next = if a_to_b {
+        // println!("next_index_and_tick post advance: {:#?}", next_index_and_tick);
+        // panic!("HALT");
+
+
+        // //// TESTING WITH ADVANCED TICK
+        // if let Some((index, tick)) = next_index_and_tick.clone() {
+        //     if next_index != next_tick_index {
+        //         println!("{} != {}", next_index, next_tick_index);
+        //     }
+        // } else {
+        //     panic!("current_score_and_tick is none");
+        // };
+
+        // loc7
+        let sqrt_price_next_tick_w_limit = if a_to_b {
+            // println!("a_to_b");
+            println!("a_to_b: {}, current sqrt_price: {}, sqrt_price_limit: {}, next_tick_sqrt_price: {}", a_to_b, compute_swap_state.current_sqrt_price, sqrt_price_limit, next_tick_sqrt_price);
             cmp::max(sqrt_price_limit, next_tick_sqrt_price)
         } else {
+            println!("a_to_b: {}, current sqrt_price: {}, sqrt_price_limit: {}, next_tick_sqrt_price: {}", a_to_b, compute_swap_state.current_sqrt_price, sqrt_price_limit, next_tick_sqrt_price);
+            // panic!("ASSAS");
             cmp::min(sqrt_price_limit, next_tick_sqrt_price)
         };
 
-        println!("current tick: {}, target tick: {}", compute_swap_state.current_tick_index, next_tick_index);
+        // println!("current tick: {}, target tick: {}", compute_swap_state.current_tick_index, next_tick_index);
 
-        let (amount_in, amount_out, sqrt_price, fee_amount) = clmm_math::compute_swap_step(
+        // println!("next_tick_sqrt_price: {}", next_tick_sqrt_price);
+
+        println!("sqrt_price_next_tick_w_limit: {}", sqrt_price_next_tick_w_limit);
+
+        // loc18 (sqrt_price_next_computed)
+        let (amount_in, amount_out, sqrt_price_next_computed, fee_amount) = clmm_math::compute_swap_step(
             compute_swap_state.current_sqrt_price,
-            sqrt_price_next,
+            sqrt_price_next_tick_w_limit,
             compute_swap_state.liquidity,
             amount_remaining,
             pool.fee_rate,
             a_to_b,
             amount_specified_is_input
         );
-
-        println!("amount_in = {}, amount_out = {}", amount_in, amount_out);
 
         if amount_in != 0 || fee_amount != 0 {
             if amount_specified_is_input {
@@ -135,6 +174,8 @@ pub fn swap_in_pool(
         swap_result.fee_amount += fee_amount;
         swap_result.steps += 1;
 
+        println!("amount_in = {}, amount_out = {}", swap_result.amount_in, swap_result.amount_out);
+
         amount_calculated += update_pool_fee(
             pool,
             fee_amount,
@@ -142,8 +183,13 @@ pub fn swap_in_pool(
             a_to_b
         );
 
-        if sqrt_price_next == sqrt_price {
-            compute_swap_state.current_sqrt_price = next_tick_sqrt_price;
+        // if sqrt_price_next_computed < sqrt_price_next_computed {
+        //     println!("{} < {}", sqrt_price_next, sqrt_price);
+        // }
+
+        if sqrt_price_next_tick_w_limit == next_tick_sqrt_price {
+            // println!("YES");
+            compute_swap_state.current_sqrt_price = sqrt_price_next_computed;
             
             compute_swap_state.current_tick_index = if a_to_b {
                 next_tick_index - 1
@@ -160,18 +206,20 @@ pub fn swap_in_pool(
                 compute_swap_state.fee_growth_global_b,
                 simulating
             );
-        } else if compute_swap_state.current_sqrt_price != sqrt_price {
-            compute_swap_state.current_sqrt_price = sqrt_price_next;
+        } else if compute_swap_state.current_sqrt_price != next_tick_sqrt_price {
+            compute_swap_state.current_sqrt_price = sqrt_price_next_tick_w_limit;
             compute_swap_state.current_tick_index = tick_math::tick_index_from_sqrt_price(compute_swap_state.current_sqrt_price);
         }
 
-        println!("end of loop 1: amount_remaining = {}", amount_remaining);
+        // println!("amount_remaining: {}", amount_remaining);        
+        // println!("sqrt_price post loop: {}", compute_swap_state.current_sqrt_price);
+        // println!("end of loop 1: amount_remaining = {}", amount_remaining);
     }
 
     swap_result.ref_fee_amount = full_math_u64::mul_div_floor(amount_calculated, fee_protocol, 10000);
 
-    println!("post swap sqrt_price: {}", compute_swap_state.current_sqrt_price);
-    println!("post swap tick: {}", compute_swap_state.current_tick_index);
+    // println!("post swap sqrt_price: {}", compute_swap_state.current_sqrt_price);
+    // println!("post swap tick: {}", compute_swap_state.current_tick_index);
 
     if !simulating {
         pool.current_sqrt_price = compute_swap_state.current_sqrt_price;
@@ -348,7 +396,7 @@ mod tests {
 
 }
 
-mod tick {
+pub mod tick {
     use super::tick_math;
     use std::collections::BTreeMap;
     use std::num::Wrapping;
@@ -381,7 +429,7 @@ mod tick {
         if a_to_b {
             tick_manager.ticks.range(..tick_index).map(|(index, tick)| (index.clone(), tick.clone())).next_back()
         } else {
-            tick_manager.ticks.range(tick_index..).map(|(index, tick)| (index.clone(), tick.clone())).next()
+            tick_manager.ticks.range(tick_index+1..).map(|(index, tick)| (index.clone(), tick.clone())).next()
         }
     }
 
@@ -466,11 +514,13 @@ mod clmm_math {
         let amount_out = 0;
         let fee_amount = 0;
 
+        println!("liquidity: {}", liquidity);
+
         if liquidity == 0 {
             return (amount_in, amount_out, sqrt_price_target, fee_amount);
         }
 
-        println!("current price: {}, target price: {}, liquidity: {}", sqrt_price_current, sqrt_price_target, liquidity);
+        // println!("current price: {}, target price: {}, liquidity: {}", sqrt_price_current, sqrt_price_target, liquidity);
 
         if a_to_b {
             assert!(sqrt_price_current >= sqrt_price_target);
@@ -485,7 +535,7 @@ mod clmm_math {
                 1000000
             );
 
-            println!("compute_swap_step(): amount_calc = {}", amount_calc);
+            // println!("compute_swap_step(): amount_calc = {}", amount_calc);
 
             let delta_up_from_input = get_delta_up_from_input(
                 sqrt_price_current,
@@ -494,7 +544,7 @@ mod clmm_math {
                 a_to_b
             );
 
-            println!("compute_swap_step(): delta_up_from_input = {}", delta_up_from_input);
+            // println!("compute_swap_step(): delta_up_from_input = {}", delta_up_from_input);
 
             let (amount_in, fee_amount, next_sqrt_price) = if delta_up_from_input > U256::from(amount_calc) {
                 // Case: The amount of the "in" token required to move the
@@ -512,7 +562,7 @@ mod clmm_math {
                     a_to_b
                 );
 
-                println!("compute_swap_step(): branch 1 next_sqrt_price = {}", next_sqrt_price);
+                // println!("compute_swap_step(): branch 1 next_sqrt_price = {}", next_sqrt_price);
 
                 (amount_in, fee_amount, next_sqrt_price)
             } else {
@@ -530,7 +580,7 @@ mod clmm_math {
 
                 let next_sqrt_price = sqrt_price_target;
 
-                println!("compute_swap_step(): branch 2 next_sqrt_price = {}", next_sqrt_price);
+                // println!("compute_swap_step(): branch 2 next_sqrt_price = {}", next_sqrt_price);
 
                 (amount_in, fee_amount, next_sqrt_price)
             };
@@ -543,7 +593,7 @@ mod clmm_math {
                 a_to_b
             );
 
-            println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U256) = {}", amount_out);
+            // println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U256) = {}", amount_out);
             // println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U128) = {}", amount_out.as_u128());
             // println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U256) <= u64::MAX = {}", amount_out <= U256::from(u64::MAX));
             // println!("compute_swap_step() amount_specified_is_input == true .. amount_out (U64) = {}", amount_out.as_u64());
@@ -581,7 +631,7 @@ mod clmm_math {
                 a_to_b
             );
 
-            println!("compute_swap_step() amount_specified_is_input == true .. amount_in (U256) = {}", amount_in);
+            // println!("compute_swap_step() amount_specified_is_input == true .. amount_in (U256) = {}", amount_in);
 
             let fee_amount = full_math_u64::mul_div_ceil(
                 amount_in.as_u64(),
@@ -611,16 +661,16 @@ mod clmm_math {
             return U256::from(0u8);
         }
 
-        println!("get_delta_up_from_input(): sqrt_price_delta = {}", sqrt_price_delta);
+        // println!("get_delta_up_from_input(): sqrt_price_delta = {}", sqrt_price_delta);
 
         if a_to_b {
             let numerator = full_math_u128::full_mul(liquidity, sqrt_price_delta).checked_shl(64).expect("Checked shl failed.");
             let denominator = full_math_u128::full_mul(sqrt_price_current, sqrt_price_target);
             let delta_x = math_u256::div_round(numerator, denominator, true);
             
-            println!("get_delta_up_from_input(): numerator = {}", numerator);
-            println!("get_delta_up_from_input(): denominator = {}", denominator);
-            println!("get_delta_up_from_input(): delta_x = {}", delta_x);
+            // println!("get_delta_up_from_input(): numerator = {}", numerator);
+            // println!("get_delta_up_from_input(): denominator = {}", denominator);
+            // println!("get_delta_up_from_input(): delta_x = {}", delta_x);
 
             delta_x
         } else {
@@ -654,7 +704,7 @@ mod clmm_math {
         if a_to_b {
             let delta_y = full_math_u128::full_mul(liquidity, sqrt_price_delta) >> 64;
             
-            println!("get_delta_down_from_output(): branch 1 delta y = {}", delta_y);
+            // println!("get_delta_down_from_output(): branch 1 delta y = {}", delta_y);
 
             delta_y
         } else {
@@ -790,7 +840,7 @@ mod clmm_math {
 }
 
 // RECHECK MIN AND MAX
-mod tick_math {
+pub mod tick_math {
     use super::{
         full_math_u128,
         math_u128

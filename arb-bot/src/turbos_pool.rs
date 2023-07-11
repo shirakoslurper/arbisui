@@ -173,7 +173,7 @@ pub fn compute_swap_result(
         let amount_out;
         let mut fee_amount;
 
-        println!("current tick: {}, target tick: {}, target_tick_initialized?: {}", compute_swap_state.tick_current_index, tick_next, initialized);
+        // println!("current tick: {}, target tick: {}, target_tick_initialized?: {}", compute_swap_state.tick_current_index, tick_next, initialized);
 
         (compute_swap_state.sqrt_price, amount_in, amount_out, fee_amount) =
             math_swap::compute_swap(
@@ -195,7 +195,7 @@ pub fn compute_swap_result(
                 pool.fee
             );
 
-        println!("amount_in = {}, amount_out = {}", amount_in, amount_out);
+        // println!("amount_in = {}, amount_out = {}", amount_in, amount_out);
         
         if amount_specified_is_input {
             // println!("amount_specified_is_input == true: amount calc = {}, amount_in = {}, amount_out = {}", compute_swap_state.amount_calculated, amount_in, amount_out);
@@ -268,7 +268,7 @@ pub fn compute_swap_result(
             );
         }
 
-        println!("end of loop 1: compute_swap_state.amount_specified_remaining = {}", compute_swap_state.amount_specified_remaining);
+        // println!("end of loop 1: compute_swap_state.amount_specified_remaining = {}", compute_swap_state.amount_specified_remaining);
     }
 
     // TODO: When we're doing backruns & whatnot. L2 orderbook style client side delta application.
@@ -766,7 +766,7 @@ mod tests {
         let mut pool = setup_test_case();
         println!("nooo!");
 
-        let amount_specified = 13_370_000_000_000; // 42 UDSC
+        let amount_specified = 13_370_000_000_000_000; // 42 UDSC
 
         let swap_result = compute_swap_result(
             &mut pool,
@@ -1096,7 +1096,7 @@ mod math_swap {
         amount_specified_is_input: bool,
         fee_rate: u32,
     ) -> (u128, u128, u128, u128) {
-        println!("current price: {}, target price: {}, liquidity: {}", sqrt_price_current, sqrt_price_target, liquidity);
+        // println!("current price: {}, target price: {}, liquidity: {}", sqrt_price_current, sqrt_price_target, liquidity);
 
         let a_to_b = sqrt_price_current >= sqrt_price_target;
         let fee_amount;
@@ -1118,8 +1118,8 @@ mod math_swap {
             );
         }
 
-        println!("compute_swap(): amount_calc = {}", amount_calc);
-        println!("compute_swap() amount_fixed delta = {}", amount_fixed_delta);
+        // println!("compute_swap(): amount_calc = {}", amount_calc);
+        // println!("compute_swap() amount_fixed delta = {}", amount_fixed_delta);
 
         let next_sqrt_price = if amount_calc >= amount_fixed_delta {
             // println!("compute_swap_step(): branch 1 next_sqrt_price = {}", sqrt_price_target);
@@ -1134,7 +1134,7 @@ mod math_swap {
             )
         };
 
-        println!("compute_swap(): next_sqrt_price = {}", next_sqrt_price);
+        // println!("compute_swap(): next_sqrt_price = {}", next_sqrt_price);
 
         let is_max_swap = next_sqrt_price == sqrt_price_target;
 

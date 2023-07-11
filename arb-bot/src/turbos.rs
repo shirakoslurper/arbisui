@@ -83,7 +83,7 @@ impl Turbos {
             .map(|pool_created_event| {
                 let parsed_json = pool_created_event.parsed_json;
                 if let Value::String(pool_id_value) = parsed_json.get("pool").context("Failed to get pool_id for a CetusMarket")? {
-                    println!("pool_id: {}", pool_id_value);
+                    println!("turbos: pool_id: {}", pool_id_value);
                     Ok(ObjectID::from_str(&format!("0x{}", pool_id_value))?)
                 } else {
                     Err(anyhow!("Failed to match pattern."))
@@ -450,6 +450,7 @@ impl TurbosMarket {
     }
 
     fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128) {
+        
         let swap_state = turbos_pool::compute_swap_result(
             self.computing_pool.as_mut().unwrap(), 
             true, 
@@ -463,6 +464,7 @@ impl TurbosMarket {
     }
 
     fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
+        
         let swap_state = turbos_pool::compute_swap_result(
             self.computing_pool.as_mut().unwrap(), 
             false, 
@@ -473,6 +475,18 @@ impl TurbosMarket {
         );
 
         (swap_state.amount_a, swap_state.amount_b)
+    }
+
+    fn viable(&self) -> bool {
+        if let Some(cp) = &self.computing_pool {
+            if cp.liquidity > 0 {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 
 }
@@ -509,6 +523,10 @@ impl Market for TurbosMarket {
 
     fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
         self.compute_swap_y_to_x(amount_specified)
+    }
+
+    fn viable(&self) -> bool {
+        self.viable()
     }
 
 }

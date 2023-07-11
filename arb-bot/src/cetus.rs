@@ -9,21 +9,27 @@ use fixed::types::U64F64;
 
 use custom_sui_sdk::{
     SuiClient,
-    apis::QueryEventsRequest
+    apis::{
+        QueryEventsRequest,
+        GetDynamicFieldsRequest
+    }
 };
 
 use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError};
-use sui_sdk::rpc_types::{EventFilter, SuiEvent, SuiMoveValue, SuiObjectResponse};
+use sui_sdk::types::dynamic_field::DynamicFieldInfo;
+use sui_sdk::rpc_types::{EventFilter, SuiEvent, SuiMoveValue, SuiObjectDataOptions, SuiMoveStruct, SuiObjectResponse};
  
 use move_core_types::language_storage::{StructTag, TypeTag};
 use std::collections::{BTreeMap, HashMap};
 
 use crate::markets::{Exchange, Market};
 use crate::sui_sdk_utils::{self, sui_move_value};
+use crate::{cetus_pool, cetus};
 
 // const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
 // const POOLS: &str = "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0";
 
+#[derive(Debug, Clone)]
 pub struct Cetus {
     package_id: ObjectID
 }
@@ -48,8 +54,7 @@ impl FromStr for Cetus {
     }
 }
 
-#[async_trait]
-impl Exchange for Cetus {
+impl Cetus {
     fn package_id(&self) -> &ObjectID {
         &self.package_id
     }
@@ -98,11 +103,13 @@ impl Exchange for Cetus {
                         Ok(
                             Box::new(
                                 CetusMarket {
+                                    parent_exchange: self.clone(),
                                     coin_x,
                                     coin_y,
                                     pool_id,
                                     coin_x_sqrt_price: None,
                                     coin_y_sqrt_price: None,
+                                    computing_pool: None
                                 }
                             ) as Box<dyn Market>
                         )
@@ -125,19 +132,238 @@ impl Exchange for Cetus {
 
         sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await
     }
+
+    pub async fn computing_pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<cetus_pool::Pool, anyhow::Error> {
+        // println!("{:#?}", response);
+        
+        let fields = sui_sdk_utils::read_fields_from_object_response(response).context("missing fields")?;
+
+        // println!("cetus pool fields: {:#?}", fields);
+
+        let tick_spacing = sui_move_value::get_number(&fields, "tick_spacing")?;
+
+        let fee_rate = u64::from_str(
+            &sui_move_value::get_string(&fields, "fee_rate")?
+        )?;
+
+        let liquidity = u128::from_str(
+            &sui_move_value::get_string(&fields, "liquidity")?
+        )?;
+
+        let current_sqrt_price = u128::from_str(
+            &sui_move_value::get_string(&fields, "current_sqrt_price")?
+        )?;
+
+        let current_tick_index = sui_move_value::get_number(
+            &sui_move_value::get_struct(&fields, "current_tick_index")?,
+            "bits"
+        )? as i32;
+
+        let fee_growth_global_a = u128::from_str(
+            &sui_move_value::get_string(&fields, "fee_growth_global_a")?
+        )?;
+
+        let fee_growth_global_b = u128::from_str(
+            &sui_move_value::get_string(&fields, "fee_growth_global_b")?
+        )?;
+
+        let fee_protocol_coin_a = u64::from_str(
+            &sui_move_value::get_string(&fields, "fee_protocol_coin_a")?
+        )?;
+
+        let fee_protocol_coin_b = u64::from_str(
+            &sui_move_value::get_string(&fields, "fee_protocol_coin_a")?
+        )?;
+
+        let tick_manager_struct = sui_move_value::get_struct(&fields, "tick_manager")?;
+
+        let tick_manager_tick_spacing = sui_move_value::get_number(&tick_manager_struct, "tick_spacing")?;
+
+        let tick_manager_ticks_skip_list_struct = sui_move_value::get_struct(&tick_manager_struct, "ticks")?;
+
+        let tick_manager_ticks_skip_list_id = sui_move_value::get_uid(
+            &tick_manager_ticks_skip_list_struct,
+            "id"
+        )?;
+
+        let ticks = self.get_ticks(sui_client, &tick_manager_ticks_skip_list_id).await?;
+
+
+        Ok(
+            cetus_pool::Pool {
+                tick_spacing,
+                fee_rate,
+                liquidity,
+                current_sqrt_price,
+                current_tick_index,
+                fee_growth_global_a,
+                fee_growth_global_b,
+                fee_protocol_coin_a,
+                fee_protocol_coin_b,
+                tick_manager: cetus_pool::tick::TickManager {
+                    tick_spacing: tick_manager_tick_spacing,
+                    ticks
+                },
+                is_pause: false
+            }
+        )
+    }
+
+    async fn get_ticks(
+        &self,
+        sui_client: &SuiClient, 
+        ticks_skip_list_id: &ObjectID
+    ) -> Result<BTreeMap<i32, cetus_pool::tick::Tick>, anyhow::Error> {
+
+        // let aa = sui_client
+        //     .read_api()
+        //     .get_object_with_options(
+        //         ticks_skip_list_id.clone(),
+        //         SuiObjectDataOptions::new().with_type()
+        //     )
+        //     .await?;
+
+        // println!("ticks skip_list: {:#?}", aa);
+
+        let skip_list_dynamic_field_infos = sui_client
+            .read_api()
+            .pages(
+                GetDynamicFieldsRequest {
+                    object_id: ticks_skip_list_id.clone(), // We can make this consuming if it saves time
+                    cursor: None,
+                    limit: None,
+                }
+            )
+            .items()
+            .try_collect::<Vec<DynamicFieldInfo>>()
+            .await?;
+
+        // println!("skip_list_dynamic_field_infos len: {}", skip_list_dynamic_field_infos.len());
+        // println!("skip_list_dynamic_field_infos: {:#?}", skip_list_dynamic_field_infos);
+
+        let node_object_type = format!("0xbe21a06129308e0495431d12286127897aff07a8ade3970495a4404d97f9eaaa::skip_list::Node<{}::tick::Tick>", self.package_id);
+
+        let node_object_ids = skip_list_dynamic_field_infos
+            .into_iter()
+            .filter(|dynamic_field_info| {
+                node_object_type == dynamic_field_info.object_type
+            })
+            .map(|tick_dynamic_field_info| {
+                tick_dynamic_field_info.object_id
+            })
+            .collect::<Vec<ObjectID>>();
+
+        let node_object_responses = sui_sdk_utils::get_object_responses(sui_client, &node_object_ids).await?;
+
+        // println!("{:#?}", node_object_responses);
+
+        let tick_index_to_tick = node_object_responses
+            .into_iter()
+            .map(|node_object_response| {
+                let fields = sui_sdk_utils::read_fields_from_object_response(&node_object_response).context("Missing fields.")?;
+
+                let node_fields = sui_move_value::get_struct(&fields, "value")?;
+
+                let tick_fields = sui_move_value::get_struct(&node_fields, "value")?;
+
+                // println!("tick_fields: {:#?}", tick_fields);
+
+                // println!("1");
+
+                let index = sui_move_value::get_number(
+                    &sui_move_value::get_struct(
+                        &tick_fields, 
+                        "index"
+                    )?, 
+                    "bits"
+                )? as i32;
+
+                // println!("2");
+
+                let sqrt_price = u128::from_str(
+                    &sui_move_value::get_string(&tick_fields,"sqrt_price")?
+                )?;
+
+                // println!("3");
+
+                let liquidity_net = u128::from_str(
+                    &sui_move_value::get_string(
+                        &sui_move_value::get_struct(
+                            &tick_fields, 
+                            "liquidity_net"
+                        )?, 
+                        "bits"
+                    )?
+                )? as i128;
+
+                // println!("4");
+
+                let liquidity_gross = u128::from_str(
+                    &sui_move_value::get_string(&tick_fields, "liquidity_gross")?
+                )?;
+
+                // println!("5");
+
+                let fee_growth_outside_a = u128::from_str(
+                    &sui_move_value::get_string(&tick_fields,"fee_growth_outside_a")?
+                )?;
+
+                // println!("6");
+
+                let fee_growth_outside_b = u128::from_str(
+                    &sui_move_value::get_string(&tick_fields,"fee_growth_outside_b")?
+                )?;
+
+                // println!("7");
+
+                // println!("tick_fields: {:#?}", tick_fields);
+
+                let tick = cetus_pool::tick::Tick{
+                    index,
+                    sqrt_price,
+                    liquidity_net,
+                    liquidity_gross,
+                    fee_growth_outside_a,
+                    fee_growth_outside_b,
+                };
+
+                Ok((index, tick))
+            })
+            .collect::<Result<BTreeMap<i32, cetus_pool::tick::Tick>, anyhow::Error>>()?;
+
+        Ok(tick_index_to_tick)
+
+    }
+}
+
+#[async_trait]
+impl Exchange for Cetus {
+    fn package_id(&self) -> &ObjectID {
+        self.package_id()
+    }
+
+    // Cetus has us query for events
+    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
+        self.get_all_markets(sui_client).await
+    }
+
+    async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
+        self.get_pool_id_to_object_response(sui_client, markets).await
+    }
 }
 
 #[derive(Debug, Clone)]
 struct CetusMarket {
+    parent_exchange: Cetus,
     coin_x: TypeTag,
     coin_y: TypeTag,
     pool_id: ObjectID,
     coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
     coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
+    computing_pool: Option<cetus_pool::Pool>
 }
 
-#[async_trait]
-impl Market for CetusMarket {
+impl CetusMarket {
     fn coin_x(&self) -> &TypeTag {
         &self.coin_x
     }
@@ -164,9 +390,10 @@ impl Market for CetusMarket {
 
     async fn update_with_object_response(&mut self, sui_client: &SuiClient, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error> {
         let fields = sui_sdk_utils::read_fields_from_object_response(object_response).context("Missing fields for object_response.")?;
+        // println!("cetus fields: {:#?}", fields);
         let coin_x_sqrt_price = U64F64::from_bits(
             u128::from_str(
-                &sui_move_value::get_string(&fields, "sqrt_price")?
+                &sui_move_value::get_string(&fields, "current_sqrt_price")?
             )?
         );
 
@@ -178,6 +405,10 @@ impl Market for CetusMarket {
         // println!("coin_x<{}>: {}", self.coin_x, self.coin_x_price.unwrap());
         // println!("coin_y<{}>: {}\n", self.coin_y, self.coin_y_price.unwrap());
 
+        self.computing_pool = Some(self.parent_exchange.computing_pool_from_object_response(sui_client, object_response).await?);
+
+        // println!("finised updating cetus pool");
+
         Ok(())
     }
 
@@ -185,12 +416,94 @@ impl Market for CetusMarket {
         &self.pool_id
     }
 
+    // Better handling of computing pool being None
+    fn compute_swap_x_to_y(&mut self, amount_specified: u64) -> (u64, u64) {
+        println!("cetus compute_swap_x_to_y()");
+
+        let swap_result = cetus_pool::swap_in_pool(
+            self.computing_pool.as_mut().unwrap(),
+            true,
+            true,
+            cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
+            amount_specified,
+            0, // It's hard coded to 0 for now (replace with global config value)
+            0,
+            true
+        );
+
+        (swap_result.amount_in, swap_result.amount_out)
+    }
+
+    fn compute_swap_y_to_x(&mut self, amount_specified: u64) -> (u64, u64) {
+        println!("cetus compute_swap_y_to_x()");
+
+        let swap_result = cetus_pool::swap_in_pool(
+            self.computing_pool.as_mut().unwrap(),
+            false,
+            true,
+            cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
+            amount_specified,
+            0, // It's hard coded to 0 for now (replace with global config value)
+            0,
+            true
+        );
+
+        (swap_result.amount_out, swap_result.amount_in)
+    }
+
+    fn viable(&self) -> bool {
+        if let Some(cp) = &self.computing_pool {
+            if cp.liquidity > 0 {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+}
+
+#[async_trait]
+impl Market for CetusMarket {
+    fn coin_x(&self) -> &TypeTag {
+        self.coin_x()
+    }
+
+    fn coin_y(&self) -> &TypeTag {
+        self.coin_y()
+    }
+
+    fn coin_x_price(&self) -> Option<U64F64> {
+        self.coin_x_price()
+    }
+
+    fn coin_y_price(&self) -> Option<U64F64> {
+        self.coin_y_price()
+    }
+
+    async fn update_with_object_response(&mut self, sui_client: &SuiClient, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error> {
+        self.update_with_object_response(sui_client, object_response).await
+    }
+
+    fn pool_id(&self) -> &ObjectID {
+        self.pool_id()
+    }
+
     fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128) {
-        (0, 0)
+        let result = self.compute_swap_x_to_y(amount_specified as u64);
+
+        (result.0 as u128, result.1 as u128)
     }
 
     fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
-        (0, 0)
+        let result = self.compute_swap_y_to_x(amount_specified as u64);
+
+        (result.0 as u128, result.1 as u128)
+    }
+
+    fn viable(&self) -> bool {
+        self.viable()
     }
 
 }
