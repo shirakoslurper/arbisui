@@ -43,52 +43,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?
     };
 
-    // // Testing Turbos TickMap
-    // let turbos_dynamic_fields =  run_data
-    //     .sui_client
-    //     .read_api()
-    //     .get_dynamic_fields(
-    //     ObjectID::from_str("0x86ed41e9b4c6cce36de4970cfd4ae3e98d6281f13a1b16aa31fc73ec90079c3d")?,
-    //     None,
-    //     None
-    // ).await?;
-
-    // println!("{:#?}", turbos_dynamic_fields);
-
-    // let turbos_tick = run_data
-    //     .sui_client
-    //     .read_api()
-    //     .get_object_with_options(
-    //         ObjectID::from_str("0xb5fed30450f21fb4df0c9881eb645be2dd583b41551ad47161a547c467bf7efd")?,
-    //         SuiObjectDataOptions::full_content()
-    //     )
-    //     .await?;
-
-    // println!("turbos_tick: {:#?}", turbos_tick);
-
-    // let turbos_tick_word = run_data
-    //     .sui_client
-    //     .read_api()
-    //     .get_object_with_options(
-    //         ObjectID::from_str("0x7e90d1d4dc20d86ea40edab59eb1568f066f7e5fe74405ac45827a26ccc11127")?,
-    //         SuiObjectDataOptions::full_content()
-    //     )
-    //     .await?;
-
-    // println!("turbos_tick_word: {:#?}", turbos_tick_word);
-
-    // let turbos_tick_map = run_data
-    //     .sui_client
-    //     .read_api()
-    //     .get_dynamic_fields(
-    //         ObjectID::from_str(TURBOS_TICK_MAP)?,
-    //         None,
-    //         None
-    //     )
-    //     .await?;
-
-    // println!("turbos_tick_map: {:#?}", turbos_tick_map);
-
     // let exchanges = vec![cetus];
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
     
@@ -96,8 +50,16 @@ async fn main() -> Result<(), anyhow::Error> {
     let turbos_markets = turbos.get_all_markets(&run_data.sui_client).await?;
 
     let mut markets = vec![];
+    markets.extend(turbos_markets.clone());
     markets.extend(cetus_markets.clone());
-    // markets.extend(turbos_markets.clone());
+    // markets.extend(cetus_markets.clone());
+
+    // // filter for viabl
+    // markets = markets.into_iter().filter(|market| {
+
+
+    //     market.viable()
+    // {}).collect::<Vec<_>>();
 
     println!("markets.len(): {}", markets.len());
 
@@ -114,7 +76,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // OR storing coin data in nodes
     // But its for human reading only rly
     let coin_to_metadata = future::try_join_all(
-        markets[..20]
+        markets[20..50]
             .iter()
             .map(|market| {
                 async {
@@ -143,7 +105,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .flatten()
         .collect::<HashMap<TypeTag, SuiCoinMetadata>>();
 
-    let mut market_graph = MarketGraph::new(&markets[..20])?;
+    let mut market_graph = MarketGraph::new(&markets[20..50])?;
 
     let cetus_pool_id_to_object_response = cetus
         .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
@@ -154,8 +116,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?;
 
     let mut pool_id_to_object_response = HashMap::new();
+    pool_id_to_object_response.extend(turbos_pool_id_to_object_response);
     pool_id_to_object_response.extend(cetus_pool_id_to_object_response);
-    // pool_id_to_object_response.extend(turbos_pool_id_to_object_response);
 
     println!("pool_id_to_fields.keys().len(): {}", pool_id_to_object_response.keys().len());
 
@@ -172,18 +134,19 @@ async fn main() -> Result<(), anyhow::Error> {
 
     market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
 
+
+
+    // let paths = all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7)).collect::<Vec<Vec<&TypeTag>>>().clone();
+
     let elapsed = now.elapsed();
     println!("Elasped: {:.2?}", elapsed);
 
+
+    // The following is all synchronous
     paths
         .iter()
         .for_each(|path| {
-            println!("SIMPLE CYCLE ({} HOP) ", path.len() - 1);
-            // path
-            //     .iter()
-            //     .for_each(|coin| {
-            //         println!("{}", *coin);
-            //     });
+            println!("\nSIMPLE CYCLE ({} HOP) ", path.len() - 1);
 
             let mut best_path_rate = U64F64::from_num(1);
 
@@ -212,34 +175,45 @@ async fn main() -> Result<(), anyhow::Error> {
 
                 let directional_rates = markets
                     .iter_mut()
-                    .filter(|market_info| { // filter for viable markets only
-                        market_info.market.viable()
-                    })
                     .map(|market_info| {
                         let coin_x = market_info.market.coin_x();
                         let coin_y = market_info.market.coin_y();
 
-                        println!("coin_x: {:#?}\n coin_y: {:#?}", coin_x, coin_y);
-                        println!("orig: {:#?}\n dest: {:#?}", orig, dest);
-
+                        // println!("coin_x: {:#?}\n coin_y: {:#?}", coin_x, coin_y);
+                        // println!("orig: {:#?}\n dest: {:#?}", orig, dest);
 
                         if (coin_x, coin_y) == (orig, dest) {
-                            println!("AASS {}", market_info.market.coin_x_price().unwrap());
-                            let (_, amount_y) = market_info.market.compute_swap_x_to_y(amount_in);
-                            amount_in = amount_y;
-                            market_info.market.coin_x_price().unwrap()
+                            // println!("AASS {}", market_info.market.coin_x_price().unwrap());
+                            if market_info.market.viable() {
+                                // let (_, amount_y) = market_info.market.compute_swap_x_to_y(amount_in);
+                                // amount_in = amount_y;
+                                // amount_out = amount_x;
+                                market_info.market.coin_x_price().unwrap()
+                            } else {
+                                println!("NO LIQUIDITY!!");
+                                amount_in = 0;
+                                U64F64::from_num(0)
+                            }
+
                         } else if (coin_y, coin_x) == (orig, dest){
-                            println!("AERE {}", market_info.market.coin_y_price().unwrap());
-                            let (amount_x, _) = market_info.market.compute_swap_y_to_x(amount_in);
-                            amount_in = amount_x;
-                            market_info.market.coin_y_price().unwrap()
+                            // println!("AERE {}", market_info.market.coin_y_price().unwrap());
+                            if market_info.market.viable() {
+                                // let (amount_x, _) = market_info.market.compute_swap_y_to_x(amount_in);
+                                // amount_in = amount_x;
+                                // amount_out = amount_y;
+                                market_info.market.coin_y_price().unwrap()
+                            } else {
+                                println!("NO LIQUIDITY!!");
+                                amount_in = 0;
+                                U64F64::from_num(0)
+                            }
                         } else {
-                            println!("AADFFS");
+                            // println!("AADFFS");
                             panic!("coin pair does not match");
                         }
                     });
 
-                println!("BBBBB");
+                // println!("BBBBB");
 
                 // println!("directional_rates: {:#?}", directional_rates);
 
@@ -252,16 +226,152 @@ async fn main() -> Result<(), anyhow::Error> {
                 println!("    -> {}: {} decimals", dest, dest_decimals);
                 // Using decimals for human readability
                 println!("        leg rate: {}", best_leg_rate / adj);
-
                 best_path_rate = best_path_rate * best_leg_rate;
+                // println!("        current path_rate: {}", best_path_rate);
             }
 
-            println!("PROFIT: {}", I256::from(amount_in) - I256::from(orig_amount));
+            // println!("PROFIT: {}", I256::from(amount_in) - I256::from(orig_amount));
 
-            // println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
+            println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
 
-            println!("\n");
+            // let orig_decimals = coin_to_metadata.get(path[0]).unwrap().decimals as u32;
+
+            if best_path_rate > 1 {
+                let mut left_orig_amount = 10_u128;
+                let mut right_orig_amount = u64::MAX as u128 - 10;   // amount in for cetus is u64
+
+                let mut mid_orig_amount = 0;
+                let mut profit_mid = I256::from(0);
+
+                let max_profit ;
+                let maximizing_orig_amount;
+
+                while left_orig_amount <= right_orig_amount {
+
+                    mid_orig_amount = left_orig_amount + ((right_orig_amount - left_orig_amount) / 2);
+                    
+                    let mid_lo_orig_amount = mid_orig_amount - 10;
+                    let mid_hi_orig_amount = mid_orig_amount + 10;
+                    
+                    let mut mid_amount_in = mid_orig_amount;
+                    let mut mid_lo_amount_in = mid_lo_orig_amount;
+                    let mut mid_hi_amount_in = mid_hi_orig_amount;
+                    // let mut best_path_rate = U64F64::from_num(1);
+
+                    // if mid_amount_in == 0 || mid_lo_amount_in == 0 || mid_hi_amount_in == 0 {
+                    //     break;
+                    // }
+
+                    mid_amount_in = amount_out(&mut market_graph, path, mid_amount_in);
+                    mid_lo_amount_in = amount_out(&mut market_graph, path, mid_lo_amount_in);
+                    mid_hi_amount_in = amount_out(&mut market_graph, path, mid_hi_amount_in);
+                    
+                    // Even if convex theres some rounding so similar input amounts can result in the same outputs
+                    // Not too helpful to have differences of 1 in the orig amounts since the outputs barely change
+
+                    // AHHHH we wanna maximize profit NOT amount out
+
+                    profit_mid = I256::from(mid_amount_in) - I256::from(mid_orig_amount);
+                    let profit_mid_lo = I256::from(mid_lo_amount_in) - I256::from(mid_lo_orig_amount);
+                    let profit_mid_hi = I256::from(mid_hi_amount_in) - I256::from(mid_hi_orig_amount);
+
+                    // println!("profit_mid: {}, mid_orig_amount: {}, mid_amount_in: {}", profit_mid, mid_orig_amount, mid_amount_in);
+                    // println!("profit_mid_hi: {}, mid_hi_orig_amount: {}, mid_hi_amount_in: {}", profit_mid_hi, mid_hi_orig_amount, mid_hi_amount_in);
+                    // println!("profit_mid_lo: {}, mid_lo_orig_amount: {}, mid_lo_amount_in: {}\n", profit_mid_lo, mid_lo_orig_amount, mid_lo_amount_in);
+
+                    if profit_mid > profit_mid_hi && profit_mid > profit_mid_lo {
+                        // max_profit = profit_mid;
+                        // maximizing_orig_amount = mid_orig_amount;
+                        // println!("AAAAHHHH");
+                        break;
+                    } else if profit_mid < profit_mid_hi {
+                        left_orig_amount = mid_orig_amount + 1;
+                    } else {
+                        right_orig_amount = mid_orig_amount - 1;
+                    }
+
+                }
+
+                max_profit = profit_mid;
+                maximizing_orig_amount = mid_orig_amount;
+
+                // if max_profit
+                println!("max_profit: {}, maximizing_orig_amount: {}", max_profit, maximizing_orig_amount);
+
+                println!("MAX_PROFIT: {}", max_profit);
+
+                // println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
+
+                println!("\n");
+
+                // println!("\n");
+
+            }
         });
+
+        // paths
+        // .iter()
+        // .for_each(|path| {
+        //     let path = &path.into_iter().cloned().rev().collect::<Vec<_>>();
+
+        //     println!("SIMPLE CYCLE ({} HOP) ", path.len() - 1);
+
+        //     let mut left_orig_amount = 10_u128;
+        //     let mut right_orig_amount = u64::MAX as u128 - 10;   // amount in for cetus is u64
+        //     let mut max_profit = I256::from(0);
+        //     let mut maximizing_orig_amount = 0_u128;
+
+        //     while left_orig_amount <= right_orig_amount {
+
+        //         let mid_orig_amount = left_orig_amount + ((right_orig_amount - left_orig_amount) / 2);
+        //         let mid_lo_orig_amount = mid_orig_amount - 10;
+        //         let mid_hi_orig_amount = mid_orig_amount + 10;
+                
+        //         let mut mid_amount_in = mid_orig_amount;
+        //         let mut mid_lo_amount_in = mid_lo_orig_amount;
+        //         let mut mid_hi_amount_in = mid_hi_orig_amount;
+        //         // let mut best_path_rate = U64F64::from_num(1);
+
+        //         mid_amount_in = amount_out(&mut market_graph, path, mid_amount_in);
+        //         mid_lo_amount_in = amount_out(&mut market_graph, path, mid_lo_amount_in);
+        //         mid_hi_amount_in = amount_out(&mut market_graph, path, mid_hi_amount_in);
+                
+        //         // Even if convex theres some rounding so similar input amounts can result in the same outputs
+        //         // Not too helpful to have differences of 1 in the orig amounts since the outputs barely change
+
+        //         // AHHHH we wanna maximize profit NOT amount out
+
+        //         let profit_mid = I256::from(mid_amount_in) - I256::from(mid_orig_amount);
+        //         let profit_mid_lo = I256::from(mid_lo_amount_in) - I256::from(mid_lo_orig_amount);
+        //         let profit_mid_hi = I256::from(mid_hi_amount_in) - I256::from(mid_hi_orig_amount);
+
+        //         println!("profit_mid: {}, mid_orig_amount: {}, mid_amount_in: {}", profit_mid, mid_orig_amount, mid_amount_in);
+        //         println!("profit_mid_hi: {}, mid_hi_orig_amount: {}, mid_hi_amount_in: {}", profit_mid_hi, mid_hi_orig_amount, mid_hi_amount_in);
+        //         println!("profit_mid_lo: {}, mid_lo_orig_amount: {}, mid_lo_amount_in: {}\n", profit_mid_lo, mid_lo_orig_amount, mid_lo_amount_in);
+
+        //         if profit_mid > profit_mid_hi && profit_mid > profit_mid_lo {
+        //             max_profit = profit_mid;
+        //             maximizing_orig_amount = mid_orig_amount;
+        //             break;
+        //         } else if profit_mid < profit_mid_hi {
+        //             left_orig_amount = mid_orig_amount + 1;
+        //         } else {
+        //             right_orig_amount = mid_orig_amount - 1;
+        //         }
+
+        //     }
+
+
+        //     // if max_profit
+        //     println!("max_profit: {}, maximizing_orig_amount: {}", max_profit, maximizing_orig_amount);
+
+        //     println!("MAX_PROFIT: {}", max_profit);
+
+        //     // println!("{} HOP CYCLE RATE: {}", path.len() - 1, best_path_rate);
+
+        //     println!("\n");
+
+        // });
 
         // let elapsed = now.elapsed();
         // println!("Elasped: {:.2?}", elapsed);
@@ -269,4 +379,96 @@ async fn main() -> Result<(), anyhow::Error> {
     // loop_blocks(run_data, vec![&flameswap]).await?;
 
     Ok(())
+}
+
+fn amount_out<'a>(market_graph: &mut MarketGraph<'a>, path: &Vec<&'a TypeTag>, orig_amount_in: u128) -> u128 {
+    let mut amount_in = orig_amount_in;
+
+    // Oh shit hmmm 
+    // We're modifying amount_in more times than we should 
+    // (especially if there are multiple markets for a pair)
+
+
+    for pair in path[..].windows(2) {
+        let orig = pair[0];
+        let dest = pair[1];
+
+        let markets = market_graph
+            .graph
+            .edge_weight_mut(orig, dest)
+            .context("Missing edge weight")
+            .unwrap();
+
+        // println!("num markets: {}", markets.len());
+
+        // AHHH we dont want to choose the max amount out but 
+        // rather the one with the best rate?
+        // Ah nah we gotta optimize some other way lmeow
+
+        (_, amount_in) = markets
+            .iter_mut()
+            .map(|market_info| {
+                let coin_x = market_info.market.coin_x();
+                let coin_y = market_info.market.coin_y();
+
+                // println!("COMPUTTTTTING");
+
+                // Add a condition that we return a certain amount if amount_in == 0
+
+                if (coin_x, coin_y) == (orig, dest) {
+                    // println!("AASS {}", market_info.market.coin_x_price().unwrap());
+                    if market_info.market.viable() {
+                        if amount_in == 0 {
+                            return (U64F64::from(0_u8), 0);
+                        }
+
+                        let (amount_x, amount_y) = market_info.market.compute_swap_x_to_y(amount_in);
+                        // amount_in = amount_y;
+                        // println!("amount_in: {}, amount_out: {}", amount_x, amount_y);
+                        // amount_out = amount_x;
+                        // market_info.market.coin_x_price().unwrap()
+                        (market_info.market.coin_x_price().unwrap(), amount_y)
+                    } else {
+                        // println!("NO LIQUIDITY!!");
+                        // amount_in = 0;
+                        // U64F64::from_num(0)
+                        (U64F64::from(0_u8), 0)
+                    }
+
+                } else if (coin_y, coin_x) == (orig, dest){
+                    // println!("AERE {}", market_info.market.coin_y_price().unwrap());
+                    if market_info.market.viable() {
+                        if amount_in == 0 {
+                            return (U64F64::from(0_u8), 0);
+                        }
+
+                        let (amount_x, amount_y) = market_info.market.compute_swap_y_to_x(amount_in);
+                        // amount_in = amount_x;
+                        // println!("amount_in: {}, amount_out: {}", amount_y, amount_x);
+                        // amount_out = amount_y;
+                        // market_info.market.coin_y_price().unwrap()
+                        (market_info.market.coin_y_price().unwrap(), amount_x)
+                    } else {
+                        // println!("NO LIQUIDITY!!");
+                        // amount_in = 0;
+                        // U64F64::from_num(0)
+                        (U64F64::from(0_u8), 0)
+                    }
+                } else {
+                    // println!("AADFFS");
+                    panic!("coin pair does not match");
+                }
+            })
+            .fold((U64F64::from(0_u8), 0), |(max_rate, best_amt_out), (rate, amt_out)| {
+                if rate > max_rate {
+                    (rate, amt_out)
+                } else {
+                    (max_rate, best_amt_out)
+                }
+            });
+
+        // amount_in
+    }
+
+    amount_in
 }

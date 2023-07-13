@@ -39,6 +39,7 @@ pub struct SuiClientBuilder {
     request_timeout: Duration,
     max_concurrent_requests: usize,
     ws_url: Option<String>,
+    // max_requests_per_second: usize
 }
 
 impl Default for SuiClientBuilder {
@@ -47,6 +48,7 @@ impl Default for SuiClientBuilder {
             request_timeout: Duration::from_secs(60),
             max_concurrent_requests: 256,
             ws_url: None,
+            // max_requests_per_second: 50
         }
     }
 }
@@ -64,6 +66,11 @@ impl SuiClientBuilder {
 
     pub fn ws_url(mut self, url: impl AsRef<str>) -> Self {
         self.ws_url = Some(url.as_ref().to_string());
+        self
+    }
+
+    pub fn max_requests_per_second(mut self, max_requests_per_second: usize) -> Self {
+        self.max_requests_per_second = max_requests_per_second;
         self
     }
 

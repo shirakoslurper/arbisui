@@ -479,6 +479,7 @@ impl TurbosMarket {
 
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
+            // println!("liquidity: {}", cp.liquidity);
             if cp.liquidity > 0 {
                 true
             } else {

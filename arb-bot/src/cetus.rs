@@ -418,7 +418,7 @@ impl CetusMarket {
 
     // Better handling of computing pool being None
     fn compute_swap_x_to_y(&mut self, amount_specified: u64) -> (u64, u64) {
-        println!("cetus compute_swap_x_to_y()");
+        // println!("cetus compute_swap_x_to_y()");
 
         let swap_result = cetus_pool::swap_in_pool(
             self.computing_pool.as_mut().unwrap(),
@@ -435,7 +435,7 @@ impl CetusMarket {
     }
 
     fn compute_swap_y_to_x(&mut self, amount_specified: u64) -> (u64, u64) {
-        println!("cetus compute_swap_y_to_x()");
+        // println!("cetus compute_swap_y_to_x()");
 
         let swap_result = cetus_pool::swap_in_pool(
             self.computing_pool.as_mut().unwrap(),
@@ -453,6 +453,7 @@ impl CetusMarket {
 
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
+            // println!("liquidity: {}", cp.liquidity);
             if cp.liquidity > 0 {
                 true
             } else {
