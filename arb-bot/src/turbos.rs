@@ -449,28 +449,56 @@ impl TurbosMarket {
         &self.pool_id
     }
 
-    fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128) {
+    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
         
         let swap_state = turbos_pool::compute_swap_result(
             self.computing_pool.as_mut().unwrap(), 
             true, 
             amount_specified, 
             true, 
-            turbos_pool::math_tick::MIN_SQRT_PRICE_X64 + 1, 
-            true
+            turbos_pool::math_tick::MIN_SQRT_PRICE_X64 + 1,
+            false
         );
 
         (swap_state.amount_a, swap_state.amount_b)
     }
 
-    fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
+    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
         
         let swap_state = turbos_pool::compute_swap_result(
             self.computing_pool.as_mut().unwrap(), 
             false, 
             amount_specified, 
             true, 
-            turbos_pool::math_tick::MAX_SQRT_PRICE_X64 - 1, 
+            turbos_pool::math_tick::MAX_SQRT_PRICE_X64 - 1,
+            false
+        );
+
+        (swap_state.amount_a, swap_state.amount_b)
+    }
+
+    fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
+        
+        let swap_state = turbos_pool::compute_swap_result(
+            &mut self.computing_pool.clone().unwrap(), 
+            true, 
+            amount_specified, 
+            true, 
+            turbos_pool::math_tick::MIN_SQRT_PRICE_X64 + 1,
+            true
+        );
+
+        (swap_state.amount_a, swap_state.amount_b)
+    }
+
+    fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
+        
+        let swap_state = turbos_pool::compute_swap_result(
+            &mut self.computing_pool.clone().unwrap(), 
+            false, 
+            amount_specified, 
+            true, 
+            turbos_pool::math_tick::MAX_SQRT_PRICE_X64 - 1,
             true
         );
 
@@ -518,11 +546,19 @@ impl Market for TurbosMarket {
         self.pool_id()
     }
 
-    fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128) {
+    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+        self.compute_swap_x_to_y_mut(amount_specified)
+    }
+
+    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+        self.compute_swap_y_to_x_mut(amount_specified)
+    }
+
+    fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
         self.compute_swap_x_to_y(amount_specified)
     }
 
-    fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
+    fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
         self.compute_swap_y_to_x(amount_specified)
     }
 

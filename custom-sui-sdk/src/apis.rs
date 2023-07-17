@@ -38,14 +38,24 @@ use sui_types::dynamic_field::DynamicFieldInfo;
 use async_trait::async_trait;
 use page_turner::prelude::*;
 
+use governor::DefaultDirectRateLimiter;
+
 #[derive(Debug)]
 pub struct ReadApi {
     api: Arc<RpcClient>,
+    rate_limiter: Arc<DefaultDirectRateLimiter>,
 }
 
 impl ReadApi {
-    pub(crate) fn new(api: Arc<RpcClient>) -> Self {
-        Self { api }
+    pub(crate) fn new(api: Arc<RpcClient>, rate_limiter: Arc<DefaultDirectRateLimiter>) -> Self {
+        Self {
+            api,
+            rate_limiter,
+        }
+    }
+
+    pub fn rate_limiter(&self) -> &Arc<DefaultDirectRateLimiter> {
+        &self.rate_limiter
     }
 
     pub async fn get_owned_objects(
@@ -55,6 +65,8 @@ impl ReadApi {
         cursor: Option<ObjectID>,
         limit: Option<usize>,
     ) -> SuiRpcResult<ObjectsPage> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -68,6 +80,8 @@ impl ReadApi {
         cursor: Option<ObjectID>,
         limit: Option<usize>,
     ) -> SuiRpcResult<DynamicFieldPage> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -81,6 +95,8 @@ impl ReadApi {
         version: SequenceNumber,
         options: SuiObjectDataOptions,
     ) -> SuiRpcResult<SuiPastObjectResponse> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -93,6 +109,8 @@ impl ReadApi {
         past_objects: Vec<SuiGetPastObjectRequest>,
         options: SuiObjectDataOptions,
     ) -> SuiRpcResult<Vec<SuiPastObjectResponse>> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -105,6 +123,8 @@ impl ReadApi {
         object_id: ObjectID,
         options: SuiObjectDataOptions,
     ) -> SuiRpcResult<SuiObjectResponse> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_object(object_id, Some(options)).await?)
     }
 
@@ -113,6 +133,8 @@ impl ReadApi {
         object_ids: Vec<ObjectID>,
         options: SuiObjectDataOptions,
     ) -> SuiRpcResult<Vec<SuiObjectResponse>> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -121,6 +143,8 @@ impl ReadApi {
     }
 
     pub async fn get_total_transaction_blocks(&self) -> SuiRpcResult<u64> {
+        self.rate_limiter.until_ready().await;
+
         Ok(*self.api.http.get_total_transaction_blocks().await?)
     }
 
@@ -129,6 +153,8 @@ impl ReadApi {
         digest: TransactionDigest,
         options: SuiTransactionBlockResponseOptions,
     ) -> SuiRpcResult<SuiTransactionBlockResponse> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -141,6 +167,8 @@ impl ReadApi {
         digests: Vec<TransactionDigest>,
         options: SuiTransactionBlockResponseOptions,
     ) -> SuiRpcResult<Vec<SuiTransactionBlockResponse>> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -152,6 +180,8 @@ impl ReadApi {
         &self,
         epoch: Option<BigInt<u64>>,
     ) -> SuiRpcResult<SuiCommittee> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_committee_info(epoch).await?)
     }
 
@@ -162,6 +192,8 @@ impl ReadApi {
         limit: Option<usize>,
         descending_order: bool,
     ) -> SuiRpcResult<TransactionBlocksPage> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -171,6 +203,8 @@ impl ReadApi {
 
     /// Return a checkpoint
     pub async fn get_checkpoint(&self, id: CheckpointId) -> SuiRpcResult<Checkpoint> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_checkpoint(id).await?)
     }
 
@@ -181,6 +215,8 @@ impl ReadApi {
         limit: Option<usize>,
         descending_order: bool,
     ) -> SuiRpcResult<CheckpointPage> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -192,6 +228,8 @@ impl ReadApi {
     pub async fn get_latest_checkpoint_sequence_number(
         &self,
     ) -> SuiRpcResult<CheckpointSequenceNumber> {
+        self.rate_limiter.until_ready().await;
+
         Ok(*self
             .api
             .http
@@ -235,6 +273,8 @@ impl ReadApi {
         &self,
         package: ObjectID,
     ) -> SuiRpcResult<BTreeMap<String, SuiMoveNormalizedModule>> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -244,6 +284,8 @@ impl ReadApi {
 
     // TODO(devx): we can probably cache this given an epoch
     pub async fn get_reference_gas_price(&self) -> SuiRpcResult<u64> {
+        self.rate_limiter.until_ready().await;
+
         Ok(*self.api.http.get_reference_gas_price().await?)
     }
 
@@ -251,6 +293,8 @@ impl ReadApi {
         &self,
         tx: TransactionData,
     ) -> SuiRpcResult<DryRunTransactionBlockResponse> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -262,6 +306,8 @@ impl ReadApi {
         &self,
         digest: TransactionDigest,
     ) -> SuiRpcResult<SuiLoadedChildObjectsResponse> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_loaded_child_objects(digest).await?)
     }
 }
@@ -325,11 +371,15 @@ impl PageTurner<GetDynamicFieldsRequest> for ReadApi {
 #[derive(Debug, Clone)]
 pub struct CoinReadApi {
     api: Arc<RpcClient>,
+    rate_limiter: Arc<DefaultDirectRateLimiter>,
 }
 
 impl CoinReadApi {
-    pub(crate) fn new(api: Arc<RpcClient>) -> Self {
-        Self { api }
+    pub(crate) fn new(api: Arc<RpcClient>, rate_limiter: Arc<DefaultDirectRateLimiter>) -> Self {
+        Self {
+            api,
+            rate_limiter
+        }
     }
 
     pub async fn get_coins(
@@ -339,6 +389,8 @@ impl CoinReadApi {
         cursor: Option<ObjectID>,
         limit: Option<usize>,
     ) -> SuiRpcResult<CoinPage> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -352,6 +404,8 @@ impl CoinReadApi {
         cursor: Option<ObjectID>,
         limit: Option<usize>,
     ) -> SuiRpcResult<CoinPage> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_all_coins(owner, cursor, limit).await?)
     }
 
@@ -397,6 +451,8 @@ impl CoinReadApi {
         amount: u128,
         exclude: Vec<ObjectID>,
     ) -> SuiRpcResult<Vec<Coin>> {
+        self.rate_limiter.until_ready().await;
+
         let mut total = 0u128;
         let coins = self
             .get_coins_stream(address, coin_type)
@@ -420,10 +476,14 @@ impl CoinReadApi {
         owner: SuiAddress,
         coin_type: Option<String>,
     ) -> SuiRpcResult<Balance> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_balance(owner, coin_type).await?)
     }
 
     pub async fn get_all_balances(&self, owner: SuiAddress) -> SuiRpcResult<Vec<Balance>> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_all_balances(owner).await?)
     }
 
@@ -431,10 +491,14 @@ impl CoinReadApi {
         &self,
         coin_type: String,
     ) -> SuiRpcResult<Option<SuiCoinMetadata>> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_coin_metadata(coin_type).await?)
     }
 
     pub async fn get_total_supply(&self, coin_type: String) -> SuiRpcResult<Supply> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_total_supply(coin_type).await?)
     }
 }
@@ -442,17 +506,23 @@ impl CoinReadApi {
 #[derive(Clone)]
 pub struct EventApi {
     api: Arc<RpcClient>,
+    rate_limiter: Arc<DefaultDirectRateLimiter>,
 }
 
 impl EventApi {
-    pub(crate) fn new(api: Arc<RpcClient>) -> Self {
-        Self { api }
+    pub(crate) fn new(api: Arc<RpcClient>, rate_limiter: Arc<DefaultDirectRateLimiter>) -> Self {
+        Self {
+            api,
+            rate_limiter,
+        }
     }
 
     pub async fn subscribe_event(
         &self,
         filter: EventFilter,
     ) -> SuiRpcResult<impl Stream<Item = SuiRpcResult<SuiEvent>>> {
+        self.rate_limiter.until_ready().await;
+
         match &self.api.ws {
             Some(c) => {
                 let subscription: Subscription<SuiEvent> = c.subscribe_event(filter).await?;
@@ -465,6 +535,8 @@ impl EventApi {
     }
 
     pub async fn get_events(&self, digest: TransactionDigest) -> SuiRpcResult<Vec<SuiEvent>> {
+        self.rate_limiter.until_ready().await;
+            
         Ok(self.api.http.get_events(digest).await?)
     }
 
@@ -475,6 +547,8 @@ impl EventApi {
         limit: Option<usize>,
         descending_order: bool,
     ) -> SuiRpcResult<EventPage> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self
             .api
             .http
@@ -542,11 +616,15 @@ impl PageTurner<QueryEventsRequest> for EventApi {
 #[derive(Clone)]
 pub struct QuorumDriverApi {
     api: Arc<RpcClient>,
+    rate_limiter: Arc<DefaultDirectRateLimiter>,
 }
 
 impl QuorumDriverApi {
-    pub(crate) fn new(api: Arc<RpcClient>) -> Self {
-        Self { api }
+    pub(crate) fn new(api: Arc<RpcClient>, rate_limiter: Arc<DefaultDirectRateLimiter>) -> Self {
+        Self {
+            api,
+            rate_limiter,
+        }
     }
 
     /// Execute a transaction with a FullNode client. `request_type`
@@ -562,6 +640,8 @@ impl QuorumDriverApi {
         options: SuiTransactionBlockResponseOptions,
         request_type: Option<ExecuteTransactionRequestType>,
     ) -> SuiRpcResult<SuiTransactionBlockResponse> {
+        self.rate_limiter.until_ready().await;
+
         let (tx_bytes, signatures) = tx.to_tx_bytes_and_signatures();
         let request_type = request_type.unwrap_or_else(|| options.default_execution_request_type());
         let mut response: SuiTransactionBlockResponse = self
@@ -603,6 +683,7 @@ impl QuorumDriverApi {
         c: &RpcClient,
         tx_digest: TransactionDigest,
     ) -> SuiRpcResult<()> {
+
         let start = Instant::now();
         loop {
             let resp = ReadApiClient::get_transaction_block(
@@ -634,15 +715,21 @@ impl QuorumDriverApi {
 #[derive(Debug, Clone)]
 pub struct GovernanceApi {
     api: Arc<RpcClient>,
+    rate_limiter: Arc<DefaultDirectRateLimiter>
 }
 
 impl GovernanceApi {
-    pub(crate) fn new(api: Arc<RpcClient>) -> Self {
-        Self { api }
+    pub(crate) fn new(api: Arc<RpcClient>, rate_limiter: Arc<DefaultDirectRateLimiter>) -> Self {
+        Self {
+            api,
+            rate_limiter,
+        }
     }
 
     /// Return all [DelegatedStake].
     pub async fn get_stakes(&self, owner: SuiAddress) -> SuiRpcResult<Vec<DelegatedStake>> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_stakes(owner).await?)
     }
 
@@ -652,16 +739,22 @@ impl GovernanceApi {
         &self,
         epoch: Option<BigInt<u64>>,
     ) -> SuiRpcResult<SuiCommittee> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_committee_info(epoch).await?)
     }
 
     /// Return the latest SUI system state object on-chain.
     pub async fn get_latest_sui_system_state(&self) -> SuiRpcResult<SuiSystemStateSummary> {
+        self.rate_limiter.until_ready().await;
+
         Ok(self.api.http.get_latest_sui_system_state().await?)
     }
 
     /// Return the reference gas price for the network
     pub async fn get_reference_gas_price(&self) -> SuiRpcResult<u64> {
+        self.rate_limiter.until_ready().await;
+
         Ok(*self.api.http.get_reference_gas_price().await?)
     }
 }

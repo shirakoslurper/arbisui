@@ -14,6 +14,7 @@ pub mod constants;
 pub mod sui_sdk_utils;
 pub mod turbos_pool;
 pub mod cetus_pool; 
+pub mod arbitrage;
 pub use crate::markets::*;
 pub use crate::market_graph::*;
 pub use crate::cetus::*;

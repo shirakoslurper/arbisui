@@ -2,6 +2,8 @@ use std::thread::current;
 use std::cmp;
 use std::num::Wrapping;
 
+use std::time::Instant;
+
 #[derive(Clone, Debug)]
 pub struct Pool {
     pub tick_spacing: u32,
@@ -69,16 +71,6 @@ pub fn swap_in_pool(
     };
 
     let mut amount_remaining = amount_specified;
-    // let mut next_score_and_tick = tick::first_score_and_tick_for_swap(
-    //     &pool.tick_manager,
-    //     pool.current_tick_index,
-    //     a_to_b
-    // );
-    // let mut next_index_and_tick = tick::first_index_and_tick_for_swap(
-    //     &pool.tick_manager,
-    //     pool.current_tick_index,
-    //     a_to_b
-    // );
 
     let mut next_index = tick::first_index_for_swap(
         &pool.tick_manager,
@@ -106,17 +98,11 @@ pub fn swap_in_pool(
 
         // println!("next_index_and_tick pre advance: {:#?}", next_index_and_tick);
 
-        // let (next_index, next_tick) = if let Some((index, tick)) = next_index_and_tick {
-        //     (index.clone(), tick.clone())
-        // } else {
-        //     panic!("current_score_and_tick is none")
-        // };
-
         // println!("next_index (advanced in prev loop): {}", next_index.unwrap());
-
         let next_tick = pool.tick_manager.ticks
             .get(&next_index.unwrap())
             .unwrap();
+
 
         // println!("next_index = {}, next_tick = {:#?}", next_index, next_tick);
 
@@ -143,15 +129,6 @@ pub fn swap_in_pool(
         // println!("next_index_and_tick post advance: {:#?}", next_index_and_tick);
         // panic!("HALT");
 
-
-        // //// TESTING WITH ADVANCED TICK
-        // if let Some((index, tick)) = next_index_and_tick.clone() {
-        //     if next_index != next_tick_index {
-        //         println!("{} != {}", next_index, next_tick_index);
-        //     }
-        // } else {
-        //     panic!("current_score_and_tick is none");
-        // };
 
         // loc7
         let sqrt_price_next_tick_w_limit = if a_to_b {
@@ -204,9 +181,6 @@ pub fn swap_in_pool(
             simulating
         );
 
-        // if sqrt_price_next_computed < sqrt_price_next_computed {
-        //     println!("{} < {}", sqrt_price_next, sqrt_price);
-        // }
 
         if sqrt_price_next_tick_w_limit == next_tick_sqrt_price {
             // println!("YES");
@@ -228,9 +202,6 @@ pub fn swap_in_pool(
                 simulating
             );
 
-            // println!("contains crossed tick {}: {}", compute_swap_state.current_tick_index, pool.tick_manager.ticks.contains_key(&compute_swap_state.current_tick_index));
-            // next_index = pool.tick_manager.ticks.get(&next_index.unwrap());
-            // next_index_and_tick = Some(next_index, pool.tick_manager.ticks.get(&next_index_and_tick.0).unwrap();
         } else if compute_swap_state.current_sqrt_price != next_tick_sqrt_price {
             compute_swap_state.current_sqrt_price = sqrt_price_next_tick_w_limit;
             compute_swap_state.current_tick_index = tick_math::tick_index_from_sqrt_price(compute_swap_state.current_sqrt_price);

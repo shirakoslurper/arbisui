@@ -417,11 +417,46 @@ impl CetusMarket {
     }
 
     // Better handling of computing pool being None
-    fn compute_swap_x_to_y(&mut self, amount_specified: u64) -> (u64, u64) {
+    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u64) -> (u64, u64) {
         // println!("cetus compute_swap_x_to_y()");
 
         let swap_result = cetus_pool::swap_in_pool(
             self.computing_pool.as_mut().unwrap(),
+            true,
+            true,
+            cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
+            amount_specified,
+            0, // It's hard coded to 0 for now (replace with global config value)
+            0,
+            false
+        );
+
+        (swap_result.amount_in, swap_result.amount_out)
+    }
+
+    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u64) -> (u64, u64) {
+        // println!("cetus compute_swap_y_to_x()");
+
+        let swap_result = cetus_pool::swap_in_pool(
+            self.computing_pool.as_mut().unwrap(),
+            false,
+            true,
+            cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
+            amount_specified,
+            0, // It's hard coded to 0 for now (replace with global config value)
+            0,
+            false
+        );
+
+        (swap_result.amount_out, swap_result.amount_in)
+    }
+
+    // Better handling of computing pool being None
+    fn compute_swap_x_to_y(&self, amount_specified: u64) -> (u64, u64) {
+        // println!("cetus compute_swap_x_to_y()");
+
+        let swap_result = cetus_pool::swap_in_pool(
+            &mut self.computing_pool.clone().unwrap(),
             true,
             true,
             cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
@@ -434,11 +469,11 @@ impl CetusMarket {
         (swap_result.amount_in, swap_result.amount_out)
     }
 
-    fn compute_swap_y_to_x(&mut self, amount_specified: u64) -> (u64, u64) {
+    fn compute_swap_y_to_x(&self, amount_specified: u64) -> (u64, u64) {
         // println!("cetus compute_swap_y_to_x()");
 
         let swap_result = cetus_pool::swap_in_pool(
-            self.computing_pool.as_mut().unwrap(),
+            &mut self.computing_pool.clone().unwrap(),
             false,
             true,
             cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
@@ -491,13 +526,25 @@ impl Market for CetusMarket {
         self.pool_id()
     }
 
-    fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128) {
+    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+        let result = self.compute_swap_x_to_y_mut(amount_specified as u64);
+
+        (result.0 as u128, result.1 as u128)
+    }
+
+    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+        let result = self.compute_swap_y_to_x_mut(amount_specified as u64);
+
+        (result.0 as u128, result.1 as u128)
+    }
+
+    fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
         let result = self.compute_swap_x_to_y(amount_specified as u64);
 
         (result.0 as u128, result.1 as u128)
     }
 
-    fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128) {
+    fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
         let result = self.compute_swap_y_to_x(amount_specified as u64);
 
         (result.0 as u128, result.1 as u128)

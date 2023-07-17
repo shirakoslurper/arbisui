@@ -4,6 +4,8 @@ use fixed::types::{U64F64, I64F64};
 use std::num::Wrapping;
 use ethnum::U256;
 
+use std::time::Instant;
+
 #[derive(Debug, Clone)]
 pub struct Tick {
     // id: UID,
@@ -155,11 +157,17 @@ pub fn compute_swap_result(
     while compute_swap_state.amount_specified_remaining > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
 
         let sqrt_price_start = compute_swap_state.sqrt_price;
+
+        // let now = Instant::now();
+
         let (mut tick_next, initialized) = next_initialized_tick_within_one_word(
             pool,
             compute_swap_state.tick_current_index,
             a_to_b
         );
+
+        // let elasped = now.elapsed();
+        // println!("Bit Map Elasped: {:.2?}", elapsed);
 
         if tick_next < math_tick::MIN_TICK_INDEX {
             tick_next = math_tick::MIN_TICK_INDEX;
