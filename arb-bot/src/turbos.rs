@@ -14,14 +14,22 @@ use custom_sui_sdk::{
     apis::{
         QueryEventsRequest,
         GetDynamicFieldsRequest
-    }
+    },
+    transaction_builder::TransactionBuilder
 };
 
 use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError, ObjectType}, object::Object};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
+use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use sui_sdk::types::transaction::Argument;
 use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiObjectDataOptions};
  
+use sui_sdk::json::SuiJsonValue;
+
 use move_core_types::language_storage::{StructTag, TypeTag};
+use move_core_types::identifier::Identifier;
+use move_core_types::account_address::AccountAddress;
+use move_core_types::value::MoveValue;
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
@@ -99,7 +107,7 @@ impl Turbos {
                 // println!("{:#?}", object_response);
                 let fields = sui_sdk_utils::read_fields_from_object_response(&object_response).context(format!("Missing fields for pool {}.", pool_id))?;
 
-                let (coin_x, coin_y) = get_coin_pair_from_object_response(&object_response)?;
+                let (coin_x, coin_y, fee) = get_coin_pair_and_fee_from_object_response(&object_response)?;
 
                 let coin_x_sqrt_price = U64F64::from_bits(
                     u128::from_str(
@@ -121,6 +129,7 @@ impl Turbos {
                             parent_exchange: self.clone(),  // reevaluate clone
                             coin_x,
                             coin_y,
+                            fee,
                             pool_id,
                             coin_x_sqrt_price: Some(coin_x_sqrt_price),
                             coin_y_sqrt_price: Some(coin_y_sqrt_price),
@@ -383,16 +392,21 @@ impl Exchange for Turbos {
         self.get_pool_id_to_object_response(sui_client, markets).await
     }
 }
+
 #[derive(Debug, Clone)]
 struct TurbosMarket {
     parent_exchange: Turbos,
     coin_x: TypeTag,
     coin_y: TypeTag,
+    fee: TypeTag,
     pool_id: ObjectID,
     coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
     coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
     computing_pool: Option<turbos_pool::Pool>
 }
+
+const SUI_STD_LIB_PACKAGE_ID: &str = "0x0000000000000000000000000000000000000000000000000000000000000002";
+const CLOCK_OBJECT_ID: &str = "0x0000000000000000000000000000000000000000000000000000000000000006";
 
 impl TurbosMarket {
     fn coin_x(&self) -> &TypeTag {
@@ -447,6 +461,10 @@ impl TurbosMarket {
 
     fn pool_id(&self) -> &ObjectID {
         &self.pool_id
+    }
+
+    fn package_id(&self) -> &ObjectID {
+        &self.parent_exchange.package_id
     }
 
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
@@ -518,6 +536,119 @@ impl TurbosMarket {
         }
     }
 
+    // async fn add_swap_to_programmable_trasaction(
+    //     &self,
+    //     transaction_builder: &TransactionBuilder,
+    //     pt_builder: &mut ProgrammableTransactionBuilder,
+    //     orig_coin: ObjectID,
+    //     orig_type: &TypeTag,
+    //     dest_type: &TypeTag,
+    //     recipient: &SuiAddress,
+    //     deadline: u64,  // Should be option for interface?
+    //     amount_in: u128,
+    // ) -> Result<(), a> {
+    //     // Very rough but lets do thisss
+    //     // We can't add to a result unless theres a function that exists..
+
+    //     Ok(())
+    // }
+
+    // async fn add_swap_to_programmable_trasaction(
+    //     &self,
+    //     transaction_builder: &TransactionBuilder,
+    //     pt_builder: &mut ProgrammableTransactionBuilder,
+    //     orig: &TypeTag,
+    //     dest: &TypeTag,
+    //     recipient: &SuiAddress,
+    //     deadline: u64,  // Should be option for interface?
+    //     amount_in: u128,
+    // ) -> Result<Argument> {
+
+    //     // let clock_timestamp = transaction_builder.programmable_move_call(
+    //     //     pt_builder,
+    //     //     ObjectID::from_str(SUI_STD_LIB_PACKAGE_ID),
+    //     //     "clock",
+    //     //     "timestamp_ms",
+    //     //     vec![],
+
+    //     // )
+
+    //     // // swap_a_b and swap_b_c arguments
+    //     // // Arg0: &mut Pool<Ty0, Ty1, Ty2>
+    //     // let pool = SuiJsonValue::from_object_id(self.pool_id.clone());
+    //     // // Arg1: vector<Coin<Ty0 or Ty1>>
+    //     // // let coin = 
+
+    //     // // let coins_orig = SuiJsonValue::move_value_to_json(
+    //     // //     MoveValue::Vector(
+    //     // //         Vec![]
+    //     // //     )
+    //     // // );
+
+    //     // // Arg2: u64
+    //     // let amount_specified = SuiJsonValue::move_value_to_json(
+    //     //     MoveValue::U64(amount_in as u64)
+    //     // );
+    //     // // Arg3: u64
+    //     // let amount_threshold;
+    //     // // Arg4: u128
+    //     // let sqrt_price_limit = SuiJsonValue::move_value_to_json(
+    //     //     MoveValue::U128(turbos_pool::math_tick::MAX_SQRT_PRICE_X64)
+    //     // );
+    //     // // Arg5: bool
+    //     // let is_exact_in = SuiJsonValue::move_value_to_json(
+    //     //     MoveValue::Bool(true)
+    //     // );
+    //     // // Arg6: address
+    //     // let recipient = SuiJsonValue::move_value_to_json(
+    //     //     MoveValue::Address(
+    //     //         AccountAddress::from(recipient)
+    //     //     )
+    //     // );
+    //     // // Arg7: u64, Needs to be based off of current clock time
+    //     // let deadline;
+    //     // // Arg8: &Clock
+    //     // let clock = SuiJsonValue::from_object_id(
+    //     //     ObjectID::from_str(CLOCK)
+    //     // );
+    //     // // Arg9: &Versioned
+    //     // let versioned = SuiJsonValue::from_object_id(
+
+    //     // );
+        
+    //     // // Transaction Context for Entry functions is implicit.
+    //     // // // Arg10: &mut TxContext
+    //     // // let ctx = SuiJsonValue::from_object_id(
+
+    //     // // );
+
+
+
+
+    //     if (orig, dest) == (self.coin_x, self.coin_y) {
+
+    //         let arg = transaction_builder.programmable_move_call(
+    //             pt_builder.
+    //             self.parent_exchange.package_id().clone(),
+    //             Identifier::from_str("swap_router"),
+    //             Identifier::from_str("swap_a_b"),
+    //             vec![self.coin_x.clone(), self.coin_y.clone(), self.fee.clone()],
+    //             vec![]
+    //         )
+    //     } else (orig, dest) == (self.coin_y, self.coin_x) {
+    //         let arg = transaction_builder.programmable_move_call(
+    //             pt_builder,
+    //             self.parent_exchange.package_id().clone(),
+    //             Identifier::from_str("swap_router"),
+    //             Identifier::from_str("swap_a_b"),
+    //             vec![self.coin_x.clone(), self.coin_y.clone(), self.fee.clone()],
+    //             vec![]
+    //         )
+    //     } else {
+    //         Err(anyhow!("AAAA"))
+    //     }
+    // }
+
 }
 
 #[async_trait]
@@ -546,6 +677,10 @@ impl Market for TurbosMarket {
         self.pool_id()
     }
 
+    fn package_id(&self) -> &ObjectID {
+        self.package_id()
+    }
+
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
         self.compute_swap_x_to_y_mut(amount_specified)
     }
@@ -568,18 +703,26 @@ impl Market for TurbosMarket {
 
 }
 
-fn get_coin_pair_from_object_response (
+fn get_coin_pair_and_fee_from_object_response (
     object_response: &SuiObjectResponse
-) -> Result<(TypeTag, TypeTag), anyhow::Error> {
+) -> Result<(TypeTag, TypeTag, TypeTag), anyhow::Error> {
     // println!("{:#?}", response);
     if let Some(data) = object_response.clone().data {
         if let Some(type_) = data.type_ {
             if let ObjectType::Struct(move_object_type) = type_ {
                 let type_params = move_object_type.type_params();
 
+                // Ty0 is the first coin
+                // Ty1 is the second coin
+                // Ty2 is a fee object
+
+                // println!("{:#?}", type_params);
+                // panic!();
+
                 Ok(
                     (
                         type_params.get(0).context("Missing coin_x")?.clone(),
+                        type_params.get(1).context("Missing coin_y")?.clone(),
                         type_params.get(1).context("Missing coin_y")?.clone()
                     )
                 )

@@ -15,6 +15,8 @@ use custom_sui_sdk::{
     }
 };
 
+use sui_sdk::json::SuiJsonValue;
+
 use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 use sui_sdk::rpc_types::{EventFilter, SuiEvent, SuiMoveValue, SuiObjectDataOptions, SuiMoveStruct, SuiObjectResponse};
@@ -416,6 +418,10 @@ impl CetusMarket {
         &self.pool_id
     }
 
+    fn package_id(&self) -> &ObjectID {
+        &self.parent_exchange.package_id
+    }
+
     // Better handling of computing pool being None
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u64) -> (u64, u64) {
         // println!("cetus compute_swap_x_to_y()");
@@ -498,6 +504,60 @@ impl CetusMarket {
             false
         }
     }
+
+    // async fn add_swap_to_programmable_trasaction(
+    //     &self,
+    //     transaction_builder: &TransactionBuilder,
+    //     pt_builder: &mut ProgrammableTransactionBuilder,
+    //     orig_coin: Coin,
+    //     orig_type: &TypeTag,
+    //     dest_type: &TypeTag,
+    //     recipient: &SuiAddress,
+    //     deadline: u64,  // Should be option for interface?
+    //     amount_in: u128,
+    // ) -> Result<()> {
+    //     // Very rough but lets do thisss
+    //     // We can't add to a result unless theres a function that exists..
+
+    //     // swap_a_b and swap_b_c arguments
+    //     // Arg0: &mut Pool<Ty0, Ty1, Ty2>
+    //     let pool = SuiJsonValue::from_object_id(self.pool_id.clone());
+    //     // Arg1: vector<Coin<Ty0 or Ty1>>
+    //     // let coin = 
+
+    //     let coin = SuiJsonValue::from_object_id(orig_coin);
+
+    //     // let coins_orig = pt_builder.make_object_vec(vec![])
+
+    //     // Arg2: u64
+    //     let amount_specified = SuiJsonValue::move_value_to_json(
+    //         MoveValue::U64(amount_in as u64)
+    //     );
+    //     // Arg3: u64
+    //     let amount_threshold;
+    //     // Arg4: u128
+    //     let sqrt_price_limit = SuiJsonValue::move_value_to_json(
+    //         MoveValue::U128(turbos_pool::math_tick::MAX_SQRT_PRICE_X64)
+    //     );
+    //     // Arg5: bool
+    //     let is_exact_in = SuiJsonValue::move_value_to_json(
+    //         MoveValue::Bool(true)
+    //     );
+    //     // Arg6: address
+    //     let recipient = SuiJsonValue::move_value_to_json(
+    //         MoveValue::Address(
+    //             AccountAddress::from(recipient)
+    //         )
+    //     );
+    //     // Arg7: u64, Needs to be based off of current clock time
+    //     let deadline;
+    //     // Arg8: &Clock
+    //     let clock = SuiJsonValue::from_object_id(
+    //         ObjectID::from_str(CLOCK)
+    //     );
+
+    //     Ok(())
+    // }
 }
 
 #[async_trait]
@@ -524,6 +584,10 @@ impl Market for CetusMarket {
 
     fn pool_id(&self) -> &ObjectID {
         self.pool_id()
+    }
+
+    fn package_id(&self) -> &ObjectID {
+        self.package_id()
     }
 
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {

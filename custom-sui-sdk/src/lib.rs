@@ -14,7 +14,7 @@ use move_core_types::language_storage::StructTag;
 use sui_json_rpc::{
     CLIENT_SDK_TYPE_HEADER, CLIENT_SDK_VERSION_HEADER, CLIENT_TARGET_API_VERSION_HEADER,
 };
-use sui_sdk::rpc_types::{
+use sui_json_rpc_types::{
     ObjectsPage, SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponse,
     SuiObjectResponseQuery,
 };
@@ -22,12 +22,15 @@ use sui_transaction_builder::{DataReader, TransactionBuilder};
 use sui_types::base_types::{ObjectID, ObjectInfo, SuiAddress};
 
 use crate::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi};
-use sui_sdk::error::{Error, SuiRpcResult};
+use crate::error::{Error, SuiRpcResult};
 
 use governor::DefaultDirectRateLimiter;
 
 pub mod apis;
 pub mod error;
+pub mod transaction_builder;
+pub mod programmable_transaction_sui_json;
+
 pub const SUI_COIN_TYPE: &str = "0x2::sui::SUI";
 const WAIT_FOR_TX_TIMEOUT_SEC: u64 = 60;
 

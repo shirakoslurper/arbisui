@@ -8,16 +8,17 @@ use move_core_types::language_storage::TypeTag;
 
 use std::fmt::{Debug, Error, Formatter};
 
+use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 
 use crate::markets::Market;
 use crate::market_graph::MarketGraph;
 
 #[derive(Debug, Clone)]
 pub struct OptimizedResult<'a> {
-    path: Vec<DirectedLeg<'a>>,
-    amount_in: u128,
-    amount_out: u128,
-    profit: I256
+    pub path: Vec<DirectedLeg<'a>>,
+    pub amount_in: u128,
+    pub amount_out: u128,
+    pub profit: I256
 }
 
 #[derive(Clone)]
@@ -58,6 +59,9 @@ pub fn optimize_starting_amount_in<'a>(
     let mut delta = 0;
 
     let mut expanded_paths = Vec::<Vec::<DirectedLeg>>::new();
+    // println!("Expanded paths: {:#?}", expanded_paths);
+    expanded_paths.push(vec![]);
+    // println!("Expanded paths: {:#?}", expanded_paths);
 
     for pair in path[..].windows(2) {
         let orig = pair[0];
@@ -90,6 +94,8 @@ pub fn optimize_starting_amount_in<'a>(
         expanded_paths = expanded_paths_extended;
     }
 
+    // println!("Expanded paths: {:#?}", expanded_paths);
+
     // Golden section search:
     // - for unimodal functions
     // - does not get caught in local extrema
@@ -105,6 +111,10 @@ pub fn optimize_starting_amount_in<'a>(
 
         let mut c = b - (((b - a) * gr_den) / gr_num);
         let mut d = a + (((b - a) * gr_den) / gr_num);
+
+        if b < a {
+            println!("b: {}, a: {}", b , a);
+        }
 
         while (I256::from(b) - I256::from(a)).abs() > 1 {
             let amount_out_c = amount_out(&expanded_path, c)?;
@@ -136,7 +146,7 @@ pub fn optimize_starting_amount_in<'a>(
         )
     }
     
-    println!("optimized_results: {:#?}", optimized_results);
+    // println!("optimized_results: {:#?}", optimized_results);
 
     let first_optimized_result = optimized_results.pop().context("optimized_results is empty")?;
 
@@ -152,6 +162,10 @@ pub fn optimize_starting_amount_in<'a>(
                 }
             }
         );
+
+    // if profit_maximized_result.profit > 0 {
+        // println!("{} HOP: max_profit = {}", profit_maximized_result.path.len(), profit_maximized_result.profit);
+    // }
 
     Ok(profit_maximized_result)
 }
@@ -193,11 +207,17 @@ pub fn amount_out(path: &[DirectedLeg], mut amount_in: u128) -> Result<u128, any
     Ok(amount_in)
 }
 
-// // We can cache these...
-// pub fn expand_paths(path: &[TypeTag], market_graph: &MarketGraph) {
+// pub fn build_programmable_transaction_block(path: &[DirectedLeg]) {
+//     let mut pt_builder = ProgrammableTransactionBuilder::new();
 
-//     let expanded_paths = Vec::new(Vec::new());
-//     let expanded_paths = 
+//     // for leg in path {
+//     //     pt_builder.programmable_move_call(
+//     //         leg.market.package_id().clone(),
+//     //         module_identifier,
+//     //         function_identifier,
+//     //         type_arguments
+//     //     )
+//     // }
 
 // }
 

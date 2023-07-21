@@ -11,13 +11,18 @@ use futures::future;
 use sui_sdk::types::object::{Object, self};
 
 use std::cmp;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 use std::time::Instant;
 use std::sync::Arc;
 
-use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata, SuiObjectResponse};
+use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata, SuiObjectResponse, SuiTypeTag};
 use sui_sdk::types::base_types::ObjectID;
+use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+
+
+use custom_sui_sdk::transaction_builder::{TransactionBuilder, ProgrammableMergeCoinsArg};
+use custom_sui_sdk::programmable_transaction_sui_json::ProgrammableTransactionArg;
 
 use move_core_types::language_storage::TypeTag;
 
@@ -28,6 +33,8 @@ use petgraph::algo::all_simple_paths;
 use governor::{Quota, RateLimiter};
 use std::num::NonZeroU32;
 use nonzero_ext::*;
+
+use rayon::prelude::*;
 
 use crate::sui_sdk_utils;
 
@@ -141,24 +148,112 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let paths = all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7)).collect::<Vec<Vec<&TypeTag>>>().clone();
 
-    // let now = Instant::now();
+    println!("Num cycles paths: {}", paths.len());
+
+    // let cross_exchange_paths = paths
+    //     .into_iter()
+    //     .filter(|path| {
+    //         let mut market_set = HashSet::new();
+
+    //         for pair in path[..].windows(2) {
+    //             for market_info in market_graph.graph.edge_weight(pair[0], pair[1]).unwrap() {
+    //                 market_set.insert(market_info.market.package_id().clone());
+    //             }
+    //         }
+
+    //         market_set.len() > 1
+    //     })
+    //     .collect::<Vec<_>>();
+
+    // println!("Num cycles cross_exchange_paths: {}", cross_exchange_paths.len());
 
     market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
 
+    // let mut total_profit = I256::from(0_u8);
 
+    let now = Instant::now();
 
-    // let paths = all_simple_paths(&market_graph.graph, &base_coin, &base_coin, 1, Some(7)).collect::<Vec<Vec<&TypeTag>>>().clone();
+    let mut optimized_results = paths
+        .par_iter()
+        .map(|path| {
+            arbitrage::optimize_starting_amount_in(path, &market_graph)
+        })
+        .collect::<Result<Vec<_>, anyhow::Error>>()?;
 
-    // let elapsed = now.elapsed();
-    // println!("Elasped: {:.2?}", elapsed);
+    optimized_results = optimized_results
+        .into_iter()
+        .filter(|optimized_result| optimized_result.profit > 0)
+        .collect::<Vec<_>>();
+    
+    // println!("{:#?}", optimized_results[0]);
 
-    println!("Num cycles: {}", paths.len());
+    let total_profit = optimized_results
+        .iter()
+        .fold(I256::from(0u8), |tp, optimized_result| {
+            tp + optimized_result.profit
+        });
 
-    let mut total_profit = I256::from(0_u8);
+    println!("total_profit: {}", total_profit);
 
-    // let optimized_results = paths[..]
-    //     .iter()
-    //     .map()
+    let most_profitable = optimized_results
+        .iter()
+        .fold(optimized_results[0].clone(), |max_result, optimized_result| {
+            if max_result.profit > optimized_result.profit {
+                max_result
+            } else {
+                optimized_result.clone()
+            }
+        });
+
+    println!("{:#?}", most_profitable);
+
+    // let transaction_builder = TransactionBuilder::new()
+    // let mut pt_builder = ProgrammableTransactionBuilder::new();
+
+    // if most_profitable.amount_in < 10_000_000_000 {
+    //     for leg in most_profitable.path {
+    //         // Yields SuiRpcResult<Vec<Coin>>
+    //         let coins = run_data
+    //             .sui_client
+    //             .coin_api(
+    //             )
+    //             .select_coins(
+    //                 owner_sui_address,
+    //                 Some(format!("0x{}", leg.coin_x)),
+    //                 most_profitable.amount_in,
+    //                 vec![]
+    //             )
+    //             .await()?;
+
+    //         let primary_coin = coins[0];
+
+    //         if coins.len() > 1 {
+    //             for coin in coins[1..] {
+    //                 transaction_builder::programmable_merge_coins(
+    //                     &mut pt_builder,
+    //                     ProgrammableMergeCoinsArg::CoinObjectID(
+    //                         primary_coin.coin_object_id.clone()
+    //                     ),
+    //                     ProgrammableMergeCoinsArg::CoinObjectID(
+    //                         coin.coin_object_id.clone()
+    //                     ),
+    //                     SuiTypeTag::new(coin[0])
+    //                 ).await?;
+    //             }
+    //         }
+
+    //         // programmable turbos move call
+    //         // for now lets make it async so that the interface function 
+    //         // gets the clock time for us and we don't have to feed it anything?
+
+    //         // programmable
+    //     }
+    // }
+
+    let elapsed = now.elapsed();
+    println!("Elasped: {:.2?}", elapsed);
+
+    // println!("{:#?}", optimized_results);
 
     // // The following is all synchronous
     // paths
@@ -523,101 +618,4 @@ async fn main() -> Result<(), anyhow::Error> {
     // println!("Total Profit: {}", total_profit);
 
     Ok(())
-}
-
-fn amount_out<'a>(market_graph: &mut MarketGraph<'a>, path: &Vec<&'a TypeTag>, orig_amount_in: u128) -> u128 {
-    let mut amount_in = orig_amount_in;
-
-    // Oh shit hmmm 
-    // We're modifying amount_in more times than we should 
-    // (especially if there are multiple markets for a pair)
-
-    // let now = Instant::now();
-
-    for pair in path[..].windows(2) {
-        let orig = pair[0];
-        let dest = pair[1];
-
-        let markets = market_graph
-            .graph
-            .edge_weight_mut(orig, dest)
-            .context("Missing edge weight")
-            .unwrap();
-
-        // println!("num markets: {}", markets.len());
-
-        // AHHH we dont want to choose the max amount out but 
-        // rather the one with the best rate?
-        // Ah nah we gotta optimize some other way lmeow
-
-        (_, amount_in) = markets
-            .iter_mut()
-            .map(|market_info| {
-                let coin_x = market_info.market.coin_x();
-                let coin_y = market_info.market.coin_y();
-
-                // println!("COMPUTTTTTING");
-
-                // Add a condition that we return a certain amount if amount_in == 0
-
-                if (coin_x, coin_y) == (orig, dest) {
-                    // println!("AASS {}", market_info.market.coin_x_price().unwrap());
-                    if market_info.market.viable() {
-                        if amount_in == 0 {
-                            return (U64F64::from(0_u8), 0);
-                        }
-
-                        let (amount_x, amount_y) = market_info.market.compute_swap_x_to_y_mut(amount_in);
-
-                        // amount_in = amount_y;
-                        // println!("amount_in: {}, amount_out: {}", amount_x, amount_y);
-                        // amount_out = amount_x;
-                        // market_info.market.coin_x_price().unwrap()
-                        (market_info.market.coin_x_price().unwrap(), amount_y)
-                    } else {
-                        // println!("NO LIQUIDITY!!");
-                        // amount_in = 0;
-                        // U64F64::from_num(0)
-                        (U64F64::from(0_u8), 0)
-                    }
-
-                } else if (coin_y, coin_x) == (orig, dest){
-                    // println!("AERE {}", market_info.market.coin_y_price().unwrap());
-                    if market_info.market.viable() {
-                        if amount_in == 0 {
-                            return (U64F64::from(0_u8), 0);
-                        }
-
-                        let (amount_x, amount_y) = market_info.market.compute_swap_y_to_x_mut(amount_in);
-                        // amount_in = amount_x;
-                        // println!("amount_in: {}, amount_out: {}", amount_y, amount_x);
-                        // amount_out = amount_y;
-                        // market_info.market.coin_y_price().unwrap()
-                        (market_info.market.coin_y_price().unwrap(), amount_x)
-                    } else {
-                        // println!("NO LIQUIDITY!!");
-                        // amount_in = 0;
-                        // U64F64::from_num(0)
-                        (U64F64::from(0_u8), 0)
-                    }
-                } else {
-                    // println!("AADFFS");
-                    panic!("coin pair does not match");
-                }
-            })
-            .fold((U64F64::from(0_u8), 0), |(max_rate, best_amt_out), (rate, amt_out)| {
-                if rate > max_rate {
-                    (rate, amt_out)
-                } else {
-                    (max_rate, best_amt_out)
-                }
-            });
-
-        // amount_in
-    }
-
-    // let elapsed = now.elapsed();
-    // println!("Len: {}, Elasped: {:.2?}", path.len(), elapsed);
-
-    amount_in
 }

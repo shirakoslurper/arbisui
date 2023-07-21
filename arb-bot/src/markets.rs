@@ -26,6 +26,7 @@ pub trait Market: Send + Sync + DynClone {
     fn coin_y_price(&self) -> Option<U64F64>;
     async fn update_with_object_response(&mut self, sui_client: &SuiClient, object_response: &SuiObjectResponse) -> Result<(), anyhow::Error>;
     fn pool_id(&self) -> &ObjectID;
+    fn package_id(&self) -> &ObjectID;
     // fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128);
     // fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128);
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128);
