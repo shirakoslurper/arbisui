@@ -777,7 +777,7 @@ impl TransactionBuilder {
     /////////////////////////////////
     
     // Consumes programmable transaction builder
-    async fn finish_building_programmable_transaction(
+    pub async fn finish_building_programmable_transaction(
         &self,
         builder: ProgrammableTransactionBuilder,
         signer: SuiAddress,
@@ -817,7 +817,7 @@ impl TransactionBuilder {
         function: &str,
         type_args: Vec<SuiTypeTag>,
         call_args: Vec<ProgrammableTransactionArg>,
-    ) -> anyhow::Result<Argument> {
+    ) -> anyhow::Result<ProgrammableTransactionArg> {
         let module = Identifier::from_str(module)?;
         let function = Identifier::from_str(function)?;
 
@@ -833,9 +833,11 @@ impl TransactionBuilder {
             .await?;
 
         Ok(
-            builder.command(Command::move_call(
-                package, module, function, type_args, call_args,
-            ))
+            ProgrammableTransactionArg::Argument(
+                builder.command(Command::move_call(
+                    package, module, function, type_args, call_args,
+                ))
+            )
         )
     }
 

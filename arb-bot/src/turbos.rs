@@ -15,14 +15,15 @@ use custom_sui_sdk::{
         QueryEventsRequest,
         GetDynamicFieldsRequest
     },
-    transaction_builder::TransactionBuilder
+    transaction_builder::TransactionBuilder,
+    programmable_transaction_sui_json::ProgrammableTransactionArg
 };
 
-use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError, ObjectType}, object::Object};
+use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError, ObjectType, SuiAddress}, object::Object};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use sui_sdk::types::transaction::Argument;
-use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiObjectDataOptions};
+use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiObjectDataOptions, SuiTypeTag};
  
 use sui_sdk::json::SuiJsonValue;
 
@@ -36,36 +37,50 @@ use std::time::{Duration, Instant};
 use crate::{markets::{Exchange, Market}, sui_sdk_utils::get_fields_from_object_response};
 use crate::sui_sdk_utils::{self, sui_move_value};
 use crate::turbos_pool;
+use crate::sui_json_utils::move_value_to_json;
 
 #[derive(Debug, Clone)]
 pub struct Turbos {
-    package_id: ObjectID
+    original_package_id: ObjectID,
+    package_id: ObjectID,
+    versioned_id: ObjectID
 }
 
 impl Turbos {
-    pub fn new(package_id: ObjectID) -> Self {
+    pub fn new(original_package_id: ObjectID, package_id: ObjectID, versioned_id: ObjectID) -> Self {
         Turbos {
+            original_package_id,
             package_id,
+            versioned_id,
         }
     }
 }
 
-impl FromStr for Turbos {
-    type Err = anyhow::Error;
+// impl FromStr for Turbos {
+//     type Err = anyhow::Error;
 
-    fn from_str(package_id_str: &str) -> Result<Self, anyhow::Error> {
-        Ok(
-            Turbos {
-                package_id: ObjectID::from_str(package_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
-            }
-        )
-    }
-}
+//     fn from_str(package_id_str: &str, router_id_str: &str) -> Result<Self, anyhow::Error> {
+//         Ok(
+//             Turbos {
+//                 package_id: ObjectID::from_str(package_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
+//                 router_id: ObjectID::from_str(router_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
+//             }
+//         )
+//     }
+// }
 
 impl Turbos {
+    fn original_package_id(&self) -> &ObjectID {
+        &self.original_package_id
+    }
+
     fn package_id(&self) -> &ObjectID {
         &self.package_id
     }
+
+    // fn router_id(&self) -> &ObjectID {
+    //     &self.router_id
+    // }
 
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
         let pool_created_events = sui_client
@@ -74,7 +89,7 @@ impl Turbos {
                 QueryEventsRequest {
                     query: EventFilter::MoveEventType(
                         StructTag::from_str(
-                            &format!("{}::pool_factory::PoolCreatedEvent", self.package_id)
+                            &format!("{}::pool_factory::PoolCreatedEvent", self.original_package_id)
                         )?
                     ),
                     cursor: None,
@@ -105,6 +120,8 @@ impl Turbos {
             .into_iter()
             .map(|(pool_id, object_response)| {
                 // println!("{:#?}", object_response);
+                // panic!();
+
                 let fields = sui_sdk_utils::read_fields_from_object_response(&object_response).context(format!("Missing fields for pool {}.", pool_id))?;
 
                 let (coin_x, coin_y, fee) = get_coin_pair_and_fee_from_object_response(&object_response)?;
@@ -304,7 +321,7 @@ impl Turbos {
 
         // println!("Len pool dynamic fields: {}", pool_dynamic_field_infos.len());
 
-        let tick_object_type = format!("{}::pool::Tick", self.package_id);
+        let tick_object_type = format!("{}::pool::Tick", self.original_package_id);
 
         let tick_object_ids = pool_dynamic_field_infos
             .into_iter()
@@ -383,6 +400,10 @@ impl Exchange for Turbos {
     fn package_id(&self) -> &ObjectID {
        self.package_id()
     }
+
+    // fn router_id(&self) -> &ObjectID {
+    //     self.router_id()
+    //  }
 
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
         self.get_all_markets(sui_client).await
@@ -467,6 +488,10 @@ impl TurbosMarket {
         &self.parent_exchange.package_id
     }
 
+    // fn router_id(&self) -> &ObjectID {
+    //     &self.parent_exchange.router_id
+    // }
+
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
         
         let swap_state = turbos_pool::compute_swap_result(
@@ -536,118 +561,170 @@ impl TurbosMarket {
         }
     }
 
-    // async fn add_swap_to_programmable_trasaction(
-    //     &self,
-    //     transaction_builder: &TransactionBuilder,
-    //     pt_builder: &mut ProgrammableTransactionBuilder,
-    //     orig_coin: ObjectID,
-    //     orig_type: &TypeTag,
-    //     dest_type: &TypeTag,
-    //     recipient: &SuiAddress,
-    //     deadline: u64,  // Should be option for interface?
-    //     amount_in: u128,
-    // ) -> Result<(), a> {
-    //     // Very rough but lets do thisss
-    //     // We can't add to a result unless theres a function that exists..
+    async fn add_swap_to_programmable_transaction(
+        &self,
+        transaction_builder: &TransactionBuilder,
+        pt_builder: &mut ProgrammableTransactionBuilder,
+        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        x_to_y: bool,
+        amount_in: u128,
+        amount_out: u128,
+        recipient: SuiAddress
+    ) -> Result<(), anyhow::Error> {
 
-    //     Ok(())
-    // }
+        // Arg8: &Clock
+        let clock = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::from_object_id(
+                ObjectID::from_str(CLOCK_OBJECT_ID)?
+            )
+        );
 
-    // async fn add_swap_to_programmable_trasaction(
-    //     &self,
-    //     transaction_builder: &TransactionBuilder,
-    //     pt_builder: &mut ProgrammableTransactionBuilder,
-    //     orig: &TypeTag,
-    //     dest: &TypeTag,
-    //     recipient: &SuiAddress,
-    //     deadline: u64,  // Should be option for interface?
-    //     amount_in: u128,
-    // ) -> Result<Argument> {
+        let clock_timestamp = transaction_builder.programmable_move_call(
+            pt_builder,
+            ObjectID::from_str(SUI_STD_LIB_PACKAGE_ID)?,
+            "clock",
+            "timestamp_ms",
+            vec![],
+            vec![clock.clone()]
+        ).await?;
 
-    //     // let clock_timestamp = transaction_builder.programmable_move_call(
-    //     //     pt_builder,
-    //     //     ObjectID::from_str(SUI_STD_LIB_PACKAGE_ID),
-    //     //     "clock",
-    //     //     "timestamp_ms",
-    //     //     vec![],
+        let time_til_expiry = 1000u64;
 
-    //     // )
+        let clock_delta = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::U64(time_til_expiry)
+                )
+                .context("failed to convert MoveValue for amount_specified_is_input to JSON")?
+            )?
+        );
 
-    //     // // swap_a_b and swap_b_c arguments
-    //     // // Arg0: &mut Pool<Ty0, Ty1, Ty2>
-    //     // let pool = SuiJsonValue::from_object_id(self.pool_id.clone());
-    //     // // Arg1: vector<Coin<Ty0 or Ty1>>
-    //     // // let coin = 
+        // Arg7: u64
+        let deadline = transaction_builder.programmable_move_call(
+            pt_builder,
+            self.parent_exchange.package_id.clone(),
+            "math_u64",
+            "wrapping_add",
+            vec![],
+            vec![clock_timestamp, clock_delta]
+        ).await?;
 
-    //     // // let coins_orig = SuiJsonValue::move_value_to_json(
-    //     // //     MoveValue::Vector(
-    //     // //         Vec![]
-    //     // //     )
-    //     // // );
+        // swap_a_b and swap_b_c arguments
+        // Arg0: &mut Pool<Ty0, Ty1, Ty2>
+        let pool = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::from_object_id(self.pool_id.clone())
+        );
 
-    //     // // Arg2: u64
-    //     // let amount_specified = SuiJsonValue::move_value_to_json(
-    //     //     MoveValue::U64(amount_in as u64)
-    //     // );
-    //     // // Arg3: u64
-    //     // let amount_threshold;
-    //     // // Arg4: u128
-    //     // let sqrt_price_limit = SuiJsonValue::move_value_to_json(
-    //     //     MoveValue::U128(turbos_pool::math_tick::MAX_SQRT_PRICE_X64)
-    //     // );
-    //     // // Arg5: bool
-    //     // let is_exact_in = SuiJsonValue::move_value_to_json(
-    //     //     MoveValue::Bool(true)
-    //     // );
-    //     // // Arg6: address
-    //     // let recipient = SuiJsonValue::move_value_to_json(
-    //     //     MoveValue::Address(
-    //     //         AccountAddress::from(recipient)
-    //     //     )
-    //     // );
-    //     // // Arg7: u64, Needs to be based off of current clock time
-    //     // let deadline;
-    //     // // Arg8: &Clock
-    //     // let clock = SuiJsonValue::from_object_id(
-    //     //     ObjectID::from_str(CLOCK)
-    //     // );
-    //     // // Arg9: &Versioned
-    //     // let versioned = SuiJsonValue::from_object_id(
+        // Arg1: vector<Coin<Ty0 or Ty1>>
+        let orig_coins_arg = transaction_builder
+            .programmable_make_object_vec(
+                pt_builder,
+                orig_coins
+            ).await?;
 
-    //     // );
+        // Arg2: u64
+        let amount_specified = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::U64(amount_in as u64)
+                )
+                .context("failed to convert MoveValue for amount_specified to JSON")?
+            )?
+        );
+
+        // Arg3: u64
+        // The amount out we're expecting 
+        let amount_threshold = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::U64(amount_out as u64)
+                )
+                .context("failed to convert MoveValue for amount_specified to JSON")?
+            )?
+        );
+
+        // Arg4: u128
+        let sqrt_price_limit = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::U128(
+                        if x_to_y {
+                            turbos_pool::math_tick::MIN_SQRT_PRICE_X64 + 1
+                        } else {
+                            turbos_pool::math_tick::MAX_SQRT_PRICE_X64 - 1
+                        }
+                    )
+                )
+                .context("failed to convert MoveValue for sqrt_price_limit to JSON")?
+            )?
+        );
         
-    //     // // Transaction Context for Entry functions is implicit.
-    //     // // // Arg10: &mut TxContext
-    //     // // let ctx = SuiJsonValue::from_object_id(
+        // Arg5: bool
+        let amount_specified_is_input = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::Bool(true)
+                )
+                .context("failed to convert MoveValue for amount_specified_is_input to JSON")?
+            )?
+        );
 
-    //     // // );
+        // Arg6: address
+        let recipient = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::Address(
+                        AccountAddress::from(
+                            recipient
+                        )
+                    )
+                ).context("failed to convert MoveValue for recipient to JSON")?
+            )?
+        );
 
+        // Arg9: &Versioned
+        let versioned = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::from_object_id(
+                self.parent_exchange.versioned_id.clone()
+            )
+        );
 
+        let call_args = vec![
+            pool,               // Arg0
+            orig_coins_arg,     // Arg1
+            amount_specified,   // Arg2
+            amount_threshold,   // Arg3
+            sqrt_price_limit,   // Arg4
+            amount_specified_is_input,  // Arg5
+            recipient,          // Arg6
+            deadline,           // Arg7
+            clock,              // Arg8
+            versioned           // Arg9
+        ];
 
+        let type_args = vec![
+            SuiTypeTag::new(format!("{}", self.coin_x)), 
+            SuiTypeTag::new(format!("{}", self.coin_y)),
+            SuiTypeTag::new(format!("{}", self.fee)),
+        ];
 
-    //     if (orig, dest) == (self.coin_x, self.coin_y) {
+        let function = if x_to_y {
+            "swap_a_b"
+        } else {
+            "swap_b_a"
+        };
 
-    //         let arg = transaction_builder.programmable_move_call(
-    //             pt_builder.
-    //             self.parent_exchange.package_id().clone(),
-    //             Identifier::from_str("swap_router"),
-    //             Identifier::from_str("swap_a_b"),
-    //             vec![self.coin_x.clone(), self.coin_y.clone(), self.fee.clone()],
-    //             vec![]
-    //         )
-    //     } else (orig, dest) == (self.coin_y, self.coin_x) {
-    //         let arg = transaction_builder.programmable_move_call(
-    //             pt_builder,
-    //             self.parent_exchange.package_id().clone(),
-    //             Identifier::from_str("swap_router"),
-    //             Identifier::from_str("swap_a_b"),
-    //             vec![self.coin_x.clone(), self.coin_y.clone(), self.fee.clone()],
-    //             vec![]
-    //         )
-    //     } else {
-    //         Err(anyhow!("AAAA"))
-    //     }
-    // }
+        transaction_builder.programmable_move_call(
+            pt_builder,
+            self.parent_exchange.package_id.clone(),
+            "swap_router",
+            function,
+            type_args,
+            call_args
+        ).await?;
+
+        Ok(())
+    }
 
 }
 
@@ -681,6 +758,10 @@ impl Market for TurbosMarket {
         self.package_id()
     }
 
+    // fn router_id(&self) -> &ObjectID {
+    //     self.router_id()
+    // }
+
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
         self.compute_swap_x_to_y_mut(amount_specified)
     }
@@ -699,6 +780,28 @@ impl Market for TurbosMarket {
 
     fn viable(&self) -> bool {
         self.viable()
+    }
+
+    async fn add_swap_to_programmable_transaction(
+        &self,
+        transaction_builder: &TransactionBuilder,
+        pt_builder: &mut ProgrammableTransactionBuilder,
+        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        x_to_y: bool,
+        amount_in: u128,
+        amount_out: u128,
+        recipient: SuiAddress
+    ) -> Result<(), anyhow::Error> {
+        self.add_swap_to_programmable_transaction(
+            transaction_builder,
+            pt_builder,
+            orig_coins,
+            x_to_y,
+            amount_in,
+            amount_out,
+            recipient
+        )
+        .await
     }
 
 }
@@ -723,7 +826,7 @@ fn get_coin_pair_and_fee_from_object_response (
                     (
                         type_params.get(0).context("Missing coin_x")?.clone(),
                         type_params.get(1).context("Missing coin_y")?.clone(),
-                        type_params.get(1).context("Missing coin_y")?.clone()
+                        type_params.get(2).context("Missing fee")?.clone()
                     )
                 )
             } else {

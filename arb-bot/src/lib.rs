@@ -12,6 +12,7 @@ pub mod cetus;
 pub mod turbos;
 pub mod constants;
 pub mod sui_sdk_utils;
+pub mod sui_json_utils;
 pub mod turbos_pool;
 pub mod cetus_pool; 
 pub mod arbitrage;
@@ -38,6 +39,8 @@ pub async fn loop_blocks(run_data: RunData, exchanges: Vec<&impl Exchange>) -> R
         })
         .collect::<Result<Vec<EventFilter>>>()?;
     
+
+    // We shoudl
     let mut subscribe_any_exchange_package_event = run_data
         .sui_client
         .event_api()
@@ -55,6 +58,8 @@ pub async fn loop_blocks(run_data: RunData, exchanges: Vec<&impl Exchange>) -> R
     
     Ok(())
 }
+
+
 
 // pub struct Config {
 //     pub rpc: ,

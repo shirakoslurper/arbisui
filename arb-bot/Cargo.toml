@@ -9,6 +9,7 @@ edition = "2021"
 
 anyhow.workspace = true
 async-trait.workspace = true
+bcs.workspace = true
 custom-sui-sdk = { path = "../custom-sui-sdk" }
 dyn-clone.workspace = true
 ethnum.workspace = true
@@ -23,5 +24,7 @@ page-turner.workspace = true
 petgraph.workspace = true
 rayon.workspace = true
 serde_json.workspace = true
+shared-crypto.workspace = true
+sui-keys.workspace = true
 sui-sdk.workspace = true
 tokio.workspace = true

@@ -467,6 +467,7 @@ impl CoinReadApi {
             .await;
 
         if total < amount {
+            println!("total: {}", total);
             return Err(Error::InsufficientFund { address, amount });
         }
         Ok(coins)

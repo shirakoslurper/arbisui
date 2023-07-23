@@ -12,53 +12,76 @@ use custom_sui_sdk::{
     apis::{
         QueryEventsRequest,
         GetDynamicFieldsRequest
-    }
+    },
+    transaction_builder::TransactionBuilder,
+    programmable_transaction_sui_json::ProgrammableTransactionArg
 };
 
 use sui_sdk::json::SuiJsonValue;
 
-use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError};
+use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError, SuiAddress};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
-use sui_sdk::rpc_types::{EventFilter, SuiEvent, SuiMoveValue, SuiObjectDataOptions, SuiMoveStruct, SuiObjectResponse};
+use sui_sdk::rpc_types::{EventFilter, SuiEvent, SuiMoveValue, SuiObjectDataOptions, SuiMoveStruct, SuiObjectResponse, SuiTypeTag};
  
+// use sui_sdk::json_types::SuiTypeTag;
+use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+
 use move_core_types::language_storage::{StructTag, TypeTag};
+use move_core_types::value::MoveValue;
+
 use std::collections::{BTreeMap, HashMap};
+use std::format;
 
 use crate::markets::{Exchange, Market};
 use crate::sui_sdk_utils::{self, sui_move_value};
 use crate::{cetus_pool, cetus};
+use crate::sui_json_utils::move_value_to_json;
 
 // const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
 // const POOLS: &str = "0xf699e7f2276f5c9a75944b37a0c5b5d9ddfd2471bf6242483b03ab2887d198d0";
+const CLOCK_OBJECT_ID: &str = "0x0000000000000000000000000000000000000000000000000000000000000006";
 
 #[derive(Debug, Clone)]
 pub struct Cetus {
-    package_id: ObjectID
+    package_id: ObjectID,
+    periphery_id: ObjectID,
+    global_config_id: ObjectID,
 }
 
 impl Cetus {
-    pub fn new(package_id: ObjectID) -> Self {
+    pub fn new(package_id: ObjectID, periphery_id: ObjectID, global_config_id: ObjectID) -> Self {
         Cetus {
             package_id,
+            periphery_id,
+            global_config_id
         }
     }
 }
 
-impl FromStr for Cetus {
-    type Err = anyhow::Error;
+// impl FromStr for Cetus {
+//     type Err = anyhow::Error;
 
-    fn from_str(package_id_str: &str) -> Result<Self, anyhow::Error> {
-        Ok(
-            Cetus {
-                package_id: ObjectID::from_str(package_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
-            }
-        )
-    }
-}
+//     fn from_str(package_id_str: &str, router_id_str: &str) -> Result<Self, anyhow::Error> {
+//         Ok(
+//             Cetus {
+//                 package_id: ObjectID::from_str(package_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
+//                 router_id: ObjectID::from_str(router_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
+//             }
+//         )
+//     }
+// }
 
 impl Cetus {
     fn package_id(&self) -> &ObjectID {
         &self.package_id
+    }
+
+    fn peripher_id(&self) -> &ObjectID {
+        &self.periphery_id
+    }
+
+    fn global_config_id(&self) -> &ObjectID {
+        &self.global_config_id
     }
 
     // Cetus has us query for events
@@ -344,6 +367,10 @@ impl Exchange for Cetus {
         self.package_id()
     }
 
+    // fn router_id(&self) -> &ObjectID {
+    //     self.router_id()
+    // }
+
     // Cetus has us query for events
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
         self.get_all_markets(sui_client).await
@@ -420,6 +447,10 @@ impl CetusMarket {
 
     fn package_id(&self) -> &ObjectID {
         &self.parent_exchange.package_id
+    }
+
+    fn periphery_id(&self) -> &ObjectID {
+        &self.parent_exchange.periphery_id
     }
 
     // Better handling of computing pool being None
@@ -505,59 +536,125 @@ impl CetusMarket {
         }
     }
 
-    // async fn add_swap_to_programmable_trasaction(
-    //     &self,
-    //     transaction_builder: &TransactionBuilder,
-    //     pt_builder: &mut ProgrammableTransactionBuilder,
-    //     orig_coin: Coin,
-    //     orig_type: &TypeTag,
-    //     dest_type: &TypeTag,
-    //     recipient: &SuiAddress,
-    //     deadline: u64,  // Should be option for interface?
-    //     amount_in: u128,
-    // ) -> Result<()> {
-    //     // Very rough but lets do thisss
-    //     // We can't add to a result unless theres a function that exists..
+    async fn add_swap_to_programmable_trasaction(
+        &self,
+        transaction_builder: &TransactionBuilder,
+        pt_builder: &mut ProgrammableTransactionBuilder,
+        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        x_to_y: bool,
+        amount_in: u128
+    ) -> Result<(), anyhow::Error> {
+        // Very rough but lets do thisss
+        // We can't add to a result unless theres a function that exists..
 
-    //     // swap_a_b and swap_b_c arguments
-    //     // Arg0: &mut Pool<Ty0, Ty1, Ty2>
-    //     let pool = SuiJsonValue::from_object_id(self.pool_id.clone());
-    //     // Arg1: vector<Coin<Ty0 or Ty1>>
-    //     // let coin = 
+        println!("x_to_y: {}", x_to_y);
 
-    //     let coin = SuiJsonValue::from_object_id(orig_coin);
+        // Arg0: &GlobalConfig
+        let global_config = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::from_object_id(self.parent_exchange.global_config_id.clone())
+        );
 
-    //     // let coins_orig = pt_builder.make_object_vec(vec![])
+        // swap_a_b and swap_b_c arguments
+        // Arg1: &mut Pool<Ty0, Ty1, Ty2>
+        let pool = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::from_object_id(self.pool_id.clone())
+        );
 
-    //     // Arg2: u64
-    //     let amount_specified = SuiJsonValue::move_value_to_json(
-    //         MoveValue::U64(amount_in as u64)
-    //     );
-    //     // Arg3: u64
-    //     let amount_threshold;
-    //     // Arg4: u128
-    //     let sqrt_price_limit = SuiJsonValue::move_value_to_json(
-    //         MoveValue::U128(turbos_pool::math_tick::MAX_SQRT_PRICE_X64)
-    //     );
-    //     // Arg5: bool
-    //     let is_exact_in = SuiJsonValue::move_value_to_json(
-    //         MoveValue::Bool(true)
-    //     );
-    //     // Arg6: address
-    //     let recipient = SuiJsonValue::move_value_to_json(
-    //         MoveValue::Address(
-    //             AccountAddress::from(recipient)
-    //         )
-    //     );
-    //     // Arg7: u64, Needs to be based off of current clock time
-    //     let deadline;
-    //     // Arg8: &Clock
-    //     let clock = SuiJsonValue::from_object_id(
-    //         ObjectID::from_str(CLOCK)
-    //     );
+        // Arg2: vector<Coin<Ty0 or Ty1>>
+        let orig_coins_arg = transaction_builder
+            .programmable_make_object_vec(
+                pt_builder,
+                orig_coins
+            ).await?;
 
-    //     Ok(())
-    // }
+        // Arg3: bool
+        let amount_specified_is_input = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::Bool(true)
+                )
+                .context("failed to convert MoveValue for amount_specified_is_input to JSON")?
+            )?
+        );
+
+        // Arg4: u64
+        let amount_specified = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::U64(amount_in as u64)
+                )
+                .context("failed to convert MoveValue for amount_specified to JSON")?
+            )?
+        );
+
+        // Arg5: u65
+        let amount_limit = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::U64(amount_in as u64)
+                )
+                .context("failed to convert MoveValue for amount_limit to JSON")?
+            )?
+        );
+
+        // Arg6: u64
+        let sqrt_price_limit = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::new(
+                move_value_to_json(
+                    &MoveValue::U128(
+                        if x_to_y {
+                            cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1
+                        } else {
+                            cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1
+                        }
+                    )
+                )
+                .context("failed to convert MoveValue for sqrt_price_limit to JSON")?
+            )?
+        );
+
+        // Arg7: &Clock
+        let clock = ProgrammableTransactionArg::SuiJsonValue(
+            SuiJsonValue::from_object_id(
+                ObjectID::from_str(CLOCK_OBJECT_ID)?
+            )
+        );
+
+        let function = if x_to_y {
+            "swap_a2b"
+        } else {
+            "swap_b2a"
+        };
+
+        let call_args = vec![
+            global_config, 
+            pool,
+            orig_coins_arg,
+            amount_specified_is_input,
+            amount_specified,
+            amount_limit,
+            sqrt_price_limit,
+            clock
+        ];
+
+        let type_args = vec![
+            SuiTypeTag::new(format!("{}", self.coin_x)), 
+            SuiTypeTag::new(format!("{}", self.coin_y)), 
+        ];
+
+        println!("{:#?}", type_args);
+
+        transaction_builder.programmable_move_call(
+            pt_builder,
+            self.parent_exchange.periphery_id.clone(),
+            "pool_script",
+            function,
+            type_args,
+            call_args
+        ).await?;
+        
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -590,6 +687,10 @@ impl Market for CetusMarket {
         self.package_id()
     }
 
+    // fn router_id(&self) -> &ObjectID {
+    //     self.router_id()
+    // }
+
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
         let result = self.compute_swap_x_to_y_mut(amount_specified as u64);
 
@@ -618,4 +719,27 @@ impl Market for CetusMarket {
         self.viable()
     }
 
+    async fn add_swap_to_programmable_transaction(
+        &self,
+        transaction_builder: &TransactionBuilder,
+        pt_builder: &mut ProgrammableTransactionBuilder,
+        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        x_to_y: bool,
+        amount_in: u128,
+        amount_out: u128,
+        recipient: SuiAddress
+    ) -> Result<(), anyhow::Error> {
+
+        // if !recipient.is_none() {
+        //     return Err(anyhow!("recipient should be none"));
+        // }
+
+        self.add_swap_to_programmable_trasaction(
+            transaction_builder,
+            pt_builder,
+            orig_coins,
+            x_to_y,
+            amount_in
+        ).await
+    }
 }
