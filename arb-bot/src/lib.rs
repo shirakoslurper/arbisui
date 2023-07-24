@@ -8,6 +8,8 @@ use futures::StreamExt;
 
 use move_core_types::language_storage::TypeTag;
 
+use rayon::prelude::*;
+
 use serde_json::Value;
 
 use std::collections::HashMap;
@@ -42,6 +44,7 @@ pub async fn loop_blocks<'a>(
     run_data: &RunData, 
     exchanges: &Vec<Box<dyn Exchange>>, 
     market_graph: &mut MarketGraph<'a>,
+    source_coin: &TypeTag
     // paths: Vec<Vec<&TypeTag>>
 ) -> Result<()> {
 
@@ -65,6 +68,7 @@ pub async fn loop_blocks<'a>(
         )
         .await?;
 
+    // let pool_to_cycles = market_graph.pool_to_cycles(source_coin)?.clone();
 
     // Equivalent to .is_some() except we can print events
     while let Some(event_result) = subscribe_pool_state_changing_events.next().await {
@@ -72,6 +76,8 @@ pub async fn loop_blocks<'a>(
         if let Ok(event) = event_result {
             // println!("Event parsed_json: {:#?}", event.parsed_json);
             // println!("New event pool id: {:#?}", event.parsed_json.get("pool").context("missing pool field")?);
+
+            println!("Event package id: {}", event.package_id);
 
             let pool_id = if let Value::String(pool_id_str) = 
                 event.parsed_json.get("pool").context("missing pool field")? {
@@ -95,13 +101,40 @@ pub async fn loop_blocks<'a>(
             ).await?;
 
             println!("Updated pool: {}", pool_id);
+
+            // All these events were chosen because they have a pool id
+            // To be honest its probably best to come up with a way to have a per 
+            // exchange parsing of the pool id field but here they are both "pool"
+            // We grab the cycles associate with a pool id and run our max profit calcs on every leg of the cycle.
+            // We can filter by exchange per leg later but for now we're trimming off a lot of time.
+            let cycles = market_graph
+                .pool_id_and_source_coin_to_cycles
+                .get(&(pool_id, source_coin.clone()))
+                .context(format!("No cycles for (pool_id, source_coin): ({}, {})", pool_id, source_coin))?;
+
+            let mut optimized_results = cycles
+                .par_iter()
+                .map(|cycle| {
+                    arbitrage::optimize_starting_amount_in(cycle, &market_graph)
+                })
+                .collect::<Result<Vec<_>, anyhow::Error>>()?;
+    
+            optimized_results = optimized_results
+                .into_iter()
+                .filter(|optimized_result| {
+                    optimized_result.profit > 0
+                })
+                .collect::<Vec<_>>();
+
+            optimized_results
+                .iter()
+                .for_each(|or| {
+                    println!("{}", or.profit);
+                });
+
         }
 
-        // All these events were chosen because they have a pool id
-        // To be honest its probably best to come up with a way to have a per 
-        // exchange parsing of the pool id field but here they are both "pool"
-        // We grab the cycles associate with a pool id and run our max profit calcs on every leg of the cycle.
-        // We can filter by exchange per leg later but for now we're trimming off a lot of time.
+
 
     }
     

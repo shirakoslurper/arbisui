@@ -138,7 +138,8 @@ async fn main() -> Result<(), anyhow::Error> {
     // loop_blocks(
     //     &run_data,
     //     &vec![Box::new(cetus), Box::new(turbos)],
-    //     &mut market_graph
+    //     &mut market_graph,
+    //     &base_coin
     // ).await?;
 
     let cetus_pool_id_to_object_response = cetus
@@ -193,148 +194,161 @@ async fn main() -> Result<(), anyhow::Error> {
     // println!("Num cycles cross_exchange_paths: {}", cross_exchange_paths.len());
 
     market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
+    market_graph.add_cycles(
+        &base_coin,
+        4
+    )?;
 
-    // let mut total_profit = I256::from(0_u8);
+    // Do an initial cleanup of the available arbs
 
-    let now = Instant::now();
+    loop_blocks(
+        &run_data,
+        &vec![Box::new(cetus), Box::new(turbos)],
+        &mut market_graph,
+        &base_coin
+    ).await?;
 
-    let mut optimized_results = paths
-        .par_iter()
-        .map(|path| {
-            arbitrage::optimize_starting_amount_in(path, &market_graph)
-        })
-        .collect::<Result<Vec<_>, anyhow::Error>>()?;
+    // // let mut total_profit = I256::from(0_u8);
 
-    optimized_results = optimized_results
-        .into_iter()
-        .filter(|optimized_result| optimized_result.profit > 0)
-        .collect::<Vec<_>>();
+    // let now = Instant::now();
+
+    // let mut optimized_results = paths
+    //     .par_iter()
+    //     .map(|path| {
+    //         arbitrage::optimize_starting_amount_in(path, &market_graph)
+    //     })
+    //     .collect::<Result<Vec<_>, anyhow::Error>>()?;
+
+    // optimized_results = optimized_results
+    //     .into_iter()
+    //     .filter(|optimized_result| optimized_result.profit > 0)
+    //     .collect::<Vec<_>>();
     
-    let elapsed = now.elapsed();
-    println!("Elasped: {:.2?}", elapsed);
-    // println!("{:#?}", optimized_results[0]);
+    // let elapsed = now.elapsed();
+    // println!("Elasped: {:.2?}", elapsed);
+    // // println!("{:#?}", optimized_results[0]);
 
-    let total_profit = optimized_results
-        .iter()
-        .fold(I256::from(0u8), |tp, optimized_result| {
-            tp + optimized_result.profit
-        });
+    // let total_profit = optimized_results
+    //     .iter()
+    //     .fold(I256::from(0u8), |tp, optimized_result| {
+    //         tp + optimized_result.profit
+    //     });
 
-    println!("total_profit: {}", total_profit);
+    // println!("total_profit: {}", total_profit);
 
-    let most_profitable = optimized_results
-        .iter()
-        .fold(optimized_results[0].clone(), |max_result, optimized_result| {
-            if max_result.profit > optimized_result.profit {
-                max_result
-            } else {
-                optimized_result.clone()
-            }
-        });
-
-    optimized_results.iter().for_each(|or| {
-        println!("profit: {}", or.profit);
-    });
-
-    println!("{:#?}", most_profitable);
-
-    // let transaction_builder = TransactionBuilder::new();
-
-    // if most_profitable.amount_in < 10_000_000_000 {
-    //     for leg in most_profitable.path {
-    //         let mut pt_builder = ProgrammableTransactionBuilder::new();
-
-    //         // println!("coin x metadata: {:#?}", coin_to_metadata.get(leg.market.coin_x()).unwrap());
-    //         // println!("coin y metadata: {:#?}", coin_to_metadata.get(leg.market.coin_y()).unwrap());
-            
-    //         let orig_coin_string = if leg.x_to_y {
-    //             Some(format!("{}", leg.market.coin_x()))
+    // let most_profitable = optimized_results
+    //     .iter()
+    //     .fold(optimized_results[0].clone(), |max_result, optimized_result| {
+    //         if max_result.profit > optimized_result.profit {
+    //             max_result
     //         } else {
-    //             Some(format!("{}", leg.market.coin_y()))
-    //         };
+    //             optimized_result.clone()
+    //         }
+    //     });
 
-    //         println!("coin_x string: {}", format!("0x{}", leg.market.coin_x()));
-    //         println!("coin_y string: {}", format!("0x{}", leg.market.coin_y()));
+    // optimized_results.iter().for_each(|or| {
+    //     println!("profit: {}", or.profit);
+    // });
 
-    //         // Yields SuiRpcResult<Vec<Coin>>
-    //         let coins = run_data
-    //             .sui_client
-    //             .coin_read_api(
-    //             )
-    //             .select_coins(
-    //                 SuiAddress::from_str(MY_SUI_ADDRESS)?,
-    //                 orig_coin_string,
-    //                 most_profitable.amount_in,
-    //                 vec![]
-    //             )
-    //             .await?;
+    // println!("{:#?}", most_profitable);
 
-    //         let coin_object_ids = coins
-    //             .into_iter()
-    //             .map(|coin| {
-    //                 coin.coin_object_id
-    //             })
-    //             .collect::<Vec<ObjectID>>();
+    // // let transaction_builder = TransactionBuilder::new();
 
-    //         // let coin_args = run_data.sui_client.transaction_builder()
-    //         //     .programmable_make_object_vec(
-    //         //         &mut pt_builder,
-    //         //         coin_object_ids
-    //         //     ).await?;
+    // // if most_profitable.amount_in < 10_000_000_000 {
+    // //     for leg in most_profitable.path {
+    // //         let mut pt_builder = ProgrammableTransactionBuilder::new();
 
-    //         // programmable turbos move call
-    //         // for now lets make it async so that the interface function 
-    //         // gets the clock time for us and we don't have to feed it anything?
+    // //         // println!("coin x metadata: {:#?}", coin_to_metadata.get(leg.market.coin_x()).unwrap());
+    // //         // println!("coin y metadata: {:#?}", coin_to_metadata.get(leg.market.coin_y()).unwrap());
             
-    //         println!("AAAAAAA");
+    // //         let orig_coin_string = if leg.x_to_y {
+    // //             Some(format!("{}", leg.market.coin_x()))
+    // //         } else {
+    // //             Some(format!("{}", leg.market.coin_y()))
+    // //         };
 
-    //         let predicted_amount_out = if leg.x_to_y {
-    //             leg.market
-    //                 .compute_swap_x_to_y(most_profitable.amount_in).1
-    //         } else {
-    //             leg.market
-    //                 .compute_swap_y_to_x(most_profitable.amount_in).0
-    //         };
+    // //         println!("coin_x string: {}", format!("0x{}", leg.market.coin_x()));
+    // //         println!("coin_y string: {}", format!("0x{}", leg.market.coin_y()));
 
-    //         println!("predicted amount out: {}", predicted_amount_out);
+    // //         // Yields SuiRpcResult<Vec<Coin>>
+    // //         let coins = run_data
+    // //             .sui_client
+    // //             .coin_read_api(
+    // //             )
+    // //             .select_coins(
+    // //                 SuiAddress::from_str(MY_SUI_ADDRESS)?,
+    // //                 orig_coin_string,
+    // //                 most_profitable.amount_in,
+    // //                 vec![]
+    // //             )
+    // //             .await?;
 
-    //         leg.market
-    //             .add_swap_to_programmable_transaction(
-    //                 run_data.sui_client.transaction_builder(),
-    //                 & mut pt_builder,
-    //                 coin_object_ids,
-    //                 leg.x_to_y,
-    //                 most_profitable.amount_in,
-    //                 predicted_amount_out,
-    //                 SuiAddress::from_str(MY_SUI_ADDRESS)?
-    //             )
-    //             .await?;
+    // //         let coin_object_ids = coins
+    // //             .into_iter()
+    // //             .map(|coin| {
+    // //                 coin.coin_object_id
+    // //             })
+    // //             .collect::<Vec<ObjectID>>();
 
-    //         let transaction = run_data
-    //             .sui_client
-    //             .transaction_builder()
-    //             .finish_building_programmable_transaction(
-    //                 pt_builder,
-    //                 SuiAddress::from_str(MY_SUI_ADDRESS)?,
-    //                 None,
-    //                 9000000
-    //             )
-    //             .await?;
+    // //         // let coin_args = run_data.sui_client.transaction_builder()
+    // //         //     .programmable_make_object_vec(
+    // //         //         &mut pt_builder,
+    // //         //         coin_object_ids
+    // //         //     ).await?;
 
-    //         let result = run_data
-    //             .sui_client
-    //             .read_api()
-    //             .dry_run_transaction_block(
-    //                 transaction
-    //             )
-    //             .await?;
+    // //         // programmable turbos move call
+    // //         // for now lets make it async so that the interface function 
+    // //         // gets the clock time for us and we don't have to feed it anything?
+            
+    // //         println!("AAAAAAA");
 
-    //         println!("RESULT: {:#?}", result);
+    // //         let predicted_amount_out = if leg.x_to_y {
+    // //             leg.market
+    // //                 .compute_swap_x_to_y(most_profitable.amount_in).1
+    // //         } else {
+    // //             leg.market
+    // //                 .compute_swap_y_to_x(most_profitable.amount_in).0
+    // //         };
+
+    // //         println!("predicted amount out: {}", predicted_amount_out);
+
+    // //         leg.market
+    // //             .add_swap_to_programmable_transaction(
+    // //                 run_data.sui_client.transaction_builder(),
+    // //                 & mut pt_builder,
+    // //                 coin_object_ids,
+    // //                 leg.x_to_y,
+    // //                 most_profitable.amount_in,
+    // //                 predicted_amount_out,
+    // //                 SuiAddress::from_str(MY_SUI_ADDRESS)?
+    // //             )
+    // //             .await?;
+
+    // //         let transaction = run_data
+    // //             .sui_client
+    // //             .transaction_builder()
+    // //             .finish_building_programmable_transaction(
+    // //                 pt_builder,
+    // //                 SuiAddress::from_str(MY_SUI_ADDRESS)?,
+    // //                 None,
+    // //                 9000000
+    // //             )
+    // //             .await?;
+
+    // //         let result = run_data
+    // //             .sui_client
+    // //             .read_api()
+    // //             .dry_run_transaction_block(
+    // //                 transaction
+    // //             )
+    // //             .await?;
+
+    // //         println!("RESULT: {:#?}", result);
                 
 
-    //         // programmable
-    //     }
-    // }
+    // //         // programmable
+    // //     }
+    // // }
 
     Ok(())
 }

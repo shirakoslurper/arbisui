@@ -52,6 +52,18 @@ pub fn swap_in_pool(
     simulating: bool
 ) -> SwapResult {
 
+    // // Sanity check: adding all the liquidity
+    // let all_tick_net_liquidity = pool.tick_manager.ticks
+    //     .iter()
+    //     .fold(0i128, |net, tick| {
+    //         net + tick.1.liquidity_net
+    //     });
+
+    // if all_tick_net_liquidity != 0 {
+    //     println!("all_tick_net_liquidity: {}", all_tick_net_liquidity);
+    // }
+
+
     let mut swap_result = SwapResult {
         amount_in: 0, 
         amount_out: 0, 
@@ -486,11 +498,19 @@ pub mod tick {
         // equivalent of math_liquidity::add_delta in turbos_pool
         let abs_directional_liquidity_net = directional_liquidity_net.abs() as u128;
 
-        let liquidity = if tick.liquidity_net >= 0 {
-            assert!(u128::MAX - abs_directional_liquidity_net >= liquidity);
+        let liquidity = if directional_liquidity_net >= 0 {
+            assert!(
+                u128::MAX - abs_directional_liquidity_net >= liquidity,
+                "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}",
+                liquidity, abs_directional_liquidity_net
+            );
             abs_directional_liquidity_net + liquidity
         } else {
-            assert!(liquidity >= abs_directional_liquidity_net);
+            assert!(
+                liquidity >= abs_directional_liquidity_net,
+                "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}",
+                liquidity, abs_directional_liquidity_net
+            );
             liquidity - abs_directional_liquidity_net
         };
 

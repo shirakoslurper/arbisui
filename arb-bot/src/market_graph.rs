@@ -31,6 +31,7 @@ pub struct MarketGraph<'data> {
     pub graph: DiGraphMap<&'data TypeTag, HashMap<ObjectID, MarketInfo>>,
     pub pool_id_to_coin_pair: HashMap<ObjectID, (&'data TypeTag, &'data TypeTag)>,
     pub source_coin_to_cycles: HashMap<TypeTag, Vec<Vec<&'data TypeTag>>>,
+    pub pool_id_and_source_coin_to_cycles: HashMap<(ObjectID, TypeTag), Vec<Vec<&'data TypeTag>>>, // Regardless of source coin? 
 }
 
 impl <'data> MarketGraph<'data> {
@@ -93,7 +94,8 @@ impl <'data> MarketGraph<'data> {
             MarketGraph {
                 graph,
                 pool_id_to_coin_pair,
-                source_coin_to_cycles: HashMap::new()
+                source_coin_to_cycles: HashMap::new(),
+                pool_id_and_source_coin_to_cycles: HashMap::new()
             }
         )
     }
@@ -205,24 +207,17 @@ impl <'data> MarketGraph<'data> {
         ).collect::<Vec<Vec<&TypeTag>>>()
     }
 
-    fn add_cycles(
+    pub fn add_cycles(
         &mut self,
         source_coin: &'data TypeTag,
         max_intermediate_nodes: usize,
-    ) {
+    ) -> Result<(), anyhow::Error>{
         self
             .source_coin_to_cycles
             .insert(
                 source_coin.clone(),
                 self.find_cycles(source_coin, max_intermediate_nodes)
             );
-    }
-
-    fn pool_to_cycles(
-        &self,
-        source_coin: &'data TypeTag
-    ) -> Result<HashMap<ObjectID, &Vec<&'data TypeTag>>, anyhow::Error> {
-        let mut pool_to_cycles = HashMap::new();
 
         let cycles = self
             .source_coin_to_cycles
@@ -240,16 +235,55 @@ impl <'data> MarketGraph<'data> {
                     .context(format!("Missing edge from {} to {}", coin_a, coin_b))?;
 
                 for (pool_id, _) in markets {
-                    pool_to_cycles.insert(
-                        pool_id.clone(),
-                        cycle
+                    let pool_cycles = self.pool_id_and_source_coin_to_cycles
+                        .entry((pool_id.clone(), source_coin.clone()))
+                        .or_insert(Vec::new());
+                    
+                    pool_cycles.push(
+                        cycle.clone()
                     );
                 }
             }
         }
 
-        Ok(pool_to_cycles)
+        Ok(())
     }
+
+    // pub fn pool_to_cycles(
+    //     &self,
+    //     source_coin: &'data TypeTag
+    // ) -> Result<HashMap<ObjectID, Vec<&Vec<&'data TypeTag>>>, anyhow::Error> {
+    //     let mut pool_to_cycles = HashMap::new();
+
+    //     let cycles = self
+    //         .source_coin_to_cycles
+    //         .get(source_coin)
+    //         .context("No cycles for given source coin.")?;
+
+    //     for cycle in cycles {
+    //         for pair in cycle[..].windows(2) {
+    //             let coin_a = pair[0];
+    //             let coin_b = pair[1];
+
+    //             let markets = self
+    //                 .graph
+    //                 .edge_weight(coin_a, coin_b)
+    //                 .context(format!("Missing edge from {} to {}", coin_a, coin_b))?;
+
+    //             for (pool_id, _) in markets {
+    //                 let pool_cycles = pool_to_cycles
+    //                     .entry(pool_id.clone())
+    //                     .or_insert(Vec::new());
+                    
+    //                 pool_cycles.push(
+    //                     cycle
+    //                 );
+    //             }
+    //         }
+    //     }
+
+    //     Ok(pool_to_cycles)
+    // }
 }
 
 // source coin to pool to 
