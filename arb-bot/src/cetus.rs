@@ -76,12 +76,49 @@ impl Cetus {
         &self.package_id
     }
 
-    fn peripher_id(&self) -> &ObjectID {
+    fn periphery_id(&self) -> &ObjectID {
         &self.periphery_id
     }
 
     fn global_config_id(&self) -> &ObjectID {
         &self.global_config_id
+    }
+
+    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error> {
+        Ok(
+            vec![
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::OpenPositionEvent", self.package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::ClosePositionEvent", self.package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::AddLiquidityEvent", self.package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::RemoveLiquidityEvent", self.package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::SwapEvent", self.package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::UpdateFeeRateEvent", self.package_id)
+                    )?
+                ),
+            ]
+        )
     }
 
     // Cetus has us query for events
@@ -367,9 +404,9 @@ impl Exchange for Cetus {
         self.package_id()
     }
 
-    // fn router_id(&self) -> &ObjectID {
-    //     self.router_id()
-    // }
+    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error> {
+        self.event_filters()
+    }
 
     // Cetus has us query for events
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {

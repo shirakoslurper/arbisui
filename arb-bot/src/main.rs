@@ -71,7 +71,7 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     // 50 Requests / Sec
-    let rate_limiter = Arc::new(RateLimiter::direct(Quota::per_second(nonzero!(50u32))));
+    let rate_limiter = Arc::new(RateLimiter::direct(Quota::per_second(nonzero!(35u32))));
 
     let run_data = RunData {
         sui_client: SuiClientBuilder::default()
@@ -87,7 +87,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?
     };
 
-    // let exchanges = vec![cetus];
+    // let exchanges = vec![Box::new(cetus.clone() as dyn Exchange), Box::new(turbos.clone() as dyn Exchange)];
+
     let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
     
     let cetus_markets = cetus.get_all_markets(&run_data.sui_client).await?;
@@ -96,60 +97,49 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut markets = vec![];
     markets.extend(turbos_markets.clone());
     markets.extend(cetus_markets.clone());
-    // markets.extend(cetus_markets.clone());
-
-    // // filter for viabl
-    // markets = markets.into_iter().filter(|market| {
-
-
-    //     market.viable()
-    // {}).collect::<Vec<_>>();
 
     println!("markets.len(): {}", markets.len());
 
-    // /// TEST
-    // // let pool_ids = markets.iter().map(|market| market.pool_id().clone()).collect::<Vec<ObjectID>>();
-    // let pool_id_to_object_response = turbos.get_pool_id_to_object_response(&run_data.sui_client, &markets).await?;
-    // for (pool_id, object_response) in pool_id_to_object_response.iter() {
-    //     println!("{:#?}", turbos.computing_pool_from_object_response(&run_data.sui_client, object_response).await?);
-    // }
-    // // END TEST
+    // // TODO: Weigh the costs of duplicate data in markets
+    // // OR storing coin data in nodes
+    // // But its for human reading only rly
+    // let coin_to_metadata = future::try_join_all(
+    //     markets
+    //         .iter()
+    //         .map(|market| {
+    //             async {
+    //                 let mut coin_to_metadata = HashMap::new();
 
+    //                 if let Some(coin_x_metadata) = run_data.sui_client
+    //                     .coin_read_api()
+    //                     .get_coin_metadata(market.coin_x().to_string()).await? {
+    //                         coin_to_metadata.insert(market.coin_x().clone(), coin_x_metadata);
+    //                     }
 
-    // TODO: Weigh the costs of duplicate data in markets
-    // OR storing coin data in nodes
-    // But its for human reading only rly
-    let coin_to_metadata = future::try_join_all(
-        markets
-            .iter()
-            .map(|market| {
-                async {
-                    let mut coin_to_metadata = HashMap::new();
+    //                 if let Some(coin_y_metadata) = run_data.sui_client
+    //                     .coin_read_api()
+    //                     .get_coin_metadata(market.coin_y().to_string()).await? {
+    //                         coin_to_metadata.insert(market.coin_y().clone(), coin_y_metadata);
+    //                     }
 
-                    if let Some(coin_x_metadata) = run_data.sui_client
-                        .coin_read_api()
-                        .get_coin_metadata(market.coin_x().to_string()).await? {
-                            coin_to_metadata.insert(market.coin_x().clone(), coin_x_metadata);
-                        }
+    //                 // println!("coin_x_metadata: {:#?}", coin_x_metadata);
+    //                 // println!("coin_y_metadata: {:#?}\n", coin_y_metadata);
 
-                    if let Some(coin_y_metadata) = run_data.sui_client
-                        .coin_read_api()
-                        .get_coin_metadata(market.coin_y().to_string()).await? {
-                            coin_to_metadata.insert(market.coin_y().clone(), coin_y_metadata);
-                        }
-
-                    // println!("coin_x_metadata: {:#?}", coin_x_metadata);
-                    // println!("coin_y_metadata: {:#?}\n", coin_y_metadata);
-
-                    Ok::<HashMap<TypeTag, SuiCoinMetadata>, anyhow::Error>(coin_to_metadata)
-                }
-            })
-        ).await?
-        .into_iter()
-        .flatten()
-        .collect::<HashMap<TypeTag, SuiCoinMetadata>>();
+    //                 Ok::<HashMap<TypeTag, SuiCoinMetadata>, anyhow::Error>(coin_to_metadata)
+    //             }
+    //         })
+    //     ).await?
+    //     .into_iter()
+    //     .flatten()
+    //     .collect::<HashMap<TypeTag, SuiCoinMetadata>>();
 
     let mut market_graph = MarketGraph::new(&markets)?;
+
+    // loop_blocks(
+    //     &run_data,
+    //     &vec![Box::new(cetus), Box::new(turbos)],
+    //     &mut market_graph
+    // ).await?;
 
     let cetus_pool_id_to_object_response = cetus
         .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
@@ -172,7 +162,7 @@ async fn main() -> Result<(), anyhow::Error> {
     //     }
     // );
 
-    let max_intermediate_nodes = 2;
+    let max_intermediate_nodes = 5;
 
     let paths = all_simple_paths(
         &market_graph.graph, 
@@ -250,101 +240,101 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // let transaction_builder = TransactionBuilder::new();
 
-    if most_profitable.amount_in < 10_000_000_000 {
-        for leg in most_profitable.path {
-            let mut pt_builder = ProgrammableTransactionBuilder::new();
+    // if most_profitable.amount_in < 10_000_000_000 {
+    //     for leg in most_profitable.path {
+    //         let mut pt_builder = ProgrammableTransactionBuilder::new();
 
-            // println!("coin x metadata: {:#?}", coin_to_metadata.get(leg.market.coin_x()).unwrap());
-            // println!("coin y metadata: {:#?}", coin_to_metadata.get(leg.market.coin_y()).unwrap());
+    //         // println!("coin x metadata: {:#?}", coin_to_metadata.get(leg.market.coin_x()).unwrap());
+    //         // println!("coin y metadata: {:#?}", coin_to_metadata.get(leg.market.coin_y()).unwrap());
             
-            let orig_coin_string = if leg.x_to_y {
-                Some(format!("{}", leg.market.coin_x()))
-            } else {
-                Some(format!("{}", leg.market.coin_y()))
-            };
+    //         let orig_coin_string = if leg.x_to_y {
+    //             Some(format!("{}", leg.market.coin_x()))
+    //         } else {
+    //             Some(format!("{}", leg.market.coin_y()))
+    //         };
 
-            println!("coin_x string: {}", format!("0x{}", leg.market.coin_x()));
-            println!("coin_y string: {}", format!("0x{}", leg.market.coin_y()));
+    //         println!("coin_x string: {}", format!("0x{}", leg.market.coin_x()));
+    //         println!("coin_y string: {}", format!("0x{}", leg.market.coin_y()));
 
-            // Yields SuiRpcResult<Vec<Coin>>
-            let coins = run_data
-                .sui_client
-                .coin_read_api(
-                )
-                .select_coins(
-                    SuiAddress::from_str(MY_SUI_ADDRESS)?,
-                    orig_coin_string,
-                    most_profitable.amount_in,
-                    vec![]
-                )
-                .await?;
+    //         // Yields SuiRpcResult<Vec<Coin>>
+    //         let coins = run_data
+    //             .sui_client
+    //             .coin_read_api(
+    //             )
+    //             .select_coins(
+    //                 SuiAddress::from_str(MY_SUI_ADDRESS)?,
+    //                 orig_coin_string,
+    //                 most_profitable.amount_in,
+    //                 vec![]
+    //             )
+    //             .await?;
 
-            let coin_object_ids = coins
-                .into_iter()
-                .map(|coin| {
-                    coin.coin_object_id
-                })
-                .collect::<Vec<ObjectID>>();
+    //         let coin_object_ids = coins
+    //             .into_iter()
+    //             .map(|coin| {
+    //                 coin.coin_object_id
+    //             })
+    //             .collect::<Vec<ObjectID>>();
 
-            // let coin_args = run_data.sui_client.transaction_builder()
-            //     .programmable_make_object_vec(
-            //         &mut pt_builder,
-            //         coin_object_ids
-            //     ).await?;
+    //         // let coin_args = run_data.sui_client.transaction_builder()
+    //         //     .programmable_make_object_vec(
+    //         //         &mut pt_builder,
+    //         //         coin_object_ids
+    //         //     ).await?;
 
-            // programmable turbos move call
-            // for now lets make it async so that the interface function 
-            // gets the clock time for us and we don't have to feed it anything?
+    //         // programmable turbos move call
+    //         // for now lets make it async so that the interface function 
+    //         // gets the clock time for us and we don't have to feed it anything?
             
-            println!("AAAAAAA");
+    //         println!("AAAAAAA");
 
-            let predicted_amount_out = if leg.x_to_y {
-                leg.market
-                    .compute_swap_x_to_y(most_profitable.amount_in).1
-            } else {
-                leg.market
-                    .compute_swap_y_to_x(most_profitable.amount_in).0
-            };
+    //         let predicted_amount_out = if leg.x_to_y {
+    //             leg.market
+    //                 .compute_swap_x_to_y(most_profitable.amount_in).1
+    //         } else {
+    //             leg.market
+    //                 .compute_swap_y_to_x(most_profitable.amount_in).0
+    //         };
 
-            println!("predicted amount out: {}", predicted_amount_out);
+    //         println!("predicted amount out: {}", predicted_amount_out);
 
-            leg.market
-                .add_swap_to_programmable_transaction(
-                    run_data.sui_client.transaction_builder(),
-                    & mut pt_builder,
-                    coin_object_ids,
-                    leg.x_to_y,
-                    most_profitable.amount_in,
-                    predicted_amount_out,
-                    SuiAddress::from_str(MY_SUI_ADDRESS)?
-                )
-                .await?;
+    //         leg.market
+    //             .add_swap_to_programmable_transaction(
+    //                 run_data.sui_client.transaction_builder(),
+    //                 & mut pt_builder,
+    //                 coin_object_ids,
+    //                 leg.x_to_y,
+    //                 most_profitable.amount_in,
+    //                 predicted_amount_out,
+    //                 SuiAddress::from_str(MY_SUI_ADDRESS)?
+    //             )
+    //             .await?;
 
-            let transaction = run_data
-                .sui_client
-                .transaction_builder()
-                .finish_building_programmable_transaction(
-                    pt_builder,
-                    SuiAddress::from_str(MY_SUI_ADDRESS)?,
-                    None,
-                    9000000
-                )
-                .await?;
+    //         let transaction = run_data
+    //             .sui_client
+    //             .transaction_builder()
+    //             .finish_building_programmable_transaction(
+    //                 pt_builder,
+    //                 SuiAddress::from_str(MY_SUI_ADDRESS)?,
+    //                 None,
+    //                 9000000
+    //             )
+    //             .await?;
 
-            let result = run_data
-                .sui_client
-                .read_api()
-                .dry_run_transaction_block(
-                    transaction
-                )
-                .await?;
+    //         let result = run_data
+    //             .sui_client
+    //             .read_api()
+    //             .dry_run_transaction_block(
+    //                 transaction
+    //             )
+    //             .await?;
 
-            println!("RESULT: {:#?}", result);
+    //         println!("RESULT: {:#?}", result);
                 
 
-            // programmable
-        }
-    }
+    //         // programmable
+    //     }
+    // }
 
     Ok(())
 }

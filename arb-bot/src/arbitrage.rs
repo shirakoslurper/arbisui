@@ -104,7 +104,7 @@ pub fn optimize_starting_amount_in<'a>(
 
 
         for expanded_path in expanded_paths {
-            for market_info in orig_to_dest_markets.iter() {
+            for (_, market_info) in orig_to_dest_markets.iter() {
                 let mut expanded_path_extended = expanded_path
                     .clone();
 

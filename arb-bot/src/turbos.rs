@@ -23,7 +23,16 @@ use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError, ObjectType, SuiA
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use sui_sdk::types::transaction::Argument;
-use sui_sdk::rpc_types::{SuiObjectResponse, EventFilter, SuiEvent, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiObjectDataOptions, SuiTypeTag};
+use sui_sdk::rpc_types::{
+    SuiObjectResponse, 
+    EventFilter, 
+    SuiEvent, 
+    SuiParsedData, 
+    SuiMoveStruct, 
+    SuiMoveValue, 
+    SuiObjectDataOptions, 
+    SuiTypeTag
+};
  
 use sui_sdk::json::SuiJsonValue;
 
@@ -78,9 +87,37 @@ impl Turbos {
         &self.package_id
     }
 
-    // fn router_id(&self) -> &ObjectID {
-    //     &self.router_id
-    // }
+    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error> {
+        Ok(
+            vec![
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::SwapEvent", self.original_package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::MintEvent", self.original_package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::BurnEvent", self.original_package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::TogglePoolStatus", self.original_package_id)
+                    )?
+                ),
+                EventFilter::MoveEventType(
+                    StructTag::from_str(
+                        &format!("{}::pool::UpdateFeeProtocolEvent", self.original_package_id)
+                    )?
+                ),
+            ]
+        )
+    }
 
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
         let pool_created_events = sui_client
@@ -401,9 +438,9 @@ impl Exchange for Turbos {
        self.package_id()
     }
 
-    // fn router_id(&self) -> &ObjectID {
-    //     self.router_id()
-    //  }
+    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error> {
+        self.event_filters()
+    }
 
     async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
         self.get_all_markets(sui_client).await
