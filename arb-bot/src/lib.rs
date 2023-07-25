@@ -13,8 +13,10 @@ use rayon::prelude::*;
 use serde_json::Value;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::str::FromStr;
 
+use sui_keys::keystore::Keystore;
 use sui_sdk::types::object::Object;
 use sui_sdk::sui_client_config;
 use sui_sdk::rpc_types::SuiObjectDataOptions;
@@ -35,8 +37,10 @@ pub use crate::market_graph::*;
 pub use crate::cetus::*;
 pub use crate::turbos::*;
 
+
 pub struct RunData {
     pub sui_client: SuiClient,
+    // pub keystore: Keystore,
     // pub wallet_context: WalletContext,
 }
 
@@ -100,7 +104,7 @@ pub async fn loop_blocks<'a>(
                 &pool_response
             ).await?;
 
-            println!("Updated pool: {}", pool_id);
+            println!("| UPDATED POOL: {}", pool_id);
 
             // All these events were chosen because they have a pool id
             // To be honest its probably best to come up with a way to have a per 
@@ -128,9 +132,36 @@ pub async fn loop_blocks<'a>(
 
             optimized_results
                 .iter()
-                .for_each(|or| {
-                    println!("{}", or.profit);
-                });
+                .try_for_each(|or| {
+                    println!("+-----------------------------------------------------");
+                    println!("| AMOUNT IN: {} {}", or.amount_in, source_coin);
+                    println!("| AMOUNT OUT: {} {}", or.amount_out, source_coin);
+                    println!("| RAW PROFIT: {} {}", or.profit, source_coin);
+                    or.path
+                        .iter()
+                        .try_for_each(|leg| {
+                            if leg.x_to_y {
+                                println!("|    +------------------------------------------------");
+                                println!("|    | {}", leg.market.coin_x());
+                                println!("|    |   ----[RATE: {}]---->", leg.market.coin_y_price().context("Missing coin_y price.")?);
+                                println!("|    | {}", leg.market.coin_y());
+                                // println!("|    +------------------------------------------------");
+                            } else {
+                                println!("|    +------------------------------------------------");
+                                println!("|    | {}", leg.market.coin_y());
+                                println!("|    |   ----[RATE: {}]---->", leg.market.coin_x_price().context("Missing coin_x price.")?);
+                                println!("|    | {}", leg.market.coin_x());
+                                // println!("|    +------------------------------------------------");
+                            }
+
+                            Ok::<(), anyhow::Error>(())
+                        })?;
+
+                    println!("|    +------------------------------------------------");
+                    println!("+-----------------------------------------------------");
+
+                    Ok::<(), anyhow::Error>(())
+                })?;
 
         }
 

@@ -60,7 +60,8 @@ pub fn swap_in_pool(
     //     });
 
     // if all_tick_net_liquidity != 0 {
-    //     println!("all_tick_net_liquidity: {}", all_tick_net_liquidity);
+    //     println!("all_tick_net_liquidity: {}, pool.liquidity: {}", all_tick_net_liquidity, pool.liquidity);
+    //     panic!();
     // }
 
 
@@ -193,8 +194,8 @@ pub fn swap_in_pool(
             simulating
         );
 
-
-        if sqrt_price_next_tick_w_limit == next_tick_sqrt_price {
+        // if sqrt_price_next_tick_w_limit == next_tick_sqrt_price
+        if sqrt_price_next_computed == next_tick_sqrt_price {
             // println!("YES");
             compute_swap_state.current_sqrt_price = sqrt_price_next_computed;
             
@@ -475,6 +476,13 @@ pub mod tick {
         fee_growth_global_b: u128,
         simulating: bool
     ) -> u128 {
+
+        // let all_tick_net_liquidity = tick_manager.ticks
+        //     .iter()
+        //     .fold(0i128, |net, tick| {
+        //         net + tick.1.liquidity_net
+        //     });
+
         // let tick = tick_manager.ticks.get_mut(&tick_score(tick_index)).unwrap();
         // let tick = tick_manager.ticks.get_mut(&tick_index).unwrap();
 
@@ -501,18 +509,28 @@ pub mod tick {
         let liquidity = if directional_liquidity_net >= 0 {
             assert!(
                 u128::MAX - abs_directional_liquidity_net >= liquidity,
-                "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}",
+                "u128::MAX - abs_directional_liquidity_net >= liquidity: liquidity: {}, abs_directional_liquidity_net: {}",
                 liquidity, abs_directional_liquidity_net
             );
-            abs_directional_liquidity_net + liquidity
+            liquidity + abs_directional_liquidity_net
         } else {
             assert!(
                 liquidity >= abs_directional_liquidity_net,
                 "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}",
                 liquidity, abs_directional_liquidity_net
             );
+            // println!("liquidity: {}, abs_directional_liquidity_net: {}", liquidity, abs_directional_liquidity_net);
             liquidity - abs_directional_liquidity_net
         };
+
+        // let liquidity_net = if a_to_b {
+        //     -tick.liquidity_net
+        // } else {
+        //     tick.liquidity_net
+        // };
+
+        // let liquidity = liquidity + liquidity_net
+
 
         if !simulating {
             tick.fee_growth_outside_a = (Wrapping(liquidity) - Wrapping(fee_growth_global_a)).0;
