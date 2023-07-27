@@ -255,8 +255,7 @@ pub async fn execute_arb<'a>(
 
         // Yields SuiRpcResult<Vec<Coin>>
         let coins = sui_client
-            .coin_read_api(
-            )
+            .coin_read_api()
             .select_coins(
                 signer_address.clone(),
                 orig_coin_string,
@@ -264,6 +263,8 @@ pub async fn execute_arb<'a>(
                 vec![]
             )
             .await?;
+
+        println!("{:#?}", coins);
 
         let coin_object_ids = coins
             .into_iter()
@@ -295,6 +296,12 @@ pub async fn execute_arb<'a>(
             )
             .await?;
 
+        let reference_gas_price = sui_client
+            .read_api()
+            .get_reference_gas_price()
+            .await?
+            * 1000;
+
         // Initial dry run transaction to get gas
         let dry_run_transaction = sui_client
             .transaction_builder()
@@ -302,7 +309,7 @@ pub async fn execute_arb<'a>(
                 dry_run_pt_builder,
                 signer_address.clone(),
                 None,
-                0
+                reference_gas_price
             )
             .await?;
 
@@ -314,9 +321,12 @@ pub async fn execute_arb<'a>(
             .await?;
 
         let gcs = dry_run_result.effects.gas_cost_summary();
-        let gas_budget = gcs.computation_cost + gcs.storage_cost + gcs.non_refundable_storage_fee;
+        let gas_budget = (gcs.computation_cost + gcs.storage_cost + gcs.non_refundable_storage_fee) * 10;
 
-        // println!("RESULT: {:#?}", result);
+        // // println!("Gas Budget: {}", gas_budget);
+        // // panic!();
+        println!("DRY RUN RESULT: {:#?}", dry_run_result);
+        panic!();
 
         let mut pt_builder = ProgrammableTransactionBuilder::new();
 
@@ -360,6 +370,8 @@ pub async fn execute_arb<'a>(
                 SuiTransactionBlockResponseOptions::full_content(),
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             ).await?;
+
+        // println!("result: {:#?}", result);
             
         // Set amount_in for next leg
         if let Some(effects) = result.effects {

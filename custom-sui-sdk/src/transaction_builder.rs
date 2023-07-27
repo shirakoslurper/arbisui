@@ -31,10 +31,12 @@ use sui_types::{coin, fp_ensure, SUI_FRAMEWORK_PACKAGE_ID, SUI_SYSTEM_PACKAGE_ID
 
 use crate::programmable_transaction_sui_json::{self, ProgrammableTransactionArg, ProgrammableTransactionResolvedCallArg};
 
-pub enum ProgrammableMergeCoinsArg {
-    CoinObjectId(ObjectID),
+// Virtually the same as above!
+pub enum ProgrammableObjectArg {
+    ObjectID(ObjectID),
     Argument(Argument)
 }
+
 
 #[async_trait]
 pub trait DataReader {
@@ -841,29 +843,63 @@ impl TransactionBuilder {
         )
     }
 
+    // pub async fn programmable_make_object_vec(
+    //     &self,
+    //     pt_builder: &mut ProgrammableTransactionBuilder,
+    //     objs: impl IntoIterator<Item = ObjectID>,
+    // ) -> anyhow::Result<ProgrammableTransactionArg> {
+
+    //     let object_args = try_join_all(
+    //         objs
+    //         .into_iter()
+    //         .map(|object_id| async move {               
+    //             Ok::<ObjectArg>(
+    //                 ObjectArg::ImmOrOwnedObject(
+    //                     self.get_object_ref(object_id).await?
+    //                 )
+    //             )
+    //         })
+    //     ).await?;
+
+    //     Ok(
+    //         ProgrammableTransactionArg::Argument(
+    //             pt_builder.make_obj_vec(
+    //                 object_args
+    //             )?
+    //         )
+    //     )
+    // }
+
     pub async fn programmable_make_object_vec(
         &self,
         pt_builder: &mut ProgrammableTransactionBuilder,
-        objs: impl IntoIterator<Item = ObjectID>,
+        objs: impl IntoIterator<Item = ProgrammableObjectArg>,
     ) -> anyhow::Result<ProgrammableTransactionArg> {
 
-        let object_args = try_join_all(
-            objs
-            .into_iter()
-            .map(|object_id| async move {               
-                Ok::<ObjectArg>(
-                    ObjectArg::ImmOrOwnedObject(
-                        self.get_object_ref(object_id).await?
-                    )
-                )
-            })
-        ).await?;
+        let mut arguments = Vec::new();
+
+        for programmable_object_arg in objs {
+            let argument = match programmable_object_arg {
+                ProgrammableObjectArg::ObjectID(object_id) => {
+                    pt_builder.obj(
+                        ObjectArg::ImmOrOwnedObject(
+                            self.get_object_ref(object_id).await?
+                        )
+                    )?
+                },
+                ProgrammableObjectArg::Argument(argument) =>{
+                    argument
+                }
+            };
+
+            arguments.push(argument);
+        }
 
         Ok(
             ProgrammableTransactionArg::Argument(
-                pt_builder.make_obj_vec(
-                    object_args
-                )?
+                pt_builder.command(
+                    Command::MakeMoveVec(None, arguments)
+                )
             )
         )
     }
@@ -871,29 +907,29 @@ impl TransactionBuilder {
     pub async fn programmable_merge_coins(
         &self,
         builder: &mut ProgrammableTransactionBuilder,
-        primary_coin: ProgrammableMergeCoinsArg,
-        coin_to_merge: ProgrammableMergeCoinsArg,
+        primary_coin: ProgrammableObjectArg,
+        coin_to_merge: ProgrammableObjectArg,
         coin_type: SuiTypeTag,
     ) -> anyhow::Result<()> {
 
         let primary_coin_arg = match primary_coin {
-            ProgrammableMergeCoinsArg::CoinObjectId(coin_object_id) => {
+            ProgrammableObjectArg::ObjectID(coin_object_id) => {
                 ProgrammableTransactionArg::SuiJsonValue(
                     SuiJsonValue::from_object_id(coin_object_id)
                 )
             },
-            ProgrammableMergeCoinsArg::Argument(coin_arg) => {
+            ProgrammableObjectArg::Argument(coin_arg) => {
                 ProgrammableTransactionArg::Argument(coin_arg)
             }
         };
 
         let coin_to_merge_arg = match coin_to_merge {
-            ProgrammableMergeCoinsArg::CoinObjectId(coin_object_id) => {
+            ProgrammableObjectArg::ObjectID(coin_object_id) => {
                 ProgrammableTransactionArg::SuiJsonValue(
                     SuiJsonValue::from_object_id(coin_object_id)
                 )
             },
-            ProgrammableMergeCoinsArg::Argument(coin_arg) => {
+            ProgrammableObjectArg::Argument(coin_arg) => {
                 ProgrammableTransactionArg::Argument(coin_arg)
             }
         };
@@ -928,6 +964,24 @@ impl TransactionBuilder {
             ));
 
         Ok(())
+    }
+
+    // Maybe programmable split coins?
+
+    pub async fn programmable_split_gas_coin(
+        &self,
+        builder: &mut ProgrammableTransactionBuilder,
+        amount: u64
+        // primary_coin: ProgrammableMergeCoinsArg,
+        // coin_to_merge: ProgrammableMergeCoinsArg,
+        // coin_type: SuiTypeTag,
+    ) -> ProgrammableTransactionArg {
+
+        let amt_arg = builder.pure(amount).unwrap();
+
+        ProgrammableTransactionArg::Argument(
+            builder.command(Command::SplitCoins(Argument::GasCoin, vec![amt_arg]))
+        )
     }
 
     async fn resolve_and_checks_programmable_transaction_args(

@@ -419,14 +419,14 @@ impl Exchange for Cetus {
 }
 
 #[derive(Debug, Clone)]
-struct CetusMarket {
-    parent_exchange: Cetus,
-    coin_x: TypeTag,
-    coin_y: TypeTag,
-    pool_id: ObjectID,
-    coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
-    coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
-    computing_pool: Option<cetus_pool::Pool>
+pub struct CetusMarket {
+    pub parent_exchange: Cetus,
+    pub coin_x: TypeTag,
+    pub coin_y: TypeTag,
+    pub pool_id: ObjectID,
+    pub coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
+    pub coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
+    pub computing_pool: Option<cetus_pool::Pool>
 }
 
 impl CetusMarket {
@@ -618,7 +618,7 @@ impl CetusMarket {
         let amount_specified = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
-                    &MoveValue::U64(amount_in as u64)
+                    &MoveValue::U64((amount_in) as u64)
                 )
                 .context("failed to convert MoveValue for amount_specified to JSON")?
             )?
@@ -628,7 +628,7 @@ impl CetusMarket {
         let amount_limit = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
-                    &MoveValue::U64(amount_in as u64)
+                    &MoveValue::U64((amount_in) as u64)
                 )
                 .context("failed to convert MoveValue for amount_limit to JSON")?
             )?
@@ -692,6 +692,7 @@ impl CetusMarket {
         
         Ok(())
     }
+
 }
 
 #[async_trait]

@@ -5,10 +5,11 @@ use arb_bot::*;
 
 use anyhow::Context;
 
+use clap::Parser;
+
 use ethnum::I256;
 
 use futures::future;
-use sui_sdk::types::object::{Object, self};
 
 use std::cmp;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -16,10 +17,12 @@ use std::str::FromStr;
 use std::time::Instant;
 use std::sync::Arc;
 
-use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata, SuiObjectResponse, SuiTypeTag};
+use sui_keys::keystore::{Keystore, FileBasedKeystore, AccountKeystore};
+
+use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata, SuiObjectResponse, SuiObjectDataOptions, SuiTypeTag};
+use sui_sdk::types::object::{Object, self};
 use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError, SuiAddress};
 use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-
 
 use custom_sui_sdk::transaction_builder::{TransactionBuilder, ProgrammableMergeCoinsArg};
 use custom_sui_sdk::programmable_transaction_sui_json::ProgrammableTransactionArg;
@@ -44,20 +47,18 @@ const CETUS_ROUTER_ADDRESS: &str = "0x2eeaab737b37137b94bfa8f841f92e36a153641119
 const CETUS_GLOBAL_CONFIG_ADDRESS: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
 
 const TURBOS_ORIGINAL_PACKAGE_ADDRESS: &str = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1";
-// const TURBOS_ROUTER_ADDRESS: &str = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1";
-const TURBOS_VERSIONED_ID: &str = "0xf1cf0e81048df168ebeb1b8030fad24b3e0b53ae827c25053fff0779c1445b6f";
-
-// const TURBOS_PACKAGE_ADDRESS: &str = "0x84d1ad43e95e9833670fcdb2f2d9fb7618fe1827e3908f2c2bb842f3dccb80af";
 const TURBOS_CURRENT_PACKAGE_ADDRESS: &str = "0x84d1ad43e95e9833670fcdb2f2d9fb7618fe1827e3908f2c2bb842f3dccb80af";
-// const TURBOS_VERSIONED_ID: &str = "0xf1cf0e81048df168ebeb1b8030fad24b3e0b53ae827c25053fff0779c1445b6f";
-
-// const TURBOS_TICK_MAP: &str = "0xd836ea2a159743a568fe29e8f42672a1b88414ab21be5411f8f6331e66b218d3";
-
+const TURBOS_VERSIONED_ID: &str = "0xf1cf0e81048df168ebeb1b8030fad24b3e0b53ae827c25053fff0779c1445b6f";
 // temp
-const MY_SUI_ADDRESS: &str = "0x02a212de6a9dfa3a69e22387acfbafbb1a9e591bd9d636e7895dcfc8de05f331";
+// const MY_SUI_ADDRESS: &str = "0x02a212de6a9dfa3a69e22387acfbafbb1a9e591bd9d636e7895dcfc8de05f331";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+
+    let run_data_opts = RunDataOpts::parse();
+    let keystore_path = run_data_opts.keystore_path;
+    let keystore = Keystore::File(FileBasedKeystore::new(&keystore_path)?);
+    let key_index = run_data_opts.key_index;
 
     let cetus = Cetus::new(
         ObjectID::from_str(CETUS_PACKAGE_ADDRESS).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?, 
@@ -76,20 +77,79 @@ async fn main() -> Result<(), anyhow::Error> {
     let run_data = RunData {
         sui_client: SuiClientBuilder::default()
         .ws_url(
-            "wss://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f"
+            &run_data_opts.wss_url
+            // "wss://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f"
             // "wss://sui-mainnet.blastapi.io:443/25957d97-3d27-4236-8056-6b3f4eff7f0b"
         )
         .build(
-            "https://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f",
+            &run_data_opts.rpc_url,
+            // "https://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f",
             // "https://sui-mainnet.blastapi.io:443/25957d97-3d27-4236-8056-6b3f4eff7f0b",
             &rate_limiter
         )
-        .await?
+        .await?,
+        keystore,
+        key_index
     };
 
-    // let exchanges = vec![Box::new(cetus.clone() as dyn Exchange), Box::new(turbos.clone() as dyn Exchange)];
+    // // END ARB
 
-    let base_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
+    let owner_address = run_data
+        .keystore
+        .addresses()
+        .get(run_data.key_index)
+        .context(format!("No address for key index {} in keystore", run_data.key_index))?
+        .clone();
+
+    let mut exec = Box::new(CetusMarket {
+        parent_exchange: cetus.clone(),
+        coin_x: TypeTag::from_str("0x06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS")?, //0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?
+        coin_y: TypeTag::from_str("0x2::sui::SUI")?,
+        pool_id: ObjectID::from_str("0x498e57c0f7a67436177348afb1e43fe15c2c572f49f056202823d8a47aefcbd1")?, // 0x25ccb77dc4de57879e12ac7f8458860a0456a0a46a84b9f4a8903b5498b96665
+        coin_x_sqrt_price: None, // In terms of y. x / y
+        coin_y_sqrt_price: None, // In terms of x. y / x
+        computing_pool: None
+    }) as Box<dyn Market>;
+
+    let exec_response = run_data
+        .sui_client
+        .read_api()
+        .get_object_with_options(
+            exec.pool_id().clone(), 
+            SuiObjectDataOptions::full_content()
+        ).await?;
+
+    exec.update_with_object_response(&run_data.sui_client, &exec_response).await?;
+
+    
+    // println!("{:?}", exec.compute_swap_x_to_y(974641586360));
+    println!("{:?}", exec.compute_swap_x_to_y(10_000_000_000));
+    // println!("{:?}", exec.compute_swap_y_to_x(8_000_000_000));
+    println!("{:?}", exec.coin_x_price());
+    // panic!();
+
+    let exec_result = arbitrage::OptimizedResult {
+        path: vec![
+            arbitrage::DirectedLeg {
+                x_to_y: false,
+                market: &exec
+            },
+        ],
+        amount_in: 8_000_000_000, // 974641586360
+        amount_out: 100000000000,
+        profit: I256::from(0)
+    };
+
+    arbitrage::execute_arb(
+        &run_data.sui_client, 
+        exec_result, 
+        &owner_address, 
+        &run_data.keystore
+    ).await?;
+
+    // panic!();
+
+    let source_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
     
     let cetus_markets = cetus.get_all_markets(&run_data.sui_client).await?;
     let turbos_markets = turbos.get_all_markets(&run_data.sui_client).await?;
@@ -100,47 +160,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     println!("markets.len(): {}", markets.len());
 
-    // // TODO: Weigh the costs of duplicate data in markets
-    // // OR storing coin data in nodes
-    // // But its for human reading only rly
-    // let coin_to_metadata = future::try_join_all(
-    //     markets
-    //         .iter()
-    //         .map(|market| {
-    //             async {
-    //                 let mut coin_to_metadata = HashMap::new();
-
-    //                 if let Some(coin_x_metadata) = run_data.sui_client
-    //                     .coin_read_api()
-    //                     .get_coin_metadata(market.coin_x().to_string()).await? {
-    //                         coin_to_metadata.insert(market.coin_x().clone(), coin_x_metadata);
-    //                     }
-
-    //                 if let Some(coin_y_metadata) = run_data.sui_client
-    //                     .coin_read_api()
-    //                     .get_coin_metadata(market.coin_y().to_string()).await? {
-    //                         coin_to_metadata.insert(market.coin_y().clone(), coin_y_metadata);
-    //                     }
-
-    //                 // println!("coin_x_metadata: {:#?}", coin_x_metadata);
-    //                 // println!("coin_y_metadata: {:#?}\n", coin_y_metadata);
-
-    //                 Ok::<HashMap<TypeTag, SuiCoinMetadata>, anyhow::Error>(coin_to_metadata)
-    //             }
-    //         })
-    //     ).await?
-    //     .into_iter()
-    //     .flatten()
-    //     .collect::<HashMap<TypeTag, SuiCoinMetadata>>();
-
     let mut market_graph = MarketGraph::new(&markets)?;
-
-    // loop_blocks(
-    //     &run_data,
-    //     &vec![Box::new(cetus), Box::new(turbos)],
-    //     &mut market_graph,
-    //     &base_coin
-    // ).await?;
 
     let cetus_pool_id_to_object_response = cetus
         .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
@@ -156,56 +176,33 @@ async fn main() -> Result<(), anyhow::Error> {
 
     println!("pool_id_to_fields.keys().len(): {}", pool_id_to_object_response.keys().len());
 
-    // let liquidity_filtered = petgraph::visit::EdgeFiltered::from_fn(
-    //     &market_graph.graph,
-    //     |(_, _, market)| {
-    //         market.viable()
-    //     }
-    // );
-
-    let max_intermediate_nodes = 5;
-
-    let paths = all_simple_paths(
-        &market_graph.graph, 
-        &base_coin, 
-        &base_coin, 
-        1, 
-        Some(max_intermediate_nodes)
-    ).collect::<Vec<Vec<&TypeTag>>>()
-    .clone();
-
-    println!("Num cycles paths: {}", paths.len());
-
-    // let cross_exchange_paths = paths
-    //     .into_iter()
-    //     .filter(|path| {
-    //         let mut market_set = HashSet::new();
-
-    //         for pair in path[..].windows(2) {
-    //             for market_info in market_graph.graph.edge_weight(pair[0], pair[1]).unwrap() {
-    //                 market_set.insert(market_info.market.package_id().clone());
-    //             }
-    //         }
-
-    //         market_set.len() > 1
-    //     })
-    //     .collect::<Vec<_>>();
-
-    // println!("Num cycles cross_exchange_paths: {}", cross_exchange_paths.len());
+    let max_intermediate_nodes = run_data_opts.max_intermediate_nodes;
 
     market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
     market_graph.add_cycles(
-        &base_coin,
-        4
+        &source_coin,
+        max_intermediate_nodes
     )?;
 
-    // Do an initial cleanup of the available arbs
+    let coin_x = TypeTag::from_str("0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?;
+    let coin_y = TypeTag::from_str("0x2::sui::SUI")?;
+
+    let weight = market_graph.graph.edge_weight(
+        &coin_x,
+        &coin_y,
+    ).unwrap();
+
+    for x in weight {
+        println!("pool: {}", x.0);
+    }
+
+    panic!();
 
     loop_blocks(
         &run_data,
         &vec![Box::new(cetus), Box::new(turbos)],
         &mut market_graph,
-        &base_coin
+        &source_coin
     ).await?;
 
     // // let mut total_profit = I256::from(0_u8);

@@ -2,9 +2,13 @@
 
 use anyhow::{anyhow, Context, Result};
 use sui_sdk::rpc_types::EventFilter;
+
+use clap::Parser;
+
 use custom_sui_sdk::SuiClient;
 // use sui_sdk::wallet_context::WalletContext;
-use futures::StreamExt;
+
+use futures::{StreamExt, future};
 
 use move_core_types::language_storage::TypeTag;
 
@@ -15,8 +19,9 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::collections::HashSet;
 
-use sui_keys::keystore::Keystore;
+use sui_keys::keystore::{Keystore, AccountKeystore};
 use sui_sdk::types::object::Object;
 use sui_sdk::sui_client_config;
 use sui_sdk::rpc_types::SuiObjectDataOptions;
@@ -37,11 +42,30 @@ pub use crate::market_graph::*;
 pub use crate::cetus::*;
 pub use crate::turbos::*;
 
+#[derive(Parser)]
+#[clap(
+    name = "arb-bot",
+    about = "hopefully he makes money",
+    rename_all = "kebab-case"
+)]
+pub struct RunDataOpts {
+    #[clap(long, default_value = "wss://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f")]
+    pub wss_url: String,
+    #[clap(long, default_value = "https://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f")]
+    pub rpc_url: String,
+    #[clap(long)]
+    pub keystore_path: PathBuf,
+    #[clap(long)]
+    pub key_index: usize, 
+    #[clap(long)]
+    pub max_intermediate_nodes: usize, 
+
+}
 
 pub struct RunData {
     pub sui_client: SuiClient,
-    // pub keystore: Keystore,
-    // pub wallet_context: WalletContext,
+    pub keystore: Keystore,
+    pub key_index: usize,
 }
 
 pub async fn loop_blocks<'a>(
@@ -51,6 +75,168 @@ pub async fn loop_blocks<'a>(
     source_coin: &TypeTag
     // paths: Vec<Vec<&TypeTag>>
 ) -> Result<()> {
+
+    println!("Addresses: {:#?}", run_data.keystore.addresses());
+    // panic!();
+
+    let owner_address = run_data
+        .keystore
+        .addresses()
+        .get(run_data.key_index)
+        .context(format!("No address for key index {} in keystore", run_data.key_index))?
+        .clone();
+        // [run_data.key_index];
+        // .context(format!("No address for key index {} in keystore", run_data.key_index))?;
+
+    let run_starting_balance = run_data
+        .sui_client
+        .coin_read_api()
+        .get_balance(
+            owner_address.clone(),
+            Some(format!("{}", source_coin))
+        )
+        .await?;
+
+    println!("RUN STARTING BALANCE: {}", run_starting_balance.total_balance);
+
+     // Do an initial cleanup of the available arbs
+    let all_cycles = market_graph
+        .source_coin_to_cycles
+        .get(source_coin)
+        .context(format!("No cycles for source coin: {}", source_coin))?;
+
+    let mut optimized_results = all_cycles
+        .par_iter()
+        .map(|cycle| {
+            arbitrage::optimize_starting_amount_in(cycle, &market_graph)
+        })
+        .collect::<Result<Vec<_>, anyhow::Error>>()?;
+
+    let mut used_legs_set = HashSet::new();
+
+    // Good future pattern may be an execute all trades func
+    // That takes an ordering and filtering function as args
+
+    // Sort by most profitable so that the later excluded trades
+    // are the less profitable ones. Sort in descending order.
+    optimized_results.sort_by(|a, b| {
+        b.profit.cmp(&a.profit)
+    });
+
+    // optimized_results.iter().for_each(|or| {
+    //     println!("profit: {}", or.profit);
+    // });
+
+    // panic!();
+
+    // Exclude less profitable trades whose legs
+    // were already seen before. Don't want any strange effects.
+    // Later we can account for the effects of our trades and whatnot.
+    // We should also not swap back through the same pool we came
+    // Since we haven't accounted for the effects of our trade on
+    // the pool.
+    // RESULTS DEPEND ON ORDER
+    let filtered_optimized_results_iter = optimized_results
+        .into_iter()
+        .filter(|optimized_result| {
+            if optimized_result.profit < 50_000_000 {
+                return false
+            }  // Should do some gas threshold instead
+            for leg in &optimized_result.path {
+                if used_legs_set.contains(leg.market.pool_id()) {
+                    return false;
+                } else {
+                    used_legs_set.insert(leg.market.pool_id());
+                }
+            }
+
+            true
+        });
+
+    for optimized_result in filtered_optimized_results_iter {
+
+        // println!("Profit: {}, Amount In: {}", optimized_result.profit, optimized_result.amount_in);
+        // panic!();
+
+        let start_source_coin_balance = run_data
+            .sui_client
+            .coin_read_api()
+            .get_balance(
+                owner_address.clone(),
+                Some(format!("{}", source_coin))
+            )
+            .await?;
+
+        if optimized_result.amount_in > start_source_coin_balance.total_balance {
+            // Skip so that we don't fail
+            continue;
+        }
+
+        // println!("OR: {:#?}", optimized_result);
+        // panic!();
+
+        println!("+-----------------------------------------------------");
+        println!("| START BALANCE: {}", start_source_coin_balance.total_balance);
+        println!("| AMOUNT IN: {} {}", optimized_result.amount_in, source_coin);
+        println!("| AMOUNT OUT: {} {}", optimized_result.amount_out, source_coin);
+        println!("| RAW PROFIT: {} {}", optimized_result.profit, source_coin);
+        optimized_result.path
+            .iter()
+            .try_for_each(|leg| {
+                if leg.x_to_y {
+                    println!("|    +------------------------------------------------");
+                    println!("|    | {}", leg.market.coin_x());
+                    println!("|    |   ----[RATE: {}]---->", leg.market.coin_y_price().context("Missing coin_y price.")?);
+                    println!("|    | {}", leg.market.coin_y());
+                    // println!("|    +------------------------------------------------");
+                } else {
+                    println!("|    +------------------------------------------------");
+                    println!("|    | {}", leg.market.coin_y());
+                    println!("|    |   ----[RATE: {}]---->", leg.market.coin_x_price().context("Missing coin_x price.")?);
+                    println!("|    | {}", leg.market.coin_x());
+                    // println!("|    +------------------------------------------------");
+                }
+
+                Ok::<(), anyhow::Error>(())
+            })?;
+
+        println!("|    +------------------------------------------------");
+
+        arbitrage::execute_arb(
+            &run_data.sui_client,
+            optimized_result,
+            run_data
+                .keystore
+                .addresses()
+                .get(run_data.key_index)
+                .context(format!("No address for key index {} in keystore", run_data.key_index))?,
+            &run_data.keystore,
+        )
+        .await?;
+
+        let end_source_coin_balance = run_data
+            .sui_client
+            .coin_read_api()
+            .get_balance(
+                owner_address.clone(),
+                Some(format!("{}", source_coin))
+            )
+            .await?;
+
+        let realized_profit = end_source_coin_balance.total_balance as i128 - start_source_coin_balance.total_balance as i128;
+
+        println!("| END BALANCE: {}", end_source_coin_balance.total_balance);
+        println!("| REALIZED PROFIT: {}", realized_profit);
+        println!("+-----------------------------------------------------");
+
+        if realized_profit < 0 {
+            return Err(anyhow!("Arb failed"));
+        } else {
+            return Err(anyhow!("TEST RUN SUCCESS. CRYYYY."));
+        }
+    }
+
+    panic!();
 
     let pool_state_changing_event_filters = exchanges
         .iter()
@@ -90,21 +276,21 @@ pub async fn loop_blocks<'a>(
                     return Err(anyhow!("Pool field should match the Value::String variant."));
                 };
 
-            let pool_response = run_data
-                .sui_client
-                .read_api()
-                .get_object_with_options(
-                    pool_id, 
-                    SuiObjectDataOptions::full_content()
-                ).await?;
+            // let pool_response = run_data
+            //     .sui_client
+            //     .read_api()
+            //     .get_object_with_options(
+            //         pool_id, 
+            //         SuiObjectDataOptions::full_content()
+            //     ).await?;
 
-            market_graph.update_market_with_object_response(
-                &run_data.sui_client,
-                &pool_id,
-                &pool_response
-            ).await?;
+            // market_graph.update_market_with_object_response(
+            //     &run_data.sui_client,
+            //     &pool_id,
+            //     &pool_response
+            // ).await?;
 
-            println!("| UPDATED POOL: {}", pool_id);
+            // println!("| UPDATED POOL: {}", pool_id);
 
             // All these events were chosen because they have a pool id
             // To be honest its probably best to come up with a way to have a per 
@@ -116,6 +302,86 @@ pub async fn loop_blocks<'a>(
                 .get(&(pool_id, source_coin.clone()))
                 .context(format!("No cycles for (pool_id, source_coin): ({}, {})", pool_id, source_coin))?;
 
+            let updated_pools = HashSet::new();
+            
+            // Update pool involved in the cycle
+            // PREVIOUS ARBS WILL EMIT EVENTS
+            // BUT WILL HAVE AFFECTED MULTIPLE POOLS
+            // So we can't just update the pool for which the vent was emitted
+            // We have to update all pools involved in the cycle
+            // TODO: We can make this more efficient by only updating pools that
+            // were involved in ther previous trade
+            for cycle in cycles {
+                for pair in cycle[..].windows(2) {
+                    let coin_a = pair[0];
+                    let coin_b = pair[1];
+    
+                    let markets = market_graph
+                        .graph
+                        .edge_weight(coin_a, coin_b)
+                        .context(format!("Missing markets for pair ({}, {})", coin_a, coin_b))?;
+    
+                    for (pool_id, _) in markets {
+                        if !updated_pools.contains(pool_id){
+                            let pool_response = run_data
+                                .sui_client
+                                .read_api()
+                                .get_object_with_options(
+                                    pool_id.clone(), 
+                                    SuiObjectDataOptions::full_content()
+                                ).await?;
+    
+                            market_graph.update_market_with_object_response(
+                                &run_data.sui_client,
+                                &pool_id,
+                                &pool_response
+                            ).await?;
+                            updated_pools.insert(pool_id.clone());
+                        }
+                    }
+                }
+            }
+
+            // future::try_join_all(
+            //     cycles
+            //         .iter()
+            //         .map(|cycle| {
+            //             async {
+            //                 for pair in cycle[..].windows(2) {
+            //                     let coin_a = pair[0];
+            //                     let coin_b = pair[1];
+    
+            //                     let markets = market_graph
+            //                         .graph
+            //                         .edge_weight(coin_a, coin_b)
+            //                         .context(format!("Missing markets for pair ({}, {})", coin_a, coin_b))?;
+    
+            //                     for (pool_id, _) in markets {
+            //                         if !updated_pools.contains(pool_id){
+            //                             let pool_response = run_data
+            //                                 .sui_client
+            //                                 .read_api()
+            //                                 .get_object_with_options(
+            //                                     pool_id.clone(), 
+            //                                     SuiObjectDataOptions::full_content()
+            //                                 ).await?;
+
+            //                             market_graph.update_market_with_object_response(
+            //                                 &run_data.sui_client,
+            //                                 &pool_id,
+            //                                 &pool_response
+            //                             ).await?;
+            //                             updated_pools.insert(pool_id.clone());
+            //                         }
+            //                     }
+    
+            //                 }
+
+            //                 Ok::<(), anyhow::Error>(())
+            //             }
+            //         })
+            // ).await?;
+
             let mut optimized_results = cycles
                 .par_iter()
                 .map(|cycle| {
@@ -123,57 +389,159 @@ pub async fn loop_blocks<'a>(
                 })
                 .collect::<Result<Vec<_>, anyhow::Error>>()?;
     
-            optimized_results = optimized_results
+            let mut used_legs_set = HashSet::new();
+
+            // Good future pattern may be an execute all trades func
+            // That takes an ordering and filtering function as args
+
+            // Sort by most profitable so that the later excluded trades
+            // are the less profitable ones. Sort in descending order.
+            optimized_results.sort_by(|a, b| {
+                b.profit.cmp(&a.profit)
+            });
+
+            // Exclude less profitable trades whose legs
+            // were already seen before. Don't want any strange effects.
+            // Later we can account for the effects of our trades and whatnot.
+            // We should also not swap back through the same pool we came
+            // Since we haven't accounted for the effects of our trade on
+            // the pool.
+            // RESULTS DEPEND ON ORDER
+
+            let filtered_optimized_results_iter = optimized_results
                 .into_iter()
                 .filter(|optimized_result| {
-                    optimized_result.profit > 0
-                })
-                .collect::<Vec<_>>();
+                    if optimized_result.profit < 100_000_000 {
+                        return false
+                    }  // Should do some gas threshold instead
+                    for leg in &optimized_result.path {
+                        if used_legs_set.contains(leg.market.pool_id()) {
+                            return false;
+                        } else {
+                            used_legs_set.insert(leg.market.pool_id());
+                        }
+                    }
 
-            optimized_results
-                .iter()
-                .try_for_each(|or| {
-                    println!("+-----------------------------------------------------");
-                    println!("| AMOUNT IN: {} {}", or.amount_in, source_coin);
-                    println!("| AMOUNT OUT: {} {}", or.amount_out, source_coin);
-                    println!("| RAW PROFIT: {} {}", or.profit, source_coin);
-                    or.path
-                        .iter()
-                        .try_for_each(|leg| {
-                            if leg.x_to_y {
-                                println!("|    +------------------------------------------------");
-                                println!("|    | {}", leg.market.coin_x());
-                                println!("|    |   ----[RATE: {}]---->", leg.market.coin_y_price().context("Missing coin_y price.")?);
-                                println!("|    | {}", leg.market.coin_y());
-                                // println!("|    +------------------------------------------------");
-                            } else {
-                                println!("|    +------------------------------------------------");
-                                println!("|    | {}", leg.market.coin_y());
-                                println!("|    |   ----[RATE: {}]---->", leg.market.coin_x_price().context("Missing coin_x price.")?);
-                                println!("|    | {}", leg.market.coin_x());
-                                // println!("|    +------------------------------------------------");
-                            }
+                    true
+                });
 
-                            Ok::<(), anyhow::Error>(())
-                        })?;
+            for optimized_result in filtered_optimized_results_iter {
 
-                    println!("|    +------------------------------------------------");
-                    println!("+-----------------------------------------------------");
+                let start_source_coin_balance = run_data
+                    .sui_client
+                    .coin_read_api()
+                    .get_balance(
+                        owner_address.clone(),
+                        Some(format!("{}", source_coin))
+                    )
+                    .await?;;
+        
+                if optimized_result.amount_in > start_source_coin_balance.total_balance {
+                    // Skip so that we don't fail
+                    continue;
+                }
 
-                    Ok::<(), anyhow::Error>(())
-                })?;
+                println!("+-----------------------------------------------------");
+                println!("| START BALANCE: {}", start_source_coin_balance.total_balance);
+                println!("| AMOUNT IN: {} {}", optimized_result.amount_in, source_coin);
+                println!("| AMOUNT OUT: {} {}", optimized_result.amount_out, source_coin);
+                println!("| RAW PROFIT: {} {}", optimized_result.profit, source_coin);
+                optimized_result.path
+                    .iter()
+                    .try_for_each(|leg| {
+                        if leg.x_to_y {
+                            println!("|    +------------------------------------------------");
+                            println!("|    | {}", leg.market.coin_x());
+                            println!("|    |   ----[RATE: {}]---->", leg.market.coin_y_price().context("Missing coin_y price.")?);
+                            println!("|    | {}", leg.market.coin_y());
+                            // println!("|    +------------------------------------------------");
+                        } else {
+                            println!("|    +------------------------------------------------");
+                            println!("|    | {}", leg.market.coin_y());
+                            println!("|    |   ----[RATE: {}]---->", leg.market.coin_x_price().context("Missing coin_x price.")?);
+                            println!("|    | {}", leg.market.coin_x());
+                            // println!("|    +------------------------------------------------");
+                        }
+
+                        Ok::<(), anyhow::Error>(())
+                    })?;
+
+                println!("|    +------------------------------------------------");
+
+                arbitrage::execute_arb(
+                    &run_data.sui_client,
+                    optimized_result,
+                    run_data
+                        .keystore
+                        .addresses()
+                        .get(run_data.key_index)
+                        .context(format!("No address for key index {} in keystore", run_data.key_index))?,
+                    &run_data.keystore,
+                )
+                .await?;
+
+                let end_source_coin_balance = run_data
+                    .sui_client
+                    .coin_read_api()
+                    .get_balance(
+                        owner_address.clone(),
+                        Some(format!("{}", source_coin))
+                    )
+                    .await?;
+
+                let realized_profit = end_source_coin_balance.total_balance - start_source_coin_balance.total_balance;
+
+                println!("| END BALANCE: {}", end_source_coin_balance.total_balance);
+                println!("| REALIZED PROFIT: {}", realized_profit);
+                println!("+-----------------------------------------------------");
+
+                if realized_profit < 0 {
+                    return Err(anyhow!("Arb failed"));
+                }
+            }
+
+            // filtered_optimized_results
+            //     .iter()
+            //     .try_for_each(|or| {
+            //         println!("+-----------------------------------------------------");
+            //         println!("| AMOUNT IN: {} {}", or.amount_in, source_coin);
+            //         println!("| AMOUNT OUT: {} {}", or.amount_out, source_coin);
+            //         println!("| RAW PROFIT: {} {}", or.profit, source_coin);
+            //         or.path
+            //             .iter()
+            //             .try_for_each(|leg| {
+            //                 if leg.x_to_y {
+            //                     println!("|    +------------------------------------------------");
+            //                     println!("|    | {}", leg.market.coin_x());
+            //                     println!("|    |   ----[RATE: {}]---->", leg.market.coin_y_price().context("Missing coin_y price.")?);
+            //                     println!("|    | {}", leg.market.coin_y());
+            //                     // println!("|    +------------------------------------------------");
+            //                 } else {
+            //                     println!("|    +------------------------------------------------");
+            //                     println!("|    | {}", leg.market.coin_y());
+            //                     println!("|    |   ----[RATE: {}]---->", leg.market.coin_x_price().context("Missing coin_x price.")?);
+            //                     println!("|    | {}", leg.market.coin_x());
+            //                     // println!("|    +------------------------------------------------");
+            //                 }
+
+            //                 Ok::<(), anyhow::Error>(())
+            //             })?;
+
+            //         println!("|    +------------------------------------------------");
+            //         println!("+-----------------------------------------------------");
+
+            //         Ok::<(), anyhow::Error>(())
+            //     })?;
 
         }
-
-
-
     }
     
     Ok(())
 }
 
+// pub fn execute_arbs()
 
-// Take 
+// Ta
 
 // pub fn initalize_loop() {
 

@@ -1,5 +1,7 @@
 # ignore ALL /lock files
 *.lock
+*.env
+*.keystore
 
 # ignore ALL files in ANY directory named target
 target/

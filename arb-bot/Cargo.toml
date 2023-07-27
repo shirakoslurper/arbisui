@@ -10,6 +10,7 @@ edition = "2021"
 anyhow.workspace = true
 async-trait.workspace = true
 bcs.workspace = true
+clap.workspace = true
 custom-sui-sdk = { path = "../custom-sui-sdk" }
 dyn-clone.workspace = true
 ethnum.workspace = true
