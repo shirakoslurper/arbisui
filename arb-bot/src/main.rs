@@ -9,29 +9,20 @@ use clap::Parser;
 
 use ethnum::I256;
 
-use futures::future;
-
 use std::cmp;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 use std::str::FromStr;
-use std::time::Instant;
 use std::sync::Arc;
+
+use std::time::{Instant, Duration};
 
 use sui_keys::keystore::{Keystore, FileBasedKeystore, AccountKeystore};
 
-use sui_sdk::rpc_types::{SuiMoveValue, SuiCoinMetadata, SuiObjectResponse, SuiObjectDataOptions, SuiTypeTag};
-use sui_sdk::types::object::{Object, self};
-use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError, SuiAddress};
-use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-
-use custom_sui_sdk::transaction_builder::{TransactionBuilder, ProgrammableMergeCoinsArg};
-use custom_sui_sdk::programmable_transaction_sui_json::ProgrammableTransactionArg;
+use sui_sdk::rpc_types::SuiObjectDataOptions;
+use sui_sdk::types::base_types::{ObjectID, ObjectIDParseError};
 
 use move_core_types::language_storage::TypeTag;
 
-use fixed::types::U64F64;
-
-use petgraph::algo::all_simple_paths;
 
 use governor::{Quota, RateLimiter};
 use std::num::NonZeroU32;
@@ -92,60 +83,70 @@ async fn main() -> Result<(), anyhow::Error> {
         key_index
     };
 
-    // // END ARB
+    // // // END ARB
 
-    let owner_address = run_data
-        .keystore
-        .addresses()
-        .get(run_data.key_index)
-        .context(format!("No address for key index {} in keystore", run_data.key_index))?
-        .clone();
+    // let owner_address = run_data
+    //     .keystore
+    //     .addresses()
+    //     .get(run_data.key_index)
+    //     .context(format!("No address for key index {} in keystore", run_data.key_index))?
+    //     .clone();
 
-    let mut exec = Box::new(CetusMarket {
-        parent_exchange: cetus.clone(),
-        coin_x: TypeTag::from_str("0x06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS")?, //0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?
-        coin_y: TypeTag::from_str("0x2::sui::SUI")?,
-        pool_id: ObjectID::from_str("0x498e57c0f7a67436177348afb1e43fe15c2c572f49f056202823d8a47aefcbd1")?, // 0x25ccb77dc4de57879e12ac7f8458860a0456a0a46a84b9f4a8903b5498b96665
-        coin_x_sqrt_price: None, // In terms of y. x / y
-        coin_y_sqrt_price: None, // In terms of x. y / x
-        computing_pool: None
-    }) as Box<dyn Market>;
+    // let mut exec = Box::new(CetusMarket {
+    //     parent_exchange: cetus.clone(),
+    //     coin_x: TypeTag::from_str("0x06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS")?, //0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?
+    //     coin_y: TypeTag::from_str("0x2::sui::SUI")?,
+    //     pool_id: ObjectID::from_str("0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded")?, //0x498e57c0f7a67436177348afb1e43fe15c2c572f49f056202823d8a47aefcbd1")?, // 0x25ccb77dc4de57879e12ac7f8458860a0456a0a46a84b9f4a8903b5498b96665
+    //     coin_x_sqrt_price: None, // In terms of y. x / y
+    //     coin_y_sqrt_price: None, // In terms of x. y / x
+    //     computing_pool: None
+    // }) as Box<dyn Market>;
 
-    let exec_response = run_data
-        .sui_client
-        .read_api()
-        .get_object_with_options(
-            exec.pool_id().clone(), 
-            SuiObjectDataOptions::full_content()
-        ).await?;
+    // // let mut exec = Box::new(CetusMarket {
+    // //     parent_exchange: cetus.clone(),
+    // //     coin_x: TypeTag::from_str("0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?,
+    // //     coin_y: TypeTag::from_str("0x2::sui::SUI")?,
+    // //     pool_id: ObjectID::from_str("0x25ccb77dc4de57879e12ac7f8458860a0456a0a46a84b9f4a8903b5498b96665")?, //0x498e57c0f7a67436177348afb1e43fe15c2c572f49f056202823d8a47aefcbd1")?, // 0x25ccb77dc4de57879e12ac7f8458860a0456a0a46a84b9f4a8903b5498b96665
+    // //     coin_x_sqrt_price: None, // In terms of y. x / y
+    // //     coin_y_sqrt_price: None, // In terms of x. y / x
+    // //     computing_pool: None
+    // // }) as Box<dyn Market>;
 
-    exec.update_with_object_response(&run_data.sui_client, &exec_response).await?;
+    // let exec_response = run_data
+    //     .sui_client
+    //     .read_api()
+    //     .get_object_with_options(
+    //         exec.pool_id().clone(), 
+    //         SuiObjectDataOptions::full_content()
+    //     ).await?;
+
+    // exec.update_with_object_response(&run_data.sui_client, &exec_response).await?;
 
     
-    // println!("{:?}", exec.compute_swap_x_to_y(974641586360));
-    println!("{:?}", exec.compute_swap_x_to_y(10_000_000_000));
-    // println!("{:?}", exec.compute_swap_y_to_x(8_000_000_000));
-    println!("{:?}", exec.coin_x_price());
-    // panic!();
+    // // println!("{:?}", exec.compute_swap_x_to_y(974641586360));
+    // println!("{:?}", exec.compute_swap_y_to_x(10_000_000_000));
+    // // println!("{:?}", exec.compute_swap_y_to_x(8_000_000_000));
+    // println!("{:?}", exec.coin_x_price());
+    // // panic!();
 
-    let exec_result = arbitrage::OptimizedResult {
-        path: vec![
-            arbitrage::DirectedLeg {
-                x_to_y: false,
-                market: &exec
-            },
-        ],
-        amount_in: 8_000_000_000, // 974641586360
-        amount_out: 100000000000,
-        profit: I256::from(0)
-    };
+    // let exec_result = arbitrage::OptimizedResult {
+    //     path: vec![
+    //         arbitrage::DirectedLeg {
+    //             x_to_y: false,
+    //             market: &exec
+    //         },
+    //     ],
+    //     amount_in: 10_000_000_000, // 974641586360
+    //     amount_out: 100000000000,
+    //     profit: I256::from(0)
+    // };
 
-    arbitrage::execute_arb(
-        &run_data.sui_client, 
-        exec_result, 
-        &owner_address, 
-        &run_data.keystore
-    ).await?;
+    // arbitrage::execute_arb(
+    //     &run_data.sui_client, 
+    //     exec_result, 
+    //     &owner_address, 
+    //     &run_data.keystore
+    // ).await?;
 
     // panic!();
 
@@ -162,41 +163,50 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut market_graph = MarketGraph::new(&markets)?;
 
-    let cetus_pool_id_to_object_response = cetus
-        .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
-        .await?;
+    // let now = Instant::now();
 
-    let turbos_pool_id_to_object_response = turbos
-        .get_pool_id_to_object_response(&run_data.sui_client, &turbos_markets)
-        .await?;
+    // let cetus_pool_id_to_object_response = cetus
+    //     .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
+    //     .await?;
 
-    let mut pool_id_to_object_response = HashMap::new();
-    pool_id_to_object_response.extend(turbos_pool_id_to_object_response);
-    pool_id_to_object_response.extend(cetus_pool_id_to_object_response);
+    // let turbos_pool_id_to_object_response = turbos
+    //     .get_pool_id_to_object_response(&run_data.sui_client, &turbos_markets)
+    //     .await?;
 
-    println!("pool_id_to_fields.keys().len(): {}", pool_id_to_object_response.keys().len());
+    // let mut pool_id_to_object_response = HashMap::new();
+    // pool_id_to_object_response.extend(turbos_pool_id_to_object_response);
+    // pool_id_to_object_response.extend(cetus_pool_id_to_object_response);
+
+    // println!("pool_id_to_fields.keys().len(): {}", pool_id_to_object_response.keys().len());
+
+
+    // Let's not do clean up. Information may be outdated by the time we execute anyway. 
+    // Lets arb as fast as we can in response to active volume
+    // market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
+    // println!("Elapsed: {:#?}", now.elapsed());
+
+    // panic!();
 
     let max_intermediate_nodes = run_data_opts.max_intermediate_nodes;
-
-    market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
+   
     market_graph.add_cycles(
         &source_coin,
         max_intermediate_nodes
     )?;
 
-    let coin_x = TypeTag::from_str("0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?;
-    let coin_y = TypeTag::from_str("0x2::sui::SUI")?;
+    // let coin_x = TypeTag::from_str("0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?;
+    // let coin_y = TypeTag::from_str("0x2::sui::SUI")?;
 
-    let weight = market_graph.graph.edge_weight(
-        &coin_x,
-        &coin_y,
-    ).unwrap();
+    // let weight = market_graph.graph.edge_weight(
+    //     &coin_x,
+    //     &coin_y,
+    // ).unwrap();
 
-    for x in weight {
-        println!("pool: {}", x.0);
-    }
+    // for x in weight {
+    //     println!("pool: {}", x.0);
+    // }
 
-    panic!();
+    // panic!();
 
     loop_blocks(
         &run_data,

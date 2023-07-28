@@ -50,7 +50,7 @@ pub trait Market: Send + Sync + DynClone {
         &self,
         transaction_builder: &TransactionBuilder,
         pt_builder: &mut ProgrammableTransactionBuilder,
-        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        orig_coins: Option<Vec<ObjectID>>, // the actual coin object in (that you own and has money)
         x_to_y: bool,
         amount_in: u128,
         amount_out: u128,

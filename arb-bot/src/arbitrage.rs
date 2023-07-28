@@ -6,7 +6,7 @@ use custom_sui_sdk::SuiClient;
 use custom_sui_sdk::programmable_transaction_sui_json::ProgrammableTransactionArg;
 use custom_sui_sdk::transaction_builder::{
     TransactionBuilder,
-    ProgrammableMergeCoinsArg
+    // ProgrammableObsArg
 };
 
 use ethnum::I256;
@@ -16,17 +16,18 @@ use move_core_types::language_storage::TypeTag;
 use shared_crypto::intent::Intent;
 
 use sui_keys::keystore::{Keystore, AccountKeystore};
+use sui_sdk::rpc_types::{
+    SuiTransactionBlockEffectsAPI,
+    SuiTransactionBlockResponseOptions,
+    SuiExecutionStatus
+};
+use sui_sdk::SUI_COIN_TYPE;
 use sui_sdk::types::{
     base_types::{SuiAddress, ObjectID},
     transaction::TransactionData,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     transaction::Transaction,
     quorum_driver_types::ExecuteTransactionRequestType
-};
-use sui_sdk::rpc_types::{
-    SuiTransactionBlockEffectsAPI,
-    SuiTransactionBlockResponseOptions,
-    SuiExecutionStatus
 };
 
 use std::fmt::{Debug, Error, Formatter};
@@ -78,7 +79,7 @@ impl<'a> Debug for DirectedLeg<'a> {
 // For a single path
 // Objective is maximizing profit
 pub fn optimize_starting_amount_in<'a>(
-    path: &[&'a TypeTag], 
+    path: &'a [TypeTag], 
     market_graph: &'a MarketGraph<'a>
 ) -> Result<OptimizedResult<'a>, anyhow::Error> {
 
@@ -92,12 +93,12 @@ pub fn optimize_starting_amount_in<'a>(
     // println!("Expanded paths: {:#?}", expanded_paths);
 
     for pair in path[..].windows(2) {
-        let orig = pair[0];
-        let dest = pair[1];
+        let orig = &pair[0];
+        let dest = &pair[1];
 
         let orig_to_dest_markets = market_graph
             .graph
-            .edge_weight(orig, dest)
+            .edge_weight(&orig, &dest)
             .unwrap();
 
         let mut expanded_paths_extended = Vec::<Vec::<DirectedLeg>>::new();
@@ -247,18 +248,20 @@ pub async fn execute_arb<'a>(
     for leg in optimized_result.path {
         let mut dry_run_pt_builder = ProgrammableTransactionBuilder::new();
 
-        let orig_coin_string = if leg.x_to_y {
-            Some(format!("{}", leg.market.coin_x()))
+        let orig_coin_type = if leg.x_to_y {
+            leg.market.coin_x()
         } else {
-            Some(format!("{}", leg.market.coin_y()))
+            leg.market.coin_y()
         };
+
+        let orig_coin_string = format!("{}", orig_coin_type);
 
         // Yields SuiRpcResult<Vec<Coin>>
         let coins = sui_client
             .coin_read_api()
             .select_coins(
                 signer_address.clone(),
-                orig_coin_string,
+                Some(orig_coin_string),
                 amount_in,
                 vec![]
             )
@@ -266,12 +269,19 @@ pub async fn execute_arb<'a>(
 
         println!("{:#?}", coins);
 
-        let coin_object_ids = coins
-            .into_iter()
-            .map(|coin| {
-                coin.coin_object_id
-            })
-            .collect::<Vec<ObjectID>>();
+        // None if our orig_cion is Sui - we'll be splitting off of gas_coin
+        let coin_object_ids = if *orig_coin_type == TypeTag::from_str(SUI_COIN_TYPE)? {
+            None
+        } else {
+            Some(
+                coins
+                    .into_iter()
+                    .map(|coin| {
+                        coin.coin_object_id
+                    })
+                    .collect::<Vec<ObjectID>>()
+            )
+        };
 
         let predicted_amount_out = if leg.x_to_y {
             leg.market
@@ -300,10 +310,11 @@ pub async fn execute_arb<'a>(
             .read_api()
             .get_reference_gas_price()
             .await?
-            * 1000;
+            * 10000;
 
         // Initial dry run transaction to get gas
-        let dry_run_transaction = sui_client
+        let dry_run_transaction = if coin_object_ids.is_some() {
+            sui_client
             .transaction_builder()
             .finish_building_programmable_transaction(
                 dry_run_pt_builder,
@@ -311,7 +322,17 @@ pub async fn execute_arb<'a>(
                 None,
                 reference_gas_price
             )
-            .await?;
+            .await?
+        } else {
+            sui_client
+            .transaction_builder()
+            .finish_building_programmable_transaction_select_all_gas(
+                dry_run_pt_builder,
+                signer_address.clone(),
+                reference_gas_price
+            )
+            .await?
+        };
 
         let dry_run_result = sui_client
             .read_api()
@@ -343,7 +364,10 @@ pub async fn execute_arb<'a>(
             )
             .await?;
 
-        let transaction = sui_client
+        // If our base coin is sui, select all gas
+        // We gotta encapsulate a little better ...
+        let transaction = if coin_object_ids.is_some() {
+            sui_client
             .transaction_builder()
             .finish_building_programmable_transaction(
                 pt_builder,
@@ -351,7 +375,17 @@ pub async fn execute_arb<'a>(
                 None,
                 gas_budget
             )
-            .await?;
+            .await?
+        } else {
+            sui_client
+            .transaction_builder()
+            .finish_building_programmable_transaction_select_all_gas(
+                pt_builder,
+                signer_address.clone(),
+                gas_budget
+            )
+            .await?
+        };
 
         let signature = keystore.sign_secure(
             &signer_address,

@@ -778,6 +778,56 @@ impl TransactionBuilder {
     /// Programmable Transactions ///
     /////////////////////////////////
     
+    pub async fn select_all_gas(
+        &self,
+        signer: SuiAddress,
+        // input_gas: Option<ObjectID>,
+        budget: u64,
+        input_objects: Vec<ObjectID>,
+        gas_price: u64,
+    ) -> anyhow::Result<Vec<ObjectRef>> {
+        if budget < gas_price {
+            bail!("Gas budget {budget} is less than the reference gas price {gas_price}. The gas budget must be at least the current reference gas price of {gas_price}.")
+        }
+
+        let gas_objs = self.0.get_owned_objects(signer, GasCoin::type_()).await?;
+        let mut total_gas_value = 0;
+
+        let mut gas_payment = Vec::new();
+
+        for obj in gas_objs {
+            let response = self
+                .0
+                .get_object_with_options(obj.object_id, SuiObjectDataOptions::new().with_bcs())
+                .await?;
+            let obj = response.object()?;
+            let gas: GasCoin = bcs::from_bytes(
+                &obj.bcs
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("bcs field is unexpectedly empty"))?
+                    .try_as_move()
+                    .ok_or_else(|| anyhow!("Cannot parse move object to gas object"))?
+                    .bcs_bytes,
+            )?;
+
+            total_gas_value += gas.value();
+
+            if input_objects.contains(&obj.object_id) {
+                return Err(anyhow!("Input objects contain at least one selected gas object."));
+            }
+
+            gas_payment.push(obj.object_ref());
+        }
+
+        if total_gas_value < budget {
+            return Err(anyhow!("Cannot find gas coins for signer address with a total amount sufficient for the requires gas amount [{budget}]."));
+        }
+
+        Ok(
+            gas_payment
+        )
+    }
+    
     // Consumes programmable transaction builder
     pub async fn finish_building_programmable_transaction(
         &self,
@@ -800,13 +850,48 @@ impl TransactionBuilder {
             .select_gas(signer, gas, gas_budget, input_objects, gas_price)
             .await?;
 
-        Ok(TransactionData::new(
-            TransactionKind::programmable(pt),
-            signer,
-            gas,
-            gas_budget,
-            gas_price,
-        ))
+        Ok(
+            TransactionData::new_programmable(
+                signer,
+                vec![gas],
+                pt,
+                gas_budget,
+                gas_price,
+            )
+        )
+    }
+
+    // Consumes programmable transaction builder
+    // All of our Sui coins will be used for gas so we 
+    pub async fn finish_building_programmable_transaction_select_all_gas(
+        &self,
+        builder: ProgrammableTransactionBuilder,
+        signer: SuiAddress,
+        gas_budget: u64,
+    ) -> anyhow::Result<TransactionData> {
+        let pt = builder.finish();
+        let input_objects = pt
+            .input_objects()?
+            .iter()
+            .flat_map(|obj| match obj {
+                InputObjectKind::ImmOrOwnedMoveObject((id, _, _)) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        let gas_price = self.0.get_reference_gas_price().await?;
+        let gas_payment = self
+            .select_all_gas(signer, gas_budget, input_objects, gas_price)
+            .await?;
+
+        Ok(
+            TransactionData::new_programmable(
+                signer,
+                gas_payment,
+                pt,
+                gas_budget,
+                gas_price
+            )
+        )
     }
 
     // // New
@@ -819,7 +904,7 @@ impl TransactionBuilder {
         function: &str,
         type_args: Vec<SuiTypeTag>,
         call_args: Vec<ProgrammableTransactionArg>,
-    ) -> anyhow::Result<ProgrammableTransactionArg> {
+    ) -> anyhow::Result<Argument> {
         let module = Identifier::from_str(module)?;
         let function = Identifier::from_str(function)?;
 
@@ -835,11 +920,9 @@ impl TransactionBuilder {
             .await?;
 
         Ok(
-            ProgrammableTransactionArg::Argument(
-                builder.command(Command::move_call(
-                    package, module, function, type_args, call_args,
-                ))
-            )
+            builder.command(Command::move_call(
+                package, module, function, type_args, call_args,
+            ))
         )
     }
 
@@ -874,7 +957,7 @@ impl TransactionBuilder {
         &self,
         pt_builder: &mut ProgrammableTransactionBuilder,
         objs: impl IntoIterator<Item = ProgrammableObjectArg>,
-    ) -> anyhow::Result<ProgrammableTransactionArg> {
+    ) -> anyhow::Result<Argument> {
 
         let mut arguments = Vec::new();
 
@@ -896,10 +979,8 @@ impl TransactionBuilder {
         }
 
         Ok(
-            ProgrammableTransactionArg::Argument(
-                pt_builder.command(
-                    Command::MakeMoveVec(None, arguments)
-                )
+            pt_builder.command(
+                Command::MakeMoveVec(None, arguments)
             )
         )
     }
@@ -975,13 +1056,11 @@ impl TransactionBuilder {
         // primary_coin: ProgrammableMergeCoinsArg,
         // coin_to_merge: ProgrammableMergeCoinsArg,
         // coin_type: SuiTypeTag,
-    ) -> ProgrammableTransactionArg {
+    ) -> Argument {
 
         let amt_arg = builder.pure(amount).unwrap();
-
-        ProgrammableTransactionArg::Argument(
-            builder.command(Command::SplitCoins(Argument::GasCoin, vec![amt_arg]))
-        )
+        
+        builder.command(Command::SplitCoins(Argument::GasCoin, vec![amt_arg]))
     }
 
     async fn resolve_and_checks_programmable_transaction_args(

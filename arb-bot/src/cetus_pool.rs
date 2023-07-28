@@ -21,6 +21,8 @@ pub struct Pool {
 
 #[derive(Clone, Debug)]
 pub struct SwapResult {
+    pub before_sqrt_price: u128,
+    pub after_sqrt_price: u128,
     pub amount_in: u64,
     pub amount_out: u64,
     pub fee_amount: u64,
@@ -65,6 +67,8 @@ pub fn swap_in_pool(
     // }
 
     let mut swap_result = SwapResult {
+        before_sqrt_price: pool.current_sqrt_price,
+        after_sqrt_price: 0,
         amount_in: 0, 
         amount_out: 0, 
         fee_amount: 0, 
@@ -122,10 +126,12 @@ pub fn swap_in_pool(
         // We've already gotten the tick, we just need the score of the next tick
         // Advance for next iteration
         next_index = if a_to_b {
+            // Selling a
             // println!("a_to_b: true");
             // println!("{:#?}", pool.tick_manager.ticks.range(..next_index.unwrap()));
             pool.tick_manager.ticks.range(..next_index.unwrap()).map(|(score, _)| score.clone()).next_back()
         } else {
+            // Selling b
             // println!("a_to_b: false");
             // println!("{:#?}", pool.tick_manager.ticks.range(next_index.unwrap()+1..));
             pool.tick_manager.ticks.range(next_index.unwrap()+1..).map(|(score, _)| score.clone()).next()
@@ -158,6 +164,8 @@ pub fn swap_in_pool(
         // println!("next_tick_sqrt_price: {}", next_tick_sqrt_price);
 
         // println!("sqrt_price_next_tick_w_limit: {}", sqrt_price_next_tick_w_limit);
+
+        // println!("liquidity: {}", compute_swap_state.liquidity);
 
         // loc18 (sqrt_price_next_computed)
         let (amount_in, amount_out, sqrt_price_next_computed, fee_amount) = clmm_math::compute_swap_step(
@@ -196,7 +204,7 @@ pub fn swap_in_pool(
         // if sqrt_price_next_tick_w_limit == next_tick_sqrt_price
         if sqrt_price_next_computed == next_tick_sqrt_price {
             // println!("YES");
-            compute_swap_state.current_sqrt_price = sqrt_price_next_computed;
+            compute_swap_state.current_sqrt_price = sqrt_price_next_tick_w_limit;
             
             compute_swap_state.current_tick_index = if a_to_b {
                 next_tick_index - 1
@@ -213,9 +221,8 @@ pub fn swap_in_pool(
                 compute_swap_state.fee_growth_global_b,
                 simulating
             );
-
         } else if compute_swap_state.current_sqrt_price != next_tick_sqrt_price {
-            compute_swap_state.current_sqrt_price = sqrt_price_next_tick_w_limit;
+            compute_swap_state.current_sqrt_price = sqrt_price_next_computed;
             compute_swap_state.current_tick_index = tick_math::tick_index_from_sqrt_price(compute_swap_state.current_sqrt_price);
         }
 
@@ -224,6 +231,7 @@ pub fn swap_in_pool(
         // println!("end of loop 1: amount_remaining = {}", amount_remaining);
     }
 
+    swap_result.after_sqrt_price = compute_swap_state.current_sqrt_price;
     swap_result.ref_fee_amount = full_math_u64::mul_div_floor(amount_calculated, fee_protocol, 10000);
 
     // println!("post swap sqrt_price: {}", compute_swap_state.current_sqrt_price);
@@ -243,6 +251,7 @@ pub fn swap_in_pool(
         }
     }
 
+    // println!("swap_result: {:#?}", swap_result);
     swap_result
 }
 
@@ -560,9 +569,9 @@ mod clmm_math {
         amount_specified_is_input: bool
     ) -> (u64, u64, u128, u64) {
         // let next_sqrt_price = sqrt_price_target;
-        let amount_in = 0;
-        let amount_out = 0;
-        let fee_amount = 0;
+        // let amount_in = 0;
+        // let amount_out = 0;
+        // let fee_amount = 0;
 
         // println!("liquidity: {}", liquidity);
 
@@ -581,8 +590,8 @@ mod clmm_math {
         if amount_specified_is_input {
             let amount_calc = full_math_u64::mul_div_floor(
                 amount_remaining,
-                1000000 - fee_rate,
-                1000000
+                1_000_000 - fee_rate,
+                1_000_000
             );
 
             // println!("compute_swap_step(): amount_calc = {}", amount_calc);
@@ -612,7 +621,7 @@ mod clmm_math {
                     a_to_b
                 );
 
-                // println!("compute_swap_step(): branch 1 next_sqrt_price = {}", next_sqrt_price);
+                // println!("compute_swap_step(): branch 1 next_sqrt_price = {}, amount_in = {}", next_sqrt_price, amount_in);
 
                 (amount_in, fee_amount, next_sqrt_price)
             } else {
@@ -625,16 +634,17 @@ mod clmm_math {
                 let fee_amount = full_math_u64::mul_div_ceil(
                     amount_in,
                     fee_rate,
-                    1000000 - fee_rate
+                    1_000_000 - fee_rate
                 );
 
                 let next_sqrt_price = sqrt_price_target;
 
-                // println!("compute_swap_step(): branch 2 next_sqrt_price = {}", next_sqrt_price);
+                // println!("compute_swap_step(): branch 2 next_sqrt_price = {}, amount_in = {}", next_sqrt_price, amount_in);
 
                 (amount_in, fee_amount, next_sqrt_price)
             };
 
+            // println!("amount_in:", amount )
 
             let amount_out = get_delta_down_from_output(
                 sqrt_price_current,

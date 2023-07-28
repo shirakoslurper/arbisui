@@ -11,6 +11,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
 
 use custom_sui_sdk::SuiClient;
+
+// use rayon::prelude::*;/
+
 use sui_sdk::types::base_types::ObjectID;
 use sui_sdk::rpc_types::{SuiMoveValue, SuiObjectResponse};
 
@@ -106,6 +109,7 @@ impl <'data> MarketGraph<'data> {
     // Make more sense to iterate through all edges
     // But markets fields to edges is one to many
 
+    // Now only updates provided markets
     pub async fn update_markets_with_object_responses(
         &mut self, 
         sui_client: &SuiClient, 
@@ -123,8 +127,11 @@ impl <'data> MarketGraph<'data> {
                         .map(|(_, market_info)| {
                             async {
                                 let pool_id = *market_info.market.pool_id();
-                                let object_response = pool_id_to_object_response.get(&pool_id).context("Missing fields for pool.")?;
-                                market_info.market.update_with_object_response(sui_client, object_response).await?;
+                                // let object_response = pool_id_to_object_response.get(&pool_id).context("Missing fields for pool.")?;
+                                // market_info.market.update_with_object_response(sui_client, object_response).await?;
+                                if let Some(object_response) = pool_id_to_object_response.get(&pool_id) {
+                                    market_info.market.update_with_object_response(sui_client, object_response).await?;
+                                }
 
                                 Ok::<(), anyhow::Error>(())
                             }
@@ -136,7 +143,15 @@ impl <'data> MarketGraph<'data> {
             })
         )
         .await?;
-        
+
+        // for (pool_id, response) in pool_id_to_object_response {
+        //     self.update_market_with_object_response(
+        //         sui_client, 
+        //         pool_id, 
+        //         response
+        //     ).await?;
+        // }
+
         Ok(())
     }
 

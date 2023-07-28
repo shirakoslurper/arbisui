@@ -13,7 +13,7 @@ use custom_sui_sdk::{
         QueryEventsRequest,
         GetDynamicFieldsRequest
     },
-    transaction_builder::TransactionBuilder,
+    transaction_builder::{TransactionBuilder, ProgrammableObjectArg},
     programmable_transaction_sui_json::ProgrammableTransactionArg
 };
 
@@ -250,6 +250,7 @@ impl Cetus {
 
         let ticks = self.get_ticks(sui_client, &tick_manager_ticks_skip_list_id).await?;
 
+        let is_pause = sui_move_value::get_bool(&fields, "is_pause")?;
 
         Ok(
             cetus_pool::Pool {
@@ -266,7 +267,7 @@ impl Cetus {
                     tick_spacing: tick_manager_tick_spacing,
                     ticks
                 },
-                is_pause: false
+                is_pause,
             }
         )
     }
@@ -324,9 +325,9 @@ impl Cetus {
             .map(|node_object_response| {
                 let fields = sui_sdk_utils::read_fields_from_object_response(&node_object_response).context("Missing fields.")?;
 
-                let node_fields = sui_move_value::get_struct(&fields, "value")?;
+                let node_fields = sui_move_value::get_struct(&fields, "value").context("cetus")?;
 
-                let tick_fields = sui_move_value::get_struct(&node_fields, "value")?;
+                let tick_fields = sui_move_value::get_struct(&node_fields, "value").context("cetus")?;
 
                 // println!("tick_fields: {:#?}", tick_fields);
 
@@ -564,7 +565,11 @@ impl CetusMarket {
         if let Some(cp) = &self.computing_pool {
             // println!("liquidity: {}", cp.liquidity);
             if cp.liquidity > 0 {
-                true
+                if cp.is_pause {
+                    false
+                } else {
+                    true
+                }
             } else {
                 false
             }
@@ -577,7 +582,8 @@ impl CetusMarket {
         &self,
         transaction_builder: &TransactionBuilder,
         pt_builder: &mut ProgrammableTransactionBuilder,
-        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        orig_coins: Option<Vec<ObjectID>>, // the actual coin object in (that you own and has money)
+        // orig_coin_is_gas_coin: bool,
         x_to_y: bool,
         amount_in: u128
     ) -> Result<(), anyhow::Error> {
@@ -598,11 +604,29 @@ impl CetusMarket {
         );
 
         // Arg2: vector<Coin<Ty0 or Ty1>>
-        let orig_coins_arg = transaction_builder
-            .programmable_make_object_vec(
-                pt_builder,
-                orig_coins
-            ).await?;
+
+        let orig_coins_args_vec = if let Some(oc) = orig_coins {
+            oc
+                .into_iter()
+                .map(|orig_coin| {
+                    ProgrammableObjectArg::ObjectID(orig_coin)
+                })
+                .collect::<Vec<ProgrammableObjectArg>>()
+        } else {
+            vec![
+                ProgrammableObjectArg::Argument(
+                    transaction_builder.programmable_split_gas_coin(pt_builder, amount_in as u64).await
+                )
+            ]
+        };
+
+        let orig_coins_arg = ProgrammableTransactionArg::Argument(
+            transaction_builder
+                .programmable_make_object_vec(
+                    pt_builder,
+                    orig_coins_args_vec
+                ).await?
+        );
 
         // Arg3: bool
         let amount_specified_is_input = ProgrammableTransactionArg::SuiJsonValue(
@@ -761,7 +785,7 @@ impl Market for CetusMarket {
         &self,
         transaction_builder: &TransactionBuilder,
         pt_builder: &mut ProgrammableTransactionBuilder,
-        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        orig_coins: Option<Vec<ObjectID>>, // the actual coin object in (that you own and has money)
         x_to_y: bool,
         amount_in: u128,
         amount_out: u128,

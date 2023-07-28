@@ -6,6 +6,7 @@ use futures::{future, TryStreamExt};
 
 use move_core_types::language_storage::TypeTag;
 
+use std::str::FromStr;
 use std::collections::{HashMap, BTreeMap};
 
 use sui_sdk::types::base_types::{ObjectID, ObjectType};
@@ -127,6 +128,72 @@ pub async fn get_object_id_to_object_response(
 
 pub mod sui_move_value {
     use super::*;
+    use ethnum::U256;
+
+    // // U256: Decimal string or Hex
+    // pub fn read_field_as_u128(
+    //     sui_move_struct: &SuiMoveStruct,
+    //     field: &str
+    // ) -> Result<U256, anyhow::Error> {
+    //     let dynamic_field_value = sui_move_struct
+    //         .read_dynamic_field_value(field)
+    //         .context(format!("Missing field '{}'.", field))?;
+
+    //     match dynamic_field_value {
+    //         SuiMoveValue::String(decimal_string_value) => {
+    //             Ok(u128::from_str(&decimal_string_value)?)
+    //         },
+    //         SuiMoveValue::Address(hex_value) => {
+    //             Ok(
+    //                 u128::from_le_bytes(
+    //                     hex_value
+    //                         .to_vec()
+    //                         .try_into()
+    //                         .map_err(|err| anyhow!(format!("Failed to convert {:?} into [u8, 32]", err)))
+    //                         .context("Failed to convert hex_value U256's Vec<U8> to [u8, 32].")?
+    //                 )
+    //             )
+    //         },
+    //         _ => {
+    //             Err(anyhow!(format!("'{}' U256 field must be encoded as a SuiMoveValue::String (decimal string) or SuiMoveValue::Address (hex) value.", field)))
+    //         }
+    //     }
+    // }
+
+    // Note: Given that Sui types can be encoded in various ways
+    // in JSON, it makes sense to try converting from those types
+    // into the Sui type we want (or the closest matching type we have in Rust)
+    // U256: Decimal string or Hex
+    pub fn read_field_as_u256(
+        sui_move_struct: &SuiMoveStruct,
+        field: &str
+    ) -> Result<U256, anyhow::Error> {
+        let dynamic_field_value = sui_move_struct
+            .read_dynamic_field_value(field)
+            .context(format!("Missing field '{}'.", field))?;
+
+        match dynamic_field_value {
+            SuiMoveValue::String(decimal_string_value) => {
+                Ok(U256::from_str(&decimal_string_value)?)
+            },
+            SuiMoveValue::Address(hex_value) => {
+                let ret = U256::from_le_bytes(
+                    hex_value.to_inner()
+                );
+
+                // panic!("ret: {}", ret);
+
+                Ok(
+                    ret
+                )
+            },
+            _ => {
+                Err(anyhow!(format!("'{}' U256 field must be encoded as a SuiMoveValue::String (decimal string) or SuiMoveValue::Address (hex) value.", field)))
+            }
+        }
+    }
+
+
     pub fn get_number(sui_move_struct: &SuiMoveStruct, field: &str) -> Result<u32, anyhow::Error> {
         if let SuiMoveValue::Number(num_value) = sui_move_struct
             .read_dynamic_field_value(field)
@@ -163,7 +230,7 @@ pub mod sui_move_value {
             .context(format!("Missing field '{}'.", field))? {
                 Ok(struct_value)
             } else {
-                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::Bool variant.", field)))
+                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::Struct variant.", field)))
             }
     }
 
@@ -173,12 +240,7 @@ pub mod sui_move_value {
             .context(format!("Missing field '{}'.", field))? {
                 Ok(id)
             } else {
-                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::ObjectID variant.", field)))
+                Err(anyhow!(format!("'{}' field does not match SuiMoveValue::UID variant.", field)))
             }
     }
-
-
-
-   
-
 }

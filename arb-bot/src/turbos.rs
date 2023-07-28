@@ -15,13 +15,13 @@ use custom_sui_sdk::{
         QueryEventsRequest,
         GetDynamicFieldsRequest
     },
-    transaction_builder::TransactionBuilder,
+    transaction_builder::{TransactionBuilder, ProgrammableObjectArg},
     programmable_transaction_sui_json::ProgrammableTransactionArg
 };
 
 use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError, ObjectType, SuiAddress}, object::Object};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
-use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use sui_sdk::types::programmable_transaction_builder::{ProgrammableTransactionBuilder};
 use sui_sdk::types::transaction::Argument;
 use sui_sdk::rpc_types::{
     SuiObjectResponse, 
@@ -143,7 +143,7 @@ impl Turbos {
             .map(|pool_created_event| {
                 let parsed_json = pool_created_event.parsed_json;
                 if let Value::String(pool_id_value) = parsed_json.get("pool").context("Failed to get pool_id for a CetusMarket")? {
-                    println!("turbos: pool_id: {}", pool_id_value);
+                    // println!("turbos: pool_id: {}", pool_id_value);
                     Ok(ObjectID::from_str(&format!("0x{}", pool_id_value))?)
                 } else {
                     Err(anyhow!("Failed to match pattern."))
@@ -330,10 +330,16 @@ impl Turbos {
                     "bits"
                 )? as i32;
 
+                // println!("fields: {:#?}", fields);
+
                 // Moving the casts/conversions to outside the if let makes this more modular
-                let word = U256::from_str(
-                    &sui_move_value::get_string(&fields, "value")?
-                )?;
+                let word = sui_move_value::read_field_as_u256(&fields, "value")?;
+                
+                // U256::from_str(
+                //     &sui_move_value::get_string(&fields, "value").context(format!("turbos string, fields: {:#?}", fields))?
+                // )?;
+
+                // println!("Word: {}", word);
 
                 Ok((word_pos, word))
             })
@@ -387,7 +393,7 @@ impl Turbos {
                     "bits"
                 )? as i32;
 
-                let tick_fields = sui_move_value::get_struct(&fields, "value")?;
+                let tick_fields = sui_move_value::get_struct(&fields, "value").context("turbos struct")?;
 
                 let liquidity_gross = u128::from_str(
                     &sui_move_value::get_string(&tick_fields, "liquidity_gross")?
@@ -589,7 +595,11 @@ impl TurbosMarket {
         if let Some(cp) = &self.computing_pool {
             // println!("liquidity: {}", cp.liquidity);
             if cp.liquidity > 0 {
-                true
+                if cp.unlocked {
+                    true
+                } else {
+                    false
+                }
             } else {
                 false
             }
@@ -602,7 +612,7 @@ impl TurbosMarket {
         &self,
         transaction_builder: &TransactionBuilder,
         pt_builder: &mut ProgrammableTransactionBuilder,
-        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        orig_coins: Option<Vec<ObjectID>>, // the actual coin object in (that you own and has money)
         x_to_y: bool,
         amount_in: u128,
         amount_out: u128,
@@ -610,24 +620,26 @@ impl TurbosMarket {
     ) -> Result<(), anyhow::Error> {
 
         // Arg8: &Clock
-        let clock = ProgrammableTransactionArg::SuiJsonValue(
+        let clock_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::from_object_id(
                 ObjectID::from_str(CLOCK_OBJECT_ID)?
             )
         );
 
-        let clock_timestamp = transaction_builder.programmable_move_call(
-            pt_builder,
-            ObjectID::from_str(SUI_STD_LIB_PACKAGE_ID)?,
-            "clock",
-            "timestamp_ms",
-            vec![],
-            vec![clock.clone()]
-        ).await?;
+        let clock_timestamp_arg = ProgrammableTransactionArg::Argument(
+            transaction_builder.programmable_move_call(
+                pt_builder,
+                ObjectID::from_str(SUI_STD_LIB_PACKAGE_ID)?,
+                "clock",
+                "timestamp_ms",
+                vec![],
+                vec![clock_arg.clone()]
+            ).await?
+        );
 
         let time_til_expiry = 1000u64;
 
-        let clock_delta = ProgrammableTransactionArg::SuiJsonValue(
+        let clock_delta_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
                     &MoveValue::U64(time_til_expiry)
@@ -637,30 +649,49 @@ impl TurbosMarket {
         );
 
         // Arg7: u64
-        let deadline = transaction_builder.programmable_move_call(
-            pt_builder,
-            self.parent_exchange.package_id.clone(),
-            "math_u64",
-            "wrapping_add",
-            vec![],
-            vec![clock_timestamp, clock_delta]
-        ).await?;
+        let deadline_arg = ProgrammableTransactionArg::Argument(
+            transaction_builder.programmable_move_call(
+                pt_builder,
+                self.parent_exchange.package_id.clone(),
+                "math_u64",
+                "wrapping_add",
+                vec![],
+                vec![clock_timestamp_arg, clock_delta_arg]
+            ).await?   
+        );
 
         // swap_a_b and swap_b_c arguments
         // Arg0: &mut Pool<Ty0, Ty1, Ty2>
-        let pool = ProgrammableTransactionArg::SuiJsonValue(
+        let pool_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::from_object_id(self.pool_id.clone())
         );
 
         // Arg1: vector<Coin<Ty0 or Ty1>>
-        let orig_coins_arg = transaction_builder
-            .programmable_make_object_vec(
-                pt_builder,
-                orig_coins
-            ).await?;
+        let orig_coins_args_vec = if let Some(oc) = orig_coins {
+            oc
+                .into_iter()
+                .map(|orig_coin| {
+                    ProgrammableObjectArg::ObjectID(orig_coin)
+                })
+                .collect::<Vec<ProgrammableObjectArg>>()
+        } else {
+            vec![
+                ProgrammableObjectArg::Argument(
+                    transaction_builder.programmable_split_gas_coin(pt_builder, amount_in as u64).await
+                )
+            ]
+        };
+
+        let orig_coins_arg = ProgrammableTransactionArg::Argument(
+            transaction_builder
+                .programmable_make_object_vec(
+                    pt_builder,
+                    orig_coins_args_vec
+                ).await?
+        );
 
         // Arg2: u64
-        let amount_specified = ProgrammableTransactionArg::SuiJsonValue(
+        let amount_specified_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
                     &MoveValue::U64(amount_in as u64)
@@ -671,7 +702,7 @@ impl TurbosMarket {
 
         // Arg3: u64
         // The amount out we're expecting 
-        let amount_threshold = ProgrammableTransactionArg::SuiJsonValue(
+        let amount_threshold_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
                     &MoveValue::U64(amount_out as u64)
@@ -681,7 +712,7 @@ impl TurbosMarket {
         );
 
         // Arg4: u128
-        let sqrt_price_limit = ProgrammableTransactionArg::SuiJsonValue(
+        let sqrt_price_limit_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
                     &MoveValue::U128(
@@ -697,7 +728,7 @@ impl TurbosMarket {
         );
         
         // Arg5: bool
-        let amount_specified_is_input = ProgrammableTransactionArg::SuiJsonValue(
+        let amount_specified_is_input_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
                     &MoveValue::Bool(true)
@@ -707,7 +738,7 @@ impl TurbosMarket {
         );
 
         // Arg6: address
-        let recipient = ProgrammableTransactionArg::SuiJsonValue(
+        let recipient_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
                     &MoveValue::Address(
@@ -720,23 +751,23 @@ impl TurbosMarket {
         );
 
         // Arg9: &Versioned
-        let versioned = ProgrammableTransactionArg::SuiJsonValue(
+        let versioned_arg = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::from_object_id(
                 self.parent_exchange.versioned_id.clone()
             )
         );
 
         let call_args = vec![
-            pool,               // Arg0
+            pool_arg,               // Arg0
             orig_coins_arg,     // Arg1
-            amount_specified,   // Arg2
-            amount_threshold,   // Arg3
-            sqrt_price_limit,   // Arg4
-            amount_specified_is_input,  // Arg5
-            recipient,          // Arg6
-            deadline,           // Arg7
-            clock,              // Arg8
-            versioned           // Arg9
+            amount_specified_arg,   // Arg2
+            amount_threshold_arg,   // Arg3
+            sqrt_price_limit_arg,   // Arg4
+            amount_specified_is_input_arg,  // Arg5
+            recipient_arg,          // Arg6
+            deadline_arg,           // Arg7
+            clock_arg,              // Arg8
+            versioned_arg         // Arg9
         ];
 
         let type_args = vec![
@@ -823,7 +854,7 @@ impl Market for TurbosMarket {
         &self,
         transaction_builder: &TransactionBuilder,
         pt_builder: &mut ProgrammableTransactionBuilder,
-        orig_coins: Vec<ObjectID>, // the actual coin object in (that you own and has money)
+        orig_coins: Option<Vec<ObjectID>>, // the actual coin object in (that you own and has money)
         x_to_y: bool,
         amount_in: u128,
         amount_out: u128,
