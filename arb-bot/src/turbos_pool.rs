@@ -1073,11 +1073,11 @@ mod math_liquidity {
         // println!("y: {}", y);
 
         if y < 0 {
-            assert!(x >= abs_y, "add_delta: x < |y|.");
+            assert!(x >= abs_y, "add_delta: x < |y|. x = {}, |y| = {}", x, abs_y);
             z = x - abs_y;
         } else {
             z = x + abs_y;
-            assert!(z >= x, "add_delta: z < x");
+            assert!(z >= x, "add_delta: z < x, z = {}, x = {}", z, x);
         }
 
         z

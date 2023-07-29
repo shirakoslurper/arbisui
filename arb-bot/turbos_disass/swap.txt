@@ -1,0 +1,165 @@
+swap<Ty0, Ty1>(Arg0: &GlobalConfig, Arg1: &mut Pool<Ty0, Ty1>, Arg2: vector<Coin<Ty0>>, Arg3: vector<Coin<Ty1>>, Arg4: bool, Arg5: bool, Arg6: u64, Arg7: u64, Arg8: u128, Arg9: &Clock, Arg10: &mut TxContext) {
+L0:	loc11: Balance<Ty0>
+L1:	loc12: Balance<Ty1>
+B0:
+	0: MoveLoc[2](Arg2: vector<Coin<Ty0>>)
+	1: CopyLoc[10](Arg10: &mut TxContext)
+	2: Call utils::merge_coins<Ty0>(vector<Coin<Ty0>>, &mut TxContext): Coin<Ty0>
+	3: MoveLoc[3](Arg3: vector<Coin<Ty1>>)
+	4: CopyLoc[10](Arg10: &mut TxContext)
+	5: Call utils::merge_coins<Ty1>(vector<Coin<Ty1>>, &mut TxContext): Coin<Ty1>
+	6: StLoc[16](loc5: Coin<Ty1>)
+	7: StLoc[15](loc4: Coin<Ty0>)
+	8: CopyLoc[0](Arg0: &GlobalConfig)
+	9: CopyLoc[1](Arg1: &mut Pool<Ty0, Ty1>)
+	10: CopyLoc[4](Arg4: bool)
+	11: CopyLoc[5](Arg5: bool)
+	12: CopyLoc[6](Arg6: u64)
+	13: MoveLoc[8](Arg8: u128)
+	14: MoveLoc[9](Arg9: &Clock)
+	15: Call pool::flash_swap<Ty0, Ty1>(&GlobalConfig, &mut Pool<Ty0, Ty1>, bool, bool, u64, u128, &Clock): Balance<Ty0> * Balance<Ty1> * FlashSwapReceipt<Ty0, Ty1>
+	16: StLoc[17](loc6: FlashSwapReceipt<Ty0, Ty1>)
+	17: StLoc[23](loc12: Balance<Ty1>)
+	18: StLoc[22](loc11: Balance<Ty0>)
+	19: ImmBorrowLoc[17](loc6: FlashSwapReceipt<Ty0, Ty1>)
+	20: Call pool::swap_pay_amount<Ty0, Ty1>(&FlashSwapReceipt<Ty0, Ty1>): u64
+	21: StLoc[12](loc1: u64)
+	22: CopyLoc[4](Arg4: bool)
+	23: BrFalse(28)
+B1:
+	24: ImmBorrowLoc[23](loc12: Balance<Ty1>)
+	25: Call balance::value<Ty1>(&Balance<Ty1>): u64
+	26: StLoc[11](loc0: u64)
+	27: Branch(31)
+B2:
+	28: ImmBorrowLoc[22](loc11: Balance<Ty0>)
+	29: Call balance::value<Ty0>(&Balance<Ty0>): u64
+	30: StLoc[11](loc0: u64)
+B3:
+	31: MoveLoc[12](loc1: u64)
+	32: MoveLoc[11](loc0: u64)
+	33: StLoc[19](loc8: u64)
+	34: StLoc[18](loc7: u64)
+	35: MoveLoc[5](Arg5: bool)
+	36: BrFalse(64)
+B4:
+	37: CopyLoc[18](loc7: u64)
+	38: MoveLoc[6](Arg6: u64)
+	39: Eq
+	40: BrFalse(42)
+B5:
+	41: Branch(50)
+B6:
+	42: MoveLoc[1](Arg1: &mut Pool<Ty0, Ty1>)
+	43: Pop
+	44: MoveLoc[10](Arg10: &mut TxContext)
+	45: Pop
+	46: MoveLoc[0](Arg0: &GlobalConfig)
+	47: Pop
+	48: LdConst[2](U64: 02000000..)
+	49: Abort
+B7:
+	50: MoveLoc[19](loc8: u64)
+	51: MoveLoc[7](Arg7: u64)
+	52: Ge
+	53: BrFalse(55)
+B8:
+	54: Branch(63)
+B9:
+	55: MoveLoc[1](Arg1: &mut Pool<Ty0, Ty1>)
+	56: Pop
+	57: MoveLoc[10](Arg10: &mut TxContext)
+	58: Pop
+	59: MoveLoc[0](Arg0: &GlobalConfig)
+	60: Pop
+	61: LdConst[1](U64: 01000000..)
+	62: Abort
+B10:
+	63: Branch(90)
+B11:
+	64: MoveLoc[19](loc8: u64)
+	65: MoveLoc[6](Arg6: u64)
+	66: Eq
+	67: BrFalse(69)
+B12:
+	68: Branch(77)
+B13:
+	69: MoveLoc[1](Arg1: &mut Pool<Ty0, Ty1>)
+	70: Pop
+	71: MoveLoc[10](Arg10: &mut TxContext)
+	72: Pop
+	73: MoveLoc[0](Arg0: &GlobalConfig)
+	74: Pop
+	75: LdConst[2](U64: 02000000..)
+	76: Abort
+B14:
+	77: CopyLoc[18](loc7: u64)
+	78: MoveLoc[7](Arg7: u64)
+	79: Le
+	80: BrFalse(82)
+B15:
+	81: Branch(90)
+B16:
+	82: MoveLoc[1](Arg1: &mut Pool<Ty0, Ty1>)
+	83: Pop
+	84: MoveLoc[10](Arg10: &mut TxContext)
+	85: Pop
+	86: MoveLoc[0](Arg0: &GlobalConfig)
+	87: Pop
+	88: LdConst[0](U64: 00000000..)
+	89: Abort
+B17:
+	90: MoveLoc[4](Arg4: bool)
+	91: BrFalse(101)
+B18:
+	92: MutBorrowLoc[15](loc4: Coin<Ty0>)
+	93: MoveLoc[18](loc7: u64)
+	94: CopyLoc[10](Arg10: &mut TxContext)
+	95: Call coin::split<Ty0>(&mut Coin<Ty0>, u64, &mut TxContext): Coin<Ty0>
+	96: Call coin::into_balance<Ty0>(Coin<Ty0>): Balance<Ty0>
+	97: Call balance::zero<Ty1>(): Balance<Ty1>
+	98: StLoc[14](loc3: Balance<Ty1>)
+	99: StLoc[13](loc2: Balance<Ty0>)
+	100: Branch(109)
+B19:
+	101: Call balance::zero<Ty0>(): Balance<Ty0>
+	102: MutBorrowLoc[16](loc5: Coin<Ty1>)
+	103: MoveLoc[18](loc7: u64)
+	104: CopyLoc[10](Arg10: &mut TxContext)
+	105: Call coin::split<Ty1>(&mut Coin<Ty1>, u64, &mut TxContext): Coin<Ty1>
+	106: Call coin::into_balance<Ty1>(Coin<Ty1>): Balance<Ty1>
+	107: StLoc[14](loc3: Balance<Ty1>)
+	108: StLoc[13](loc2: Balance<Ty0>)
+B20:
+	109: MoveLoc[13](loc2: Balance<Ty0>)
+	110: MoveLoc[14](loc3: Balance<Ty1>)
+	111: StLoc[21](loc10: Balance<Ty1>)
+	112: StLoc[20](loc9: Balance<Ty0>)
+	113: MutBorrowLoc[16](loc5: Coin<Ty1>)
+	114: MoveLoc[23](loc12: Balance<Ty1>)
+	115: CopyLoc[10](Arg10: &mut TxContext)
+	116: Call coin::from_balance<Ty1>(Balance<Ty1>, &mut TxContext): Coin<Ty1>
+	117: Call coin::join<Ty1>(&mut Coin<Ty1>, Coin<Ty1>)
+	118: MutBorrowLoc[15](loc4: Coin<Ty0>)
+	119: MoveLoc[22](loc11: Balance<Ty0>)
+	120: CopyLoc[10](Arg10: &mut TxContext)
+	121: Call coin::from_balance<Ty0>(Balance<Ty0>, &mut TxContext): Coin<Ty0>
+	122: Call coin::join<Ty0>(&mut Coin<Ty0>, Coin<Ty0>)
+	123: MoveLoc[0](Arg0: &GlobalConfig)
+	124: MoveLoc[1](Arg1: &mut Pool<Ty0, Ty1>)
+	125: MoveLoc[20](loc9: Balance<Ty0>)
+	126: MoveLoc[21](loc10: Balance<Ty1>)
+	127: MoveLoc[17](loc6: FlashSwapReceipt<Ty0, Ty1>)
+	128: Call pool::repay_flash_swap<Ty0, Ty1>(&GlobalConfig, &mut Pool<Ty0, Ty1>, Balance<Ty0>, Balance<Ty1>, FlashSwapReceipt<Ty0, Ty1>)
+	129: MoveLoc[15](loc4: Coin<Ty0>)
+	130: CopyLoc[10](Arg10: &mut TxContext)
+	131: FreezeRef
+	132: Call tx_context::sender(&TxContext): address
+	133: Call utils::send_coin<Ty0>(Coin<Ty0>, address)
+	134: MoveLoc[16](loc5: Coin<Ty1>)
+	135: MoveLoc[10](Arg10: &mut TxContext)
+	136: FreezeRef
+	137: Call tx_context::sender(&TxContext): address
+	138: Call utils::send_coin<Ty1>(Coin<Ty1>, address)
+	139: Ret
+}

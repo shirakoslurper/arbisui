@@ -245,6 +245,8 @@ pub async fn loop_blocks<'a>(
             let filtered_optimized_results_iter = optimized_results
                 .into_iter()
                 .filter(|optimized_result| {
+                    println!("profit: {}", optimized_result.profit);
+
                     if optimized_result.profit < 10_000_000 {
                         return false
                     }  // Should do some gas threshold instead
@@ -270,7 +272,7 @@ pub async fn loop_blocks<'a>(
                     )
                     .await?;
         
-                if optimized_result.amount_in > start_source_coin_balance.total_balance {
+                if optimized_result.amount_in > start_source_coin_balance.total_balance / 5 {
                     // Skip so that we don't fail
                     continue;
                 }
@@ -284,7 +286,7 @@ pub async fn loop_blocks<'a>(
                     .iter()
                     .try_for_each(|leg| {
                         if leg.x_to_y {
-                            println!("|    +------------------------------------------------");
+                            println!("|    +----[POOL: {}, X_TO_Y: {}]--------------------------------------------", leg.market.pool_id(), leg.x_to_y);
                             println!("|    | {}", leg.market.coin_x());
                             println!("|    |   ----[RATE: {}]---->", leg.market.coin_y_price().context("Missing coin_y price.")?);
                             println!("|    | {}", leg.market.coin_y());

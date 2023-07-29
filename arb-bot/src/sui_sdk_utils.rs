@@ -177,11 +177,12 @@ pub mod sui_move_value {
                 Ok(U256::from_str(&decimal_string_value)?)
             },
             SuiMoveValue::Address(hex_value) => {
-                let ret = U256::from_le_bytes(
+                let ret = U256::from_be_bytes(
                     hex_value.to_inner()
                 );
 
                 // panic!("ret: {}", ret);
+                println!("RAAAAAAAA");
 
                 Ok(
                     ret

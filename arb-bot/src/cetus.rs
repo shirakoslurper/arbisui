@@ -585,7 +585,8 @@ impl CetusMarket {
         orig_coins: Option<Vec<ObjectID>>, // the actual coin object in (that you own and has money)
         // orig_coin_is_gas_coin: bool,
         x_to_y: bool,
-        amount_in: u128
+        amount_in: u128,
+        amount_out: u128,
     ) -> Result<(), anyhow::Error> {
         // Very rough but lets do thisss
         // We can't add to a result unless theres a function that exists..
@@ -652,7 +653,7 @@ impl CetusMarket {
         let amount_limit = ProgrammableTransactionArg::SuiJsonValue(
             SuiJsonValue::new(
                 move_value_to_json(
-                    &MoveValue::U64((amount_in) as u64)
+                    &MoveValue::U64((amount_out) as u64)
                 )
                 .context("failed to convert MoveValue for amount_limit to JSON")?
             )?
@@ -801,7 +802,8 @@ impl Market for CetusMarket {
             pt_builder,
             orig_coins,
             x_to_y,
-            amount_in
+            amount_in,
+            amount_out
         ).await
     }
 }

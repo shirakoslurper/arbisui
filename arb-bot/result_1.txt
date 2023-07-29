@@ -1,0 +1,71 @@
+markets.len(): 160
+Addresses: [
+    0x664e4e02ef1b143e797022a9594360939a4378379ae352b7522095f11350c709,
+]
+RUN STARTING BALANCE: 26724203744
+New event pool id: String("0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded")
+Event package id: 0x2eeaab737b37137b94bfa8f841f92e36a153641119da3456dec1926b9960d9be
+num cycles: 26
+Measuring...
+elapsed: 15.408282547s
+profit: 106577590
+profit: -2
+profit: -3
+profit: -3
+profit: -3
+profit: -4
+profit: -4
+profit: -4
+profit: -4
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+New event pool id: String("0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded")
+Event package id: 0x2eeaab737b37137b94bfa8f841f92e36a153641119da3456dec1926b9960d9be
+num cycles: 26
+Measuring...
+elapsed: 17.249907211s
+profit: 106599331
+profit: -2
+profit: -3
+profit: -3
+profit: -3
+profit: -4
+profit: -4
+profit: -4
+profit: -4
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+profit: -5
+New event pool id: String("0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded")
+Event package id: 0x2eeaab737b37137b94bfa8f841f92e36a153641119da3456dec1926b9960d9be
+num cycles: 26
+Measuring...

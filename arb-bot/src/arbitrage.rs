@@ -30,6 +30,7 @@ use sui_sdk::types::{
     quorum_driver_types::ExecuteTransactionRequestType
 };
 
+use std::collections::HashMap;
 use std::fmt::{Debug, Error, Formatter};
 use std::str::FromStr;
 
@@ -204,8 +205,8 @@ pub fn optimize_starting_amount_in<'a>(
 pub fn amount_out(path: &[DirectedLeg], mut amount_in: u128) -> Result<u128, anyhow::Error> {
 
     for leg in path {
-        let coin_x = leg.market.coin_x();
-        let coin_y = leg.market.coin_y();
+        // let coin_x = leg.market.coin_x();
+        // let coin_y = leg.market.coin_y();
 
         if leg.x_to_y {
             if leg.market.viable() {
@@ -248,10 +249,10 @@ pub async fn execute_arb<'a>(
     for leg in optimized_result.path {
         let mut dry_run_pt_builder = ProgrammableTransactionBuilder::new();
 
-        let orig_coin_type = if leg.x_to_y {
-            leg.market.coin_x()
+        let (orig_coin_type, dest_coin_type) = if leg.x_to_y {
+            (leg.market.coin_x(), leg.market.coin_y())
         } else {
-            leg.market.coin_y()
+            (leg.market.coin_y(), leg.market.coin_x())
         };
 
         let orig_coin_string = format!("{}", orig_coin_type);
@@ -301,7 +302,7 @@ pub async fn execute_arb<'a>(
                 coin_object_ids.clone(),
                 leg.x_to_y,
                 amount_in,
-                predicted_amount_out,
+                0, // predicted_amount_out
                 signer_address.clone()
             )
             .await?;
@@ -346,8 +347,8 @@ pub async fn execute_arb<'a>(
 
         // // println!("Gas Budget: {}", gas_budget);
         // // panic!();
-        println!("DRY RUN RESULT: {:#?}", dry_run_result);
-        panic!();
+        // println!("DRY RUN RESULT: {:#?}", dry_run_result);
+        // panic!();
 
         let mut pt_builder = ProgrammableTransactionBuilder::new();
 
@@ -356,10 +357,10 @@ pub async fn execute_arb<'a>(
             .add_swap_to_programmable_transaction(
                 sui_client.transaction_builder(),
                 &mut pt_builder,
-                coin_object_ids,
+                coin_object_ids.clone(),
                 leg.x_to_y,
                 amount_in,
-                predicted_amount_out,
+                0, // Predicted amount out 
                 signer_address.clone()
             )
             .await?;
@@ -405,36 +406,53 @@ pub async fn execute_arb<'a>(
                 Some(ExecuteTransactionRequestType::WaitForLocalExecution),
             ).await?;
 
-        // println!("result: {:#?}", result);
+        // println!("RESULT: {:#?}", result);
             
         // Set amount_in for next leg
         if let Some(effects) = result.effects {
             match effects.into_status() {
                 SuiExecutionStatus::Success => {
                     if let Some(balance_changes) = result.balance_changes {
-                        let balance_change_a = balance_changes
-                            .get(0)
-                            .context("Balance change 0 missing.")?;
-    
-                        let balance_change_b = balance_changes
-                            .get(1)
-                            .context("Balance change 1 missing")?;
-    
-                        if (&balance_change_a.coin_type, &balance_change_b.coin_type) == (leg.market.coin_x(), leg.market.coin_y()) {
-                            if leg.x_to_y {
-                                amount_in = balance_change_b.amount as u128
-                            } else {
-                                amount_in = balance_change_a.amount as u128
-                            }
-                        } else if (&balance_change_b.coin_type, &balance_change_a.coin_type) == (leg.market.coin_x(), leg.market.coin_y()){
-                            if leg.x_to_y {
-                                amount_in = balance_change_a.amount as u128
-                            } else {
-                                amount_in = balance_change_b.amount as u128
-                            }
-                        } else {
-                            return Err(anyhow!("Balance change coin types do not match leg's coin types."));
+                        let coin_type_to_balance_change_amount = balance_changes
+                            .into_iter()
+                            .map(|balance_change| {
+                                (balance_change.coin_type, balance_change.amount)
+                            })
+                            .collect::<HashMap<TypeTag, i128>>();
+
+                        let dest_coin_balance_change_amount = coin_type_to_balance_change_amount
+                            .get(dest_coin_type)
+                            .context(format!("Balance change for orig_coin {} not available", dest_coin_type))?;
+
+                        // DESTINATION COIN
+                        if *dest_coin_balance_change_amount > 0 {
+                            amount_in = *dest_coin_balance_change_amount as u128;
                         }
+
+                        // let balance_change_a = balance_changes
+                        //     .get(0)
+                        //     .context("Balance change 0 missing.")?;
+    
+                        // let balance_change_b = balance_changes
+                        //     .get(1)
+                        //     .context("Balance change 1 missing")?;
+    
+                        // if (&balance_change_a.coin_type, &balance_change_b.coin_type) == (leg.market.coin_x(), leg.market.coin_y()) {
+                        //     if leg.x_to_y {
+                        //         amount_in = balance_change_b.amount as u128
+                        //     } else {
+                        //         amount_in = balance_change_a.amount as u128
+                        //     }
+                        // } else if (&balance_change_b.coin_type, &balance_change_a.coin_type) == (leg.market.coin_x(), leg.market.coin_y()){
+                        //     if leg.x_to_y {
+                        //         amount_in = balance_change_a.amount as u128
+                        //     } else {
+                        //         amount_in = balance_change_b.amount as u128
+                        //     }
+                        // } else {
+                        //     return Err(anyhow!("Balance change coin types do not match leg's coin types."));
+                        // }
+
                     } else {
                         return Err(anyhow!("result.balance_changes missing."))
                     }
