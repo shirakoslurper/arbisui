@@ -268,7 +268,7 @@ pub async fn execute_arb<'a>(
             )
             .await?;
 
-        println!("{:#?}", coins);
+        // println!("{:#?}", coins);
 
         // None if our orig_cion is Sui - we'll be splitting off of gas_coin
         let coin_object_ids = if *orig_coin_type == TypeTag::from_str(SUI_COIN_TYPE)? {
@@ -292,7 +292,7 @@ pub async fn execute_arb<'a>(
                 .compute_swap_y_to_x(amount_in).0
         };
 
-        println!("predicted amount out: {}", predicted_amount_out);
+        // println!("predicted amount out: {}", predicted_amount_out);
 
         leg
             .market
@@ -311,7 +311,7 @@ pub async fn execute_arb<'a>(
             .read_api()
             .get_reference_gas_price()
             .await?
-            * 10000;
+            * 20000;
 
         // Initial dry run transaction to get gas
         let dry_run_transaction = if coin_object_ids.is_some() {
@@ -383,7 +383,7 @@ pub async fn execute_arb<'a>(
             .finish_building_programmable_transaction_select_all_gas(
                 pt_builder,
                 signer_address.clone(),
-                gas_budget
+                gas_budget * 2
             )
             .await?
         };

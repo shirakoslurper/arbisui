@@ -13,6 +13,7 @@ use std::cmp;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::collections::HashSet;
 
 use std::time::{Instant, Duration};
 
@@ -38,7 +39,7 @@ const CETUS_ROUTER_ADDRESS: &str = "0x2eeaab737b37137b94bfa8f841f92e36a153641119
 const CETUS_GLOBAL_CONFIG_ADDRESS: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
 
 const TURBOS_ORIGINAL_PACKAGE_ADDRESS: &str = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1";
-const TURBOS_CURRENT_PACKAGE_ADDRESS: &str = "0x84d1ad43e95e9833670fcdb2f2d9fb7618fe1827e3908f2c2bb842f3dccb80af";
+const TURBOS_CURRENT_PACKAGE_ADDRESS: &str = "0x788eae6a3c6f9a03df54781d32e8e7fe3c0688ff2b75b2ba5b82c971aed1873d";
 const TURBOS_VERSIONED_ID: &str = "0xf1cf0e81048df168ebeb1b8030fad24b3e0b53ae827c25053fff0779c1445b6f";
 // temp
 // const MY_SUI_ADDRESS: &str = "0x02a212de6a9dfa3a69e22387acfbafbb1a9e591bd9d636e7895dcfc8de05f331";
@@ -63,7 +64,7 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     // 50 Requests / Sec
-    let rate_limiter = Arc::new(RateLimiter::direct(Quota::per_second(nonzero!(35u32))));
+    let rate_limiter = Arc::new(RateLimiter::direct(Quota::per_second(nonzero!(38u32))));
 
     let run_data = RunData {
         sui_client: SuiClientBuilder::default()
@@ -83,73 +84,6 @@ async fn main() -> Result<(), anyhow::Error> {
         key_index
     };
 
-    // // // END ARB
-
-    // let owner_address = run_data
-    //     .keystore
-    //     .addresses()
-    //     .get(run_data.key_index)
-    //     .context(format!("No address for key index {} in keystore", run_data.key_index))?
-    //     .clone();
-
-    // let mut exec = Box::new(CetusMarket {
-    //     parent_exchange: cetus.clone(),
-    //     coin_x: TypeTag::from_str("0x06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS")?, //0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?
-    //     coin_y: TypeTag::from_str("0x2::sui::SUI")?,
-    //     pool_id: ObjectID::from_str("0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded")?, //0x498e57c0f7a67436177348afb1e43fe15c2c572f49f056202823d8a47aefcbd1")?, // 0x25ccb77dc4de57879e12ac7f8458860a0456a0a46a84b9f4a8903b5498b96665
-    //     coin_x_sqrt_price: None, // In terms of y. x / y
-    //     coin_y_sqrt_price: None, // In terms of x. y / x
-    //     computing_pool: None
-    // }) as Box<dyn Market>;
-
-    // // let mut exec = Box::new(CetusMarket {
-    // //     parent_exchange: cetus.clone(),
-    // //     coin_x: TypeTag::from_str("0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?,
-    // //     coin_y: TypeTag::from_str("0x2::sui::SUI")?,
-    // //     pool_id: ObjectID::from_str("0x25ccb77dc4de57879e12ac7f8458860a0456a0a46a84b9f4a8903b5498b96665")?, //0x498e57c0f7a67436177348afb1e43fe15c2c572f49f056202823d8a47aefcbd1")?, // 0x25ccb77dc4de57879e12ac7f8458860a0456a0a46a84b9f4a8903b5498b96665
-    // //     coin_x_sqrt_price: None, // In terms of y. x / y
-    // //     coin_y_sqrt_price: None, // In terms of x. y / x
-    // //     computing_pool: None
-    // // }) as Box<dyn Market>;
-
-    // let exec_response = run_data
-    //     .sui_client
-    //     .read_api()
-    //     .get_object_with_options(
-    //         exec.pool_id().clone(), 
-    //         SuiObjectDataOptions::full_content()
-    //     ).await?;
-
-    // exec.update_with_object_response(&run_data.sui_client, &exec_response).await?;
-
-    
-    // // println!("{:?}", exec.compute_swap_x_to_y(974641586360));
-    // println!("{:?}", exec.compute_swap_y_to_x(10_000_000_000));
-    // // println!("{:?}", exec.compute_swap_y_to_x(8_000_000_000));
-    // println!("{:?}", exec.coin_x_price());
-    // // panic!();
-
-    // let exec_result = arbitrage::OptimizedResult {
-    //     path: vec![
-    //         arbitrage::DirectedLeg {
-    //             x_to_y: false,
-    //             market: &exec
-    //         },
-    //     ],
-    //     amount_in: 10_000_000_000, // 974641586360
-    //     amount_out: 100000000000,
-    //     profit: I256::from(0)
-    // };
-
-    // arbitrage::execute_arb(
-    //     &run_data.sui_client, 
-    //     exec_result, 
-    //     &owner_address, 
-    //     &run_data.keystore
-    // ).await?;
-
-    // panic!();
-
     let source_coin = TypeTag::from_str(SUI_COIN_TYPE)?;
     
     let cetus_markets = cetus.get_all_markets(&run_data.sui_client).await?;
@@ -159,33 +93,40 @@ async fn main() -> Result<(), anyhow::Error> {
     markets.extend(turbos_markets.clone());
     markets.extend(cetus_markets.clone());
 
+    let mut target_markets = HashSet::new();
+    target_markets.insert(ObjectID::from_str("0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded")?);
+    target_markets.insert(ObjectID::from_str("0x296f2d8717eef03ec701357213fe2318d2281c31c609ffb446a14e3ce07d7754")?);
+    target_markets.insert(ObjectID::from_str("0x86ed41e9b4c6cce36de4970cfd4ae3e98d6281f13a1b16aa31fc73ec90079c3d")?);
+    target_markets.insert(ObjectID::from_str("0x51ee9f5e33c1d7b38b197a09acb17ef0027e83e6d0b3c0f6466855398e4c1cba")?);
+    target_markets.insert(ObjectID::from_str("0xb05c45ef2b9647cab2ccc21e2a85af14d81d0e0a4aabf5219de50902f0cee1d8")?);
+    target_markets.insert(ObjectID::from_str("0x31970253068fc315682301b128b17e6c84a60b1cf0397641395d2b65268ed924")?);
+    
+    target_markets.insert(ObjectID::from_str("0xe63cedb411544f435221df201157db8666c910b7c7dd58c385cbc6a7a26f218b")?);
+    target_markets.insert(ObjectID::from_str("0xc8d7a1503dc2f9f5b05449a87d8733593e2f0f3e7bffd90541252782e4d2ca20")?);
+    target_markets.insert(ObjectID::from_str("0x46b44725cae3e9b31b722f79adbc00acc25faa6f41881c635b55a0ee65d9d4f4")?);
+    target_markets.insert(ObjectID::from_str("0xcf994611fd4c48e277ce3ffd4d4364c914af2c3cbb05f7bf6facd371de688630")?);
+    target_markets.insert(ObjectID::from_str("0x06d8af9e6afd27262db436f0d37b304a041f710c3ea1fa4c3a9bab36b3569ad3")?);
+
+    target_markets.insert(ObjectID::from_str("0x2c6fc12bf0d093b5391e7c0fed7e044d52bc14eb29f6352a3fb358e33e80729e")?);
+    target_markets.insert(ObjectID::from_str("0x81f6bdb7f443b2a55de8554d2d694b7666069a481526a1ff0c91775265ac0fc1")?);
+    target_markets.insert(ObjectID::from_str("0xff44a06b08481a0e2587537f0ef8f042de3b311f45f01d4dbae1cb15c507a204")?);
+    target_markets.insert(ObjectID::from_str("0x20739112ab4d916d05639f13765d952795d53b965d206dfaed92fff7729e29af")?);
+    target_markets.insert(ObjectID::from_str("0x238f7e4648e62751de29c982cbf639b4225547c31db7bd866982d7d56fc2c7a8")?);
+    target_markets.insert(ObjectID::from_str("0xb8a6b18fa8a9d773125b89e6def125a48c28e6d85d7e4f2e1424a62ffcef0bb5")?);
+
+    target_markets.insert(ObjectID::from_str("0x5eb2dfcdd1b15d2021328258f6d5ec081e9a0cdcfa9e13a0eaeb9b5f7505ca78")?);
+    target_markets.insert(ObjectID::from_str("0x9b2a5da1310657a622f22c2fb54e7be2eb0a858a511b8c4987c9dd5df96d11f3")?);
+
+    markets = markets
+        .into_iter()
+        .filter(|market| {
+            target_markets.contains(market.pool_id())
+        })
+        .collect::<Vec<_>>();
+
     println!("markets.len(): {}", markets.len());
 
     let mut market_graph = MarketGraph::new(&markets)?;
-
-    // let now = Instant::now();
-
-    // let cetus_pool_id_to_object_response = cetus
-    //     .get_pool_id_to_object_response(&run_data.sui_client, &cetus_markets)
-    //     .await?;
-
-    // let turbos_pool_id_to_object_response = turbos
-    //     .get_pool_id_to_object_response(&run_data.sui_client, &turbos_markets)
-    //     .await?;
-
-    // let mut pool_id_to_object_response = HashMap::new();
-    // pool_id_to_object_response.extend(turbos_pool_id_to_object_response);
-    // pool_id_to_object_response.extend(cetus_pool_id_to_object_response);
-
-    // println!("pool_id_to_fields.keys().len(): {}", pool_id_to_object_response.keys().len());
-
-
-    // Let's not do clean up. Information may be outdated by the time we execute anyway. 
-    // Lets arb as fast as we can in response to active volume
-    // market_graph.update_markets_with_object_responses(&run_data.sui_client, &pool_id_to_object_response).await?;
-    // println!("Elapsed: {:#?}", now.elapsed());
-
-    // panic!();
 
     let max_intermediate_nodes = run_data_opts.max_intermediate_nodes;
    
@@ -194,168 +135,12 @@ async fn main() -> Result<(), anyhow::Error> {
         max_intermediate_nodes
     )?;
 
-    // let coin_x = TypeTag::from_str("0xf0fe2210b4f0c4e3aff7ed147f14980cf14f1114c6ad8fd531ab748ccf33373b::bswt::BSWT")?;
-    // let coin_y = TypeTag::from_str("0x2::sui::SUI")?;
-
-    // let weight = market_graph.graph.edge_weight(
-    //     &coin_x,
-    //     &coin_y,
-    // ).unwrap();
-
-    // for x in weight {
-    //     println!("pool: {}", x.0);
-    // }
-
-    // panic!();
-
     loop_blocks(
         &run_data,
         &vec![Box::new(cetus), Box::new(turbos)],
         &mut market_graph,
         &source_coin
     ).await?;
-
-    // // let mut total_profit = I256::from(0_u8);
-
-    // let now = Instant::now();
-
-    // let mut optimized_results = paths
-    //     .par_iter()
-    //     .map(|path| {
-    //         arbitrage::optimize_starting_amount_in(path, &market_graph)
-    //     })
-    //     .collect::<Result<Vec<_>, anyhow::Error>>()?;
-
-    // optimized_results = optimized_results
-    //     .into_iter()
-    //     .filter(|optimized_result| optimized_result.profit > 0)
-    //     .collect::<Vec<_>>();
-    
-    // let elapsed = now.elapsed();
-    // println!("Elasped: {:.2?}", elapsed);
-    // // println!("{:#?}", optimized_results[0]);
-
-    // let total_profit = optimized_results
-    //     .iter()
-    //     .fold(I256::from(0u8), |tp, optimized_result| {
-    //         tp + optimized_result.profit
-    //     });
-
-    // println!("total_profit: {}", total_profit);
-
-    // let most_profitable = optimized_results
-    //     .iter()
-    //     .fold(optimized_results[0].clone(), |max_result, optimized_result| {
-    //         if max_result.profit > optimized_result.profit {
-    //             max_result
-    //         } else {
-    //             optimized_result.clone()
-    //         }
-    //     });
-
-    // optimized_results.iter().for_each(|or| {
-    //     println!("profit: {}", or.profit);
-    // });
-
-    // println!("{:#?}", most_profitable);
-
-    // // let transaction_builder = TransactionBuilder::new();
-
-    // // if most_profitable.amount_in < 10_000_000_000 {
-    // //     for leg in most_profitable.path {
-    // //         let mut pt_builder = ProgrammableTransactionBuilder::new();
-
-    // //         // println!("coin x metadata: {:#?}", coin_to_metadata.get(leg.market.coin_x()).unwrap());
-    // //         // println!("coin y metadata: {:#?}", coin_to_metadata.get(leg.market.coin_y()).unwrap());
-            
-    // //         let orig_coin_string = if leg.x_to_y {
-    // //             Some(format!("{}", leg.market.coin_x()))
-    // //         } else {
-    // //             Some(format!("{}", leg.market.coin_y()))
-    // //         };
-
-    // //         println!("coin_x string: {}", format!("0x{}", leg.market.coin_x()));
-    // //         println!("coin_y string: {}", format!("0x{}", leg.market.coin_y()));
-
-    // //         // Yields SuiRpcResult<Vec<Coin>>
-    // //         let coins = run_data
-    // //             .sui_client
-    // //             .coin_read_api(
-    // //             )
-    // //             .select_coins(
-    // //                 SuiAddress::from_str(MY_SUI_ADDRESS)?,
-    // //                 orig_coin_string,
-    // //                 most_profitable.amount_in,
-    // //                 vec![]
-    // //             )
-    // //             .await?;
-
-    // //         let coin_object_ids = coins
-    // //             .into_iter()
-    // //             .map(|coin| {
-    // //                 coin.coin_object_id
-    // //             })
-    // //             .collect::<Vec<ObjectID>>();
-
-    // //         // let coin_args = run_data.sui_client.transaction_builder()
-    // //         //     .programmable_make_object_vec(
-    // //         //         &mut pt_builder,
-    // //         //         coin_object_ids
-    // //         //     ).await?;
-
-    // //         // programmable turbos move call
-    // //         // for now lets make it async so that the interface function 
-    // //         // gets the clock time for us and we don't have to feed it anything?
-            
-    // //         println!("AAAAAAA");
-
-    // //         let predicted_amount_out = if leg.x_to_y {
-    // //             leg.market
-    // //                 .compute_swap_x_to_y(most_profitable.amount_in).1
-    // //         } else {
-    // //             leg.market
-    // //                 .compute_swap_y_to_x(most_profitable.amount_in).0
-    // //         };
-
-    // //         println!("predicted amount out: {}", predicted_amount_out);
-
-    // //         leg.market
-    // //             .add_swap_to_programmable_transaction(
-    // //                 run_data.sui_client.transaction_builder(),
-    // //                 & mut pt_builder,
-    // //                 coin_object_ids,
-    // //                 leg.x_to_y,
-    // //                 most_profitable.amount_in,
-    // //                 predicted_amount_out,
-    // //                 SuiAddress::from_str(MY_SUI_ADDRESS)?
-    // //             )
-    // //             .await?;
-
-    // //         let transaction = run_data
-    // //             .sui_client
-    // //             .transaction_builder()
-    // //             .finish_building_programmable_transaction(
-    // //                 pt_builder,
-    // //                 SuiAddress::from_str(MY_SUI_ADDRESS)?,
-    // //                 None,
-    // //                 9000000
-    // //             )
-    // //             .await?;
-
-    // //         let result = run_data
-    // //             .sui_client
-    // //             .read_api()
-    // //             .dry_run_transaction_block(
-    // //                 transaction
-    // //             )
-    // //             .await?;
-
-    // //         println!("RESULT: {:#?}", result);
-                
-
-    // //         // programmable
-    // //     }
-    // // }
 
     Ok(())
 }

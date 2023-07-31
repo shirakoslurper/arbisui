@@ -591,7 +591,7 @@ impl CetusMarket {
         // Very rough but lets do thisss
         // We can't add to a result unless theres a function that exists..
 
-        println!("x_to_y: {}", x_to_y);
+        // println!("x_to_y: {}", x_to_y);
 
         // Arg0: &GlobalConfig
         let global_config = ProgrammableTransactionArg::SuiJsonValue(
@@ -704,7 +704,7 @@ impl CetusMarket {
             SuiTypeTag::new(format!("{}", self.coin_y)), 
         ];
 
-        println!("{:#?}", type_args);
+        // println!("{:#?}", type_args);
 
         transaction_builder.programmable_move_call(
             pt_builder,

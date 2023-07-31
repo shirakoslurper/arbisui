@@ -1,4 +1,4 @@
-use anyhow;
+use anyhow::{anyhow, Context};
 use std::collections:: BTreeMap;
 use fixed::types::{U64F64, I64F64};
 use std::num::Wrapping;
@@ -56,54 +56,65 @@ pub struct ComputeSwapState {
 }
 
 use std::collections::HashSet;
-pub fn count_init_ticks_in_tick_map(pool: &mut Pool) -> HashSet<i32> {
-    let mut tick_count = 0;
+pub fn count_init_ticks_in_tick_map(pool: &Pool) -> HashSet<i32> {
+    // let mut tick_count = 0;
     let tick_spacing_i32 = pool.tick_spacing as i32;
     let mut tick_index_set = HashSet::new();
 
     for (word_pos, word) in pool.tick_map.iter() {
         for bit_pos in 0..256 {
             if (*word >> bit_pos) & U256::from(1_u8) == U256::from(1_u8) {
-                tick_count += 1;
+                // tick_count += 1;
 
                 let tick_index = (((*word_pos) << 8) | bit_pos) * tick_spacing_i32;
                 tick_index_set.insert(tick_index);
 
-                // println!("TICK MAP: tick_index: {}", tick_index);
-
-                println!("TICK_MAP: ({}, {})", word_pos, bit_pos);
+                // println!("TICK_MAP: ({}, {})", word_pos, bit_pos);
             }
         }
     }
 
-    println!("TICKS IN TICK MAP: {}", tick_count);
+    // println!("TICKS IN TICK MAP: {}", tick_count);
     
     tick_index_set
 }
 
-pub fn count_init_tick_in_ticks(pool: &mut Pool) -> HashSet<i32> {
-    let mut tick_count = 0;
+pub fn count_init_tick_in_ticks(pool: &Pool) -> HashSet<i32> {
+    // let mut tick_count = 0;
     let tick_spacing_i32 = pool.tick_spacing as i32;
     let mut tick_index_set = HashSet::new();
 
     for (tick_index, tick) in pool.ticks.iter() {
         if tick.initialized {
-            tick_count += 1;
+            // tick_count += 1;
 
             tick_index_set.insert(*tick_index);
 
-            // println!("TICKS: tick_index: {}", tick_index);
-
             let compressed = tick_index / tick_spacing_i32;
-            println!("TICKS: {:?}", position_tick(compressed));
+
+            // println!("TICKS: {:?}", position_tick(compressed));
             // I think theres a fuckign problem with position_tick;
         }
     } 
 
-    println!("TICKS IN TICKS: {}", tick_count);
+    // println!("TICKS IN TICKS: {}", tick_count);
 
     tick_index_set
 }
+
+// pub fn next_index_for_swap(
+//     ticks: &BTreeMap<i32, Tick>,
+//     tick_index: i32,
+//     a_to_b: bool
+// ) -> Option<(i32, bool)> {
+//     // let score = tick_score(tick_index);
+
+//     if a_to_b {
+//         ticks.range(..tick_index).map(|(index, tick)| (index.clone(), tick.initialized)).next_back()
+//     } else {
+//         ticks.range(tick_index+1..).map(|(index, tick)| (index.clone(), tick.initialized)).next()
+//     }
+// }
 
 // Seems that this does most of the work in swap()
 pub fn compute_swap_result(
@@ -115,14 +126,39 @@ pub fn compute_swap_result(
     simulating: bool
 ) -> ComputeSwapState {
 
-    // /// TESTING
+    // // TESTING
     // let tick_map_tick_index_set = count_init_ticks_in_tick_map(pool);
     // let ticks_tick_index_set = count_init_tick_in_ticks(pool);
+    // let diff  = tick_map_tick_index_set.difference(&ticks_tick_index_set).cloned().collect::<Vec<i32>>().len();
 
-    // println!("SETS ARE SAME: {}", tick_map_tick_index_set.difference(&ticks_tick_index_set).cloned().collect::<Vec<i32>>().len() == 0);
+    // if diff != 0 {
+    //     panic!("diff: {}", diff);
+    // }
 
-    // // INDUCE FAILURE
-    // assert!(1 == 0);
+    let total_ticks_liquidity_net = (*&pool)
+        .ticks
+        .iter()
+        .fold(0i128, |total, (_, tick)| {
+            total + tick.liquidity_net
+        });
+
+    // let og_liquidity_net = pool.ticks.get(&pool.tick_current_index).unwrap().liquidity_net;
+
+    // let total_ticks_liquidity_net = if a_to_b {
+    //     (*&pool)
+    //         .ticks
+    //         .range(..pool.tick_current_index)
+    //         .fold(og_liquidity_net, |total, (_, tick)| {
+    //             total - tick.liquidity_net
+    //         })
+    // } else {
+    //     (*&pool)
+    //         .ticks
+    //         .range(pool.tick_current_index+1..)
+    //         .fold(og_liquidity_net, |total, (_, tick)| {
+    //             total + tick.liquidity_net
+    //         })
+    // };
 
     assert!(pool.unlocked);
     assert!(amount_specified != 0);
@@ -154,20 +190,21 @@ pub fn compute_swap_result(
         fee_amount: 0,
     };
 
+    let mut steps = 0;
+    let mut num_liq_updates = 0;
+    let mut weird = 0;
+    // let mut num_skipped_real_ticks = 0;
+    // let mut uninitialized_steps = 0;
+
     while compute_swap_state.amount_specified_remaining > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
 
         let sqrt_price_start = compute_swap_state.sqrt_price;
-
-        // let now = Instant::now();
 
         let (mut tick_next, initialized) = next_initialized_tick_within_one_word(
             pool,
             compute_swap_state.tick_current_index,
             a_to_b
         );
-
-        // let elasped = now.elapsed();
-        // println!("Bit Map Elasped: {:.2?}", elapsed);
 
         if tick_next < math_tick::MIN_TICK_INDEX {
             tick_next = math_tick::MIN_TICK_INDEX;
@@ -250,6 +287,16 @@ pub fn compute_swap_result(
                     },
                     // &next_pool_reward_infos,
                     simulating
+                ).expect(
+                    // &format!(
+                    //     "ticks set difference: {}\nticks_set ({}): {:#?}\ntick_map_set ({}):{:#?}", 
+                    //     diff, 
+                    //     ticks_tick_index_set.len(),
+                    //     ticks_tick_index_set,
+                    //     tick_map_tick_index_set.len(),
+                    //     tick_map_tick_index_set
+                    // )
+                    "cross_tick() failed"
                 );
 
                 if a_to_b {
@@ -259,10 +306,38 @@ pub fn compute_swap_result(
                 // println!("liquidity: {}", compute_swap_state.liquidity);
                 // println!("liquidity_net: {}", liquidity_net);
 
+
+                // BTreeMap implements double ended iterater
+                let first_tick_position = position_tick(pool.ticks.iter().next_back().unwrap().0 / pool.tick_spacing as i32);
+                let last_tick_position = position_tick(pool.ticks.iter().next().unwrap().0 / pool.tick_spacing as i32);
+
                 compute_swap_state.liquidity = math_liquidity::add_delta(
                     compute_swap_state.liquidity,
                     liquidity_net
+                ).expect(
+                    // &format!(
+                    //     "add_delta_failed: total_ticks_liquidity_net = {}, css: {:#?}, delta = {}, steps = {}, a_to_b: {}\n{:#?}\namount_specified = {}", 
+                    //     total_ticks_liquidity_net, 
+                    //     compute_swap_state, 
+                    //     liquidity_net, 
+                    //     steps, 
+                    //     a_to_b, 
+                    //     pool,
+                    //     amount_specified
+                    // )
+                    // &format!("ticks set difference: {}", diff)
+                    &format!("\ntotal_liquidity_net: {}\na_to_b: {}\nsteps: {}\nnum_liq_updates: {}\nweird: {}\namount_specified: {}\ncompute_swap_state: {:#?}\ntick_next_position: {:#?}\nfirst_tick: {:#?}\nlast_tick: {:#?} \ntick_map: {:#?}", total_ticks_liquidity_net, a_to_b, steps, num_liq_updates, weird, amount_specified, compute_swap_state, position_tick(tick_next/pool.tick_spacing as i32), first_tick_position, last_tick_position, pool.tick_map)
+                    // &format!("tick with difference exists: {:#?}",  
+                    //     tick_exists
+                    // )
                 );
+
+                num_liq_updates += 1;
+            } else {
+                // uninitialized_steps += 1;
+                // if pool.ticks.contains_key(&tick_next) && pool.ticks.get(&tick_next).unwrap().liquidity_net != 0 {
+                //     num_skipped_real_ticks += 1;
+                // }
             }
 
             compute_swap_state.tick_current_index = if a_to_b {
@@ -271,10 +346,18 @@ pub fn compute_swap_result(
                 tick_next
             }
         } else if compute_swap_state.sqrt_price != sqrt_price_start {
+            // here ??
             compute_swap_state.tick_current_index = math_tick::tick_index_from_sqrt_price(
                 compute_swap_state.sqrt_price
             );
+
+            weird += 1;
+        } else {
+            // this mean the sqrt price has not changed...
+            weird += 1;
         }
+
+        steps += 1;
 
         // println!("end of loop 1: compute_swap_state.amount_specified_remaining = {}", compute_swap_state.amount_specified_remaining);
     }
@@ -362,7 +445,7 @@ pub fn next_initialized_tick_within_one_word(
         let next = if initialized {
             (compressed + 1 + (math_bit::least_significant_bit(masked) - bit_pos) as i32) * tick_spacing_i32
         } else {
-            (compressed + 1 + (u8::MAX - bit_pos) as i32) * tick_spacing_i32
+            (compressed + 1 + ((u8::MAX - bit_pos) as u32) as i32) * tick_spacing_i32
         };
 
         (next, initialized)
@@ -375,7 +458,9 @@ pub fn position_tick(
     tick: i32
 ) -> (i32, u8) {
     let word_pos = tick >> 8;   // Arithmetic right shift (on purpose!)
-    let bit_pos = mod_euclidean(tick, 256) as u8;
+    // let bit_pos = mod_euclidean(tick, 256) as u8;
+
+    let bit_pos = mod_euclidean(tick, 256).abs() as u32 as u8;
 
     (word_pos, bit_pos)
 }
@@ -396,7 +481,14 @@ pub fn cross_tick(
     fee_growth_global_b: u128,
     // next_pool_reward_infos: &[u128],
     simulating: bool,  // determines whether we 
-) -> i128 {
+) -> Result<i128, anyhow::Error> {
+
+    // let tick_total_net_liquidity = (&*pool)
+    //     .ticks
+    //     .iter()
+    //     .fold(0i128, |total, (_, tick)| {
+    //         total + tick.liquidity_net
+    //     });
 
     let tick_next = pool
         .ticks
@@ -423,9 +515,17 @@ pub fn cross_tick(
     }
 
     // We should generally never cross into an uninitialized tick
-    assert!(tick_next.initialized, "crossing uninitialized tick ({}): {:#?}", tick_next_index, tick_next);
+    // assert!(tick_next.initialized, "crossing uninitialized tick ({}): {:#?}, total_liquidity_net = {}", tick_next_index, tick_next, tick_total_net_liquidity);
 
-    tick_next.liquidity_net
+    if !tick_next.initialized {
+        return Err(anyhow!(format!("crossing uninitialized tick ({}): {:#?}", tick_next_index, tick_next)));
+    }
+
+    if tick_next.liquidity_net == 0 {
+        return Err(anyhow!(format!("crossing tick with no liquidity_net ({}): {:#?}", tick_next_index, tick_next)));
+    }
+
+    Ok(tick_next.liquidity_net)
 }
 
 pub fn deploy_pool(
@@ -515,7 +615,7 @@ pub fn modify_position(
                 liquidity_delta
             );
 
-            pool.liquidity = math_liquidity::add_delta(pool.liquidity, liquidity_delta);
+            pool.liquidity = math_liquidity::add_delta(pool.liquidity, liquidity_delta).unwrap();
         } else {
             amount_b = math_sqrt_price::get_amount_a_delta(
                 math_tick::sqrt_price_from_tick_index(tick_lower), 
@@ -608,7 +708,7 @@ pub fn update_tick(
         );
     
     let liquidity_gross_before = tick.liquidity_gross;
-    let liquidity_gross_after = math_liquidity::add_delta(liquidity_gross_before, liquidity_delta);
+    let liquidity_gross_after = math_liquidity::add_delta(liquidity_gross_before, liquidity_delta).unwrap();
 
     assert!(liquidity_gross_after <= max_liquidity_per_tick);
 
@@ -889,6 +989,64 @@ mod tests {
         pool
     }
 
+    #[test]
+    fn test_next_initialized() {
+        let mut pool = Pool {
+            protocol_fees_a: 0,
+            protocol_fees_b: 0,
+            sqrt_price: 0,
+            tick_current_index: 0,
+            tick_spacing: 1,
+            max_liquidity_per_tick: 0,
+            fee: 0,
+            fee_protocol: 0,
+            unlocked: true,
+            fee_growth_global_a: 0,
+            fee_growth_global_b: 0,
+            liquidity: 0,
+            ticks: BTreeMap::new(), // new
+            tick_map:BTreeMap::new()
+        };
+
+        let ticks = vec![-200, -55, -4, 70, 78, 84, 139, 240, 535];
+
+        init_ticks(&mut pool, &ticks);
+
+        assert_eq!((84, true), next_initialized_tick_within_one_word(&mut pool, 78, false), "(78, false)");
+        assert_eq!((-4, true), next_initialized_tick_within_one_word(&mut pool, -55, false), "(-55, false)");
+        assert_eq!((78, true), next_initialized_tick_within_one_word(&mut pool, 77, false), "(77, false)");
+        assert_eq!((-55, true), next_initialized_tick_within_one_word(&mut pool, -56, false), "(-56, false)");
+        assert_eq!((511, false), next_initialized_tick_within_one_word(&mut pool, 255, false), "(255, false)");
+        assert_eq!((-200, true), next_initialized_tick_within_one_word(&mut pool, -257, false), "(-257, false)");
+
+        flip_tick(&mut pool, 340);
+        assert_eq!((340, true), next_initialized_tick_within_one_word(&mut pool, 328, false), "(328, false)");
+        flip_tick(&mut pool, 340);
+
+        assert_eq!((511, false), next_initialized_tick_within_one_word(&mut pool, 508, false), "(508, false)");
+        assert_eq!((511, false), next_initialized_tick_within_one_word(&mut pool, 255, false), "(255, false)");
+        assert_eq!((511, false), next_initialized_tick_within_one_word(&mut pool, 383, false), "(383, false)");
+
+        assert_eq!((78, true), next_initialized_tick_within_one_word(&mut pool, 78, true), "(78, true)");
+        assert_eq!((78, true), next_initialized_tick_within_one_word(&mut pool, 79, true), "(79, true)");
+        assert_eq!((256, false), next_initialized_tick_within_one_word(&mut pool, 258, true), "(258, true)");
+        assert_eq!((256, false), next_initialized_tick_within_one_word(&mut pool, 256, true), "(256, true)");
+        assert_eq!((70, true), next_initialized_tick_within_one_word(&mut pool, 72, true), "(72, true)");
+        assert_eq!((-512, false), next_initialized_tick_within_one_word(&mut pool, -257, true), "(-257, true)");
+        assert_eq!((768, false), next_initialized_tick_within_one_word(&mut pool, 1023, true), "(1023, true)");
+        assert_eq!((768, false), next_initialized_tick_within_one_word(&mut pool, 900, true), "(900, true)");
+
+        flip_tick(&mut pool, 329);
+        assert_eq!((329, true), next_initialized_tick_within_one_word(&mut pool, 456, true), "(456, true)");
+
+    }
+
+    fn init_ticks(pool: &mut Pool, tick_indices: &[i32]) {
+        for tick_index in tick_indices {
+            flip_tick(pool, tick_index.clone())
+        }
+    }
+
     // #[test]
     // fn test_next_initialized_tick() {
 
@@ -1000,49 +1158,49 @@ mod math_bit {
 
         let mut r: u8 = 255;
 
-        if x & U256::from_str_hex("0xffffffffffffffffffffffffffffffff").unwrap() > 0 {
+        if (x & U256::from_str_hex("0xffffffffffffffffffffffffffffffff").unwrap()) > 0 {
             r = r - 128;
         } else {
             x = x >> 128;
         };
 
-        if x & U256::from_str_hex("0xffffffffffffffff").unwrap() > 0 {
+        if (x & U256::from_str_hex("0xffffffffffffffff").unwrap()) > 0 {
             r = r - 64;
         } else {
             x = x >> 64;
         };
 
-        if x & U256::from_str_hex("0xffffffff").unwrap() > 0 {
+        if (x & U256::from_str_hex("0xffffffff").unwrap()) > 0 {
             r = r - 32;
         } else {
             x = x >> 32;
         };
 
-        if x & U256::from_str_hex("0xffff").unwrap() > 0 {
+        if (x & U256::from_str_hex("0xffff").unwrap()) > 0 {
             r = r - 16;
         } else {
             x = x >> 16;
         };
 
-        if x & U256::from_str_hex("0xff").unwrap() > 0 {
+        if (x & U256::from_str_hex("0xff").unwrap()) > 0 {
             r = r - 8;
         } else {
             x = x >> 8;
         };
 
-        if x & U256::from_str_hex("0xf").unwrap() > 0 {
+        if (x & U256::from_str_hex("0xf").unwrap()) > 0 {
             r = r - 4;
         } else {
             x = x >> 4;
         };
 
-        if x & U256::from_str_hex("0x3").unwrap() > 0 {
+        if (x & U256::from_str_hex("0x3").unwrap()) > 0 {
             r = r - 2;
         } else {
             x = x >> 2;
         };
 
-        if x & U256::from_str_hex("0x1").unwrap() > 0 {
+        if (x & U256::from_str_hex("0x1").unwrap()) > 0 {
             r = r - 1;
         }
 
@@ -1059,28 +1217,45 @@ mod math_bit {
 }
 
 mod math_liquidity {
+    use anyhow::anyhow;
 
     pub const Q64: u128 = 0x10000000000000000;
 
     pub fn add_delta(
         x: u128,
         y: i128
-    ) -> u128 {
-        let mut z;
+    ) -> Result<u128, anyhow::Error> {
+        let z;
         let abs_y = y.abs() as u128;
 
         // println!("x: {}", x);
         // println!("y: {}", y);
 
+        // if y < 0 {
+        //     assert!(x >= abs_y, "add_delta: x < |y|. x = {}, |y| = {}", x, abs_y);
+        //     z = x - abs_y;
+        // } else {
+        //     z = x + abs_y;
+        //     assert!(z >= x, "add_delta: z < x, z = {}, x = {}", z, x);
+        // }
+
+        // On
+
         if y < 0 {
-            assert!(x >= abs_y, "add_delta: x < |y|. x = {}, |y| = {}", x, abs_y);
+            // assert!(x >= abs_y, "add_delta: x < |y|. x = {}, |y| = {}", x, abs_y);
+            if !(x >= abs_y) {
+                return Err(anyhow!(format!("add_delta: x < |y|. x = {}, |y| = {}", x, abs_y)));
+            }
             z = x - abs_y;
         } else {
             z = x + abs_y;
-            assert!(z >= x, "add_delta: z < x, z = {}, x = {}", z, x);
+            if !(z >= x) {
+                return Err(anyhow!(format!("add_delta: z < x, z = {}, x = {}", z, x)));
+            }
+            // assert!(z >= x, "add_delta: z < x, z = {}, x = {}", z, x);
         }
 
-        z
+        Ok(z)
     }
 }
 
@@ -1109,6 +1284,8 @@ mod math_swap {
         let a_to_b = sqrt_price_current >= sqrt_price_target;
         let fee_amount;
 
+        // How much of the "in" coin we need to push sqrt price from
+        // current to target..
         let mut amount_fixed_delta = get_amount_fixed_delta(
             sqrt_price_current,
             sqrt_price_target,
@@ -1117,6 +1294,8 @@ mod math_swap {
             a_to_b
         );
 
+        // Set amount we're swapping in to the amount_specified
+        // minus the fee if amount_specified_is_input
         let mut amount_calc = amount_remaining;
         if amount_specified_is_input {
             amount_calc = full_math_u128::mul_div_floor(
@@ -1129,10 +1308,15 @@ mod math_swap {
         // println!("compute_swap(): amount_calc = {}", amount_calc);
         // println!("compute_swap() amount_fixed delta = {}", amount_fixed_delta);
 
+        // If the amount we're swapping in is greater that the amount
+        // needed to push price from the current_price to the target price...
         let next_sqrt_price = if amount_calc >= amount_fixed_delta {
+            // Next price is the price target
             // println!("compute_swap_step(): branch 1 next_sqrt_price = {}", sqrt_price_target);
             sqrt_price_target
         } else {
+            // Next price is what we push the price to when we trade
+            // amount_calc in
             math_sqrt_price::get_next_sqrt_price(
                 sqrt_price_current,
                 liquidity,
@@ -1155,7 +1339,7 @@ mod math_swap {
         );
 
         // println!("amount_unfixed_delta = {}", amount_unfixed_delta);
-
+        // Readjust the amount if the swap is not at max
         if !is_max_swap {
             amount_fixed_delta = get_amount_fixed_delta(
                 sqrt_price_current,
@@ -1429,6 +1613,8 @@ mod math_sqrt_price {
     
     #[cfg(test)]
     mod tests {
+        use fixed::types::U64F64;
+
         use super::*;
         #[test]
         fn test_get_amount_b_delta_() {
@@ -1440,6 +1626,14 @@ mod math_sqrt_price {
             );
             assert!(delta == 989999946868);
         }
+
+        // #[test]
+        // fn test_get_next_price_from_input() {
+        //     let price = U64F64::from_num(1);
+
+
+        //     // get_next_sqrt_price(sqrt_price, liquidity, amount, amount_specified_is_input, a_to_b)
+        // }
     }
 }
 

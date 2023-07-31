@@ -265,6 +265,8 @@ impl Turbos {
             "id"
         )?;
 
+        // println!("response id: {}", response.data.as_ref().unwrap().object_id);
+
         // let tick_map_start = Instant::now();
         let tick_map = Self::get_tick_map(sui_client, &tick_map_id).await?;
         // let tick_map_duration = tick_map_start.elapsed();
@@ -334,12 +336,9 @@ impl Turbos {
 
                 // Moving the casts/conversions to outside the if let makes this more modular
                 let word = sui_move_value::read_field_as_u256(&fields, "value")?;
-                
-                // U256::from_str(
-                //     &sui_move_value::get_string(&fields, "value").context(format!("turbos string, fields: {:#?}", fields))?
-                // )?;
 
                 // println!("Word: {}", word);
+                // panic!();
 
                 Ok((word_pos, word))
             })
@@ -458,15 +457,15 @@ impl Exchange for Turbos {
 }
 
 #[derive(Debug, Clone)]
-struct TurbosMarket {
-    parent_exchange: Turbos,
-    coin_x: TypeTag,
-    coin_y: TypeTag,
-    fee: TypeTag,
-    pool_id: ObjectID,
-    coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
-    coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
-    computing_pool: Option<turbos_pool::Pool>
+pub struct TurbosMarket {
+    pub parent_exchange: Turbos,
+    pub coin_x: TypeTag,
+    pub coin_y: TypeTag,
+    pub fee: TypeTag,
+    pub pool_id: ObjectID,
+    pub coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
+    pub coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
+    pub computing_pool: Option<turbos_pool::Pool>
 }
 
 const SUI_STD_LIB_PACKAGE_ID: &str = "0x0000000000000000000000000000000000000000000000000000000000000002";
@@ -594,12 +593,13 @@ impl TurbosMarket {
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
             // println!("liquidity: {}", cp.liquidity);
-            if cp.liquidity > 0 {
-                if cp.unlocked {
-                    true
-                } else {
-                    false
-                }
+            let tick_map_set = turbos_pool::count_init_ticks_in_tick_map(cp);
+            let ticks_set = turbos_pool::count_init_tick_in_ticks(cp);
+
+            let diff = tick_map_set.difference(&ticks_set).cloned().collect::<Vec<i32>>().len();
+
+            if cp.liquidity > 0  && cp.unlocked && diff == 0 {
+                true
             } else {
                 false
             }

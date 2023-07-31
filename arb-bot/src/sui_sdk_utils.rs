@@ -177,12 +177,19 @@ pub mod sui_move_value {
                 Ok(U256::from_str(&decimal_string_value)?)
             },
             SuiMoveValue::Address(hex_value) => {
-                let ret = U256::from_be_bytes(
-                    hex_value.to_inner()
-                );
+                // let ret = U256::from_le_bytes(
+                //     hex_value.to_inner()
+                // );
+
+                // let ret = U256::from_str_hex(&format!("{}", hex_value))?;
+
+                // This is what works but it makes dealing with actual hex values 
+                // a little difficult....
+                let ret = U256::from_str(&format!("{}", hex_value)[2..])?;
 
                 // panic!("ret: {}", ret);
-                println!("RAAAAAAAA");
+                // println!("RAAAAAAAA from 'hex' {}: fields:{}", hex_value, sui_move_struct);
+                // panic!();
 
                 Ok(
                     ret

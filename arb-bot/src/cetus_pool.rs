@@ -4,6 +4,8 @@ use std::num::Wrapping;
 
 use std::time::Instant;
 
+use self::tick::next_index_for_swap;
+
 #[derive(Clone, Debug)]
 pub struct Pool {
     pub tick_spacing: u32,
@@ -88,9 +90,9 @@ pub fn swap_in_pool(
 
     let mut amount_remaining = amount_specified;
 
-    let mut next_index = tick::first_index_for_swap(
+    let mut next_index = tick::next_index_for_swap(
         &pool.tick_manager,
-        pool.current_tick_index,
+        compute_swap_state.current_tick_index,
         a_to_b
     );
 
@@ -125,20 +127,22 @@ pub fn swap_in_pool(
         // In place of borrow tick for swap
         // We've already gotten the tick, we just need the score of the next tick
         // Advance for next iteration
-        next_index = if a_to_b {
-            // Selling a
-            // println!("a_to_b: true");
-            // println!("{:#?}", pool.tick_manager.ticks.range(..next_index.unwrap()));
-            pool.tick_manager.ticks.range(..next_index.unwrap()).map(|(score, _)| score.clone()).next_back()
-        } else {
-            // Selling b
-            // println!("a_to_b: false");
-            // println!("{:#?}", pool.tick_manager.ticks.range(next_index.unwrap()+1..));
-            pool.tick_manager.ticks.range(next_index.unwrap()+1..).map(|(score, _)| score.clone()).next()
-        };
-
-        // println!("next_index_and_tick post advance: {:#?}", next_index_and_tick);
-        // panic!("HALT");
+        // next_index = if a_to_b {
+        //     // Selling a
+        //     // println!("a_to_b: true");
+        //     // println!("{:#?}", pool.tick_manager.ticks.range(..next_index.unwrap()));
+        //     pool.tick_manager.ticks.range(..next_index.unwrap()).map(|(score, _)| score.clone()).next_back()
+        // } else {
+        //     // Selling b
+        //     // println!("a_to_b: false");
+        //     // println!("{:#?}", pool.tick_manager.ticks.range(next_index.unwrap()+1..));
+        //     pool.tick_manager.ticks.range(next_index.unwrap()+1..).map(|(score, _)| score.clone()).next()
+        // };
+        next_index = tick::next_index_for_swap(
+            &pool.tick_manager,
+            next_index.unwrap(),
+            a_to_b
+        );
 
         let next_tick_index = next_tick.index;
         // loc10
@@ -160,11 +164,6 @@ pub fn swap_in_pool(
         };
 
         // println!("current tick: {}, target tick: {}", compute_swap_state.current_tick_index, next_tick_index);
-
-        // println!("next_tick_sqrt_price: {}", next_tick_sqrt_price);
-
-        // println!("sqrt_price_next_tick_w_limit: {}", sqrt_price_next_tick_w_limit);
-
         // println!("liquidity: {}", compute_swap_state.liquidity);
 
         // loc18 (sqrt_price_next_computed)
@@ -214,7 +213,7 @@ pub fn swap_in_pool(
 
             compute_swap_state.liquidity = tick::cross_by_swap(
                 &mut pool.tick_manager,
-                compute_swap_state.current_tick_index,
+                next_tick_index, // loc9! fixed from current_swap_state.current tick index which would fail in the a to b direction
                 a_to_b,
                 compute_swap_state.liquidity,
                 compute_swap_state.fee_growth_global_a,
@@ -460,6 +459,22 @@ pub mod tick {
     ) -> Option<i32> {
         // let score = tick_score(tick_index);
 
+        // When moving down, the current tick is included?, when moving up it is excluded
+        if a_to_b {
+            tick_manager.ticks.range(..tick_index+1).map(|(index, _)| index.clone()).next_back()
+        } else {
+            tick_manager.ticks.range(tick_index+1..).map(|(index, _)| index.clone()).next()
+        }
+    }
+
+    pub fn next_index_for_swap(
+        tick_manager: &TickManager,
+        tick_index: i32,
+        a_to_b: bool
+    ) -> Option<i32> {
+        // let score = tick_score(tick_index);
+
+        // When moving down, the current tick is included?, when moving up it is excluded
         if a_to_b {
             tick_manager.ticks.range(..tick_index).map(|(index, _)| index.clone()).next_back()
         } else {
@@ -485,11 +500,11 @@ pub mod tick {
         simulating: bool
     ) -> u128 {
 
-        // let all_tick_net_liquidity = tick_manager.ticks
-        //     .iter()
-        //     .fold(0i128, |net, tick| {
-        //         net + tick.1.liquidity_net
-        //     });
+        let all_ticks_liquidity_net = tick_manager.ticks
+            .iter()
+            .fold(0i128, |net, tick| {
+                net + tick.1.liquidity_net
+            });
 
         // let tick = tick_manager.ticks.get_mut(&tick_score(tick_index)).unwrap();
         // let tick = tick_manager.ticks.get_mut(&tick_index).unwrap();
@@ -517,15 +532,15 @@ pub mod tick {
         let liquidity = if directional_liquidity_net >= 0 {
             assert!(
                 u128::MAX - abs_directional_liquidity_net >= liquidity,
-                "u128::MAX - abs_directional_liquidity_net >= liquidity: liquidity: {}, abs_directional_liquidity_net: {}",
-                liquidity, abs_directional_liquidity_net
+                "u128::MAX - abs_directional_liquidity_net >= liquidity: liquidity: {}, abs_directional_liquidity_net: {}, all_ticks_liquidity_net: {}",
+                liquidity, abs_directional_liquidity_net, all_ticks_liquidity_net
             );
             liquidity + abs_directional_liquidity_net
         } else {
             assert!(
                 liquidity >= abs_directional_liquidity_net,
-                "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}",
-                liquidity, abs_directional_liquidity_net
+                "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}, all_ticks_liquidity_net: {}",
+                liquidity, abs_directional_liquidity_net, all_ticks_liquidity_net
             );
             // println!("liquidity: {}, abs_directional_liquidity_net: {}", liquidity, abs_directional_liquidity_net);
             liquidity - abs_directional_liquidity_net
@@ -588,6 +603,9 @@ mod clmm_math {
         }
 
         if amount_specified_is_input {
+            // We specified amount in
+
+            // This is the amount we're actually goin to be swapping post fees
             let amount_calc = full_math_u64::mul_div_floor(
                 amount_remaining,
                 1_000_000 - fee_rate,
@@ -596,6 +614,8 @@ mod clmm_math {
 
             // println!("compute_swap_step(): amount_calc = {}", amount_calc);
 
+            // How much we get out of the out token if we move price from the 
+            // current sqrt_price to the target sqrt price
             let delta_up_from_input = get_delta_up_from_input(
                 sqrt_price_current,
                 sqrt_price_target,
@@ -608,7 +628,7 @@ mod clmm_math {
             let (amount_in, fee_amount, next_sqrt_price) = if delta_up_from_input > U256::from(amount_calc) {
                 // Case: The amount of the "in" token required to move the
                 // current sqrt_price to the target sqrt_price is greater
-                // than the amount we are passing in
+                // than the amount we are passing in (post fees)
 
                 let amount_in = amount_calc;
 
@@ -627,10 +647,11 @@ mod clmm_math {
             } else {
                 // Case: The amount of the "in" token required to move the
                 // current sqrt_price to the target sqrt_price is less than 
-                // or equal to the amount we are passing in
+                // or equal to the amount we are passing in (pre fees)
 
                 let amount_in = delta_up_from_input.as_u64();
 
+                // The fee is taken out of what is actually traded
                 let fee_amount = full_math_u64::mul_div_ceil(
                     amount_in,
                     fee_rate,
@@ -660,6 +681,9 @@ mod clmm_math {
 
             (amount_in, amount_out.as_u64(), next_sqrt_price, fee_amount)
         } else {
+            // We specified amount out
+
+            // How much we have to reduce how much of the starting coin we have
             let delta_down_from_output = get_delta_down_from_output(
                 sqrt_price_current,
                 sqrt_price_target,
@@ -668,6 +692,11 @@ mod clmm_math {
             );
 
             let (amount_out, next_sqrt_price) = if delta_down_from_output > U256::from(amount_remaining) {
+                // If we have to reduce our starting amount by more than the amount we 
+                // have left to get to the target price: 
+                // - we can set the amount out to how much we have left
+                // - derive the new sqrt price from that
+
                 let amount_out = amount_remaining;
                 let next_sqrt_price = get_next_sqrt_price_from_output(
                     sqrt_price_current,
@@ -678,6 +707,11 @@ mod clmm_math {
 
                 (amount_out, next_sqrt_price)
             } else {
+                // If we have to reduce our starting amount by less that or equal to
+                // how much we have left, we can:
+                // - set amount out to the amount we derived above to get to the target sqrt price
+                // - set the new sqrt price to the target sqrt price
+
                 let amount_out = delta_down_from_output.as_u64();
                 let next_sqrt_price = sqrt_price_target;
 

@@ -8,6 +8,8 @@ use clap::Parser;
 use custom_sui_sdk::SuiClient;
 // use sui_sdk::wallet_context::WalletContext;
 
+use ethnum::I256;
+
 use futures::{StreamExt, future};
 
 use move_core_types::language_storage::TypeTag;
@@ -39,6 +41,7 @@ pub mod sui_json_utils;
 pub mod turbos_pool;
 pub mod cetus_pool; 
 pub mod arbitrage;
+pub mod fast_v3_pool;
 pub use crate::markets::*;
 pub use crate::market_graph::*;
 pub use crate::cetus::*;
@@ -123,11 +126,19 @@ pub async fn loop_blocks<'a>(
 
     // let pool_to_cycles = market_graph.pool_to_cycles(source_coin)?.clone();
 
+    // Very hacky skip
+    let cetus_sui_pool_id = ObjectID::from_str("0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded")?;
+
+    // let mut pool_set: HashSet<ObjectID> = HashSet::new();
+
+    let mut skip_event_pools = HashSet::new();
+    skip_event_pools.insert(cetus_sui_pool_id);
+
     // Equivalent to .is_some() except we can print events
     while let Some(event_result) = subscribe_pool_state_changing_events.next().await {
         
         if let Ok(event) = event_result {
-            // println!("Event parsed_json: {:#?}", event.parsed_json);
+            // // println!("Event parsed_json: {:#?}", event.parsed_json);
             println!("New event pool id: {:#?}", event.parsed_json.get("pool").context("missing pool field")?);
             println!("Event package id: {}", event.package_id);
 
@@ -137,6 +148,19 @@ pub async fn loop_blocks<'a>(
                 } else {
                     return Err(anyhow!("Pool field should match the Value::String variant."));
                 };
+
+            if skip_event_pools.contains(&pool_id) {
+                continue;
+            }
+
+            // pool_set.insert(pool_id);
+            // println!("[{:?}]", pool_set);
+
+            // let pool_id = ObjectID::from_str("0xcf994611fd4c48e277ce3ffd4d4364c914af2c3cbb05f7bf6facd371de688630")?;
+
+            // if pool_id == cetus_sui_pool_id {
+            //     continue;
+            // }
 
             // All these events were chosen because they have a pool id
             // To be honest its probably best to come up with a way to have a per 
@@ -247,7 +271,7 @@ pub async fn loop_blocks<'a>(
                 .filter(|optimized_result| {
                     println!("profit: {}", optimized_result.profit);
 
-                    if optimized_result.profit < 10_000_000 {
+                    if optimized_result.profit < I256::from(10_000_000u128 * optimized_result.path.len() as u128) {
                         return false
                     }  // Should do some gas threshold instead
                     for leg in &optimized_result.path {
@@ -261,7 +285,7 @@ pub async fn loop_blocks<'a>(
                     true
                 });
 
-            for optimized_result in filtered_optimized_results_iter {
+            for mut optimized_result in filtered_optimized_results_iter {
 
                 let start_source_coin_balance = run_data
                     .sui_client
@@ -272,8 +296,11 @@ pub async fn loop_blocks<'a>(
                     )
                     .await?;
         
-                if optimized_result.amount_in > start_source_coin_balance.total_balance / 5 {
+                if optimized_result.amount_in > start_source_coin_balance.total_balance / 2 {
+                    println!("profitable optimized result amount_in: {}", optimized_result.amount_in);
                     // Skip so that we don't fail
+                    // optimized_result.amount_in = start_source_coin_balance.total_balance / 2;
+                    // panic!();
                     continue;
                 }
 
@@ -286,13 +313,13 @@ pub async fn loop_blocks<'a>(
                     .iter()
                     .try_for_each(|leg| {
                         if leg.x_to_y {
-                            println!("|    +----[POOL: {}, X_TO_Y: {}]--------------------------------------------", leg.market.pool_id(), leg.x_to_y);
+                            println!("|    +----[POOL: {}, X_TO_Y: {}]-------------", leg.market.pool_id(), leg.x_to_y);
                             println!("|    | {}", leg.market.coin_x());
                             println!("|    |   ----[RATE: {}]---->", leg.market.coin_y_price().context("Missing coin_y price.")?);
                             println!("|    | {}", leg.market.coin_y());
                             // println!("|    +------------------------------------------------");
                         } else {
-                            println!("|    +------------------------------------------------");
+                            println!("|    +----[POOL: {}, X_TO_Y: {}]-------------", leg.market.pool_id(), leg.x_to_y);
                             println!("|    | {}", leg.market.coin_y());
                             println!("|    |   ----[RATE: {}]---->", leg.market.coin_x_price().context("Missing coin_x price.")?);
                             println!("|    | {}", leg.market.coin_x());
@@ -325,14 +352,15 @@ pub async fn loop_blocks<'a>(
                     )
                     .await?;
 
-                let realized_profit = end_source_coin_balance.total_balance - start_source_coin_balance.total_balance;
+                let realized_profit = end_source_coin_balance.total_balance as i128 - start_source_coin_balance.total_balance as i128;
 
                 println!("| END BALANCE: {}", end_source_coin_balance.total_balance);
                 println!("| REALIZED PROFIT: {}", realized_profit);
                 println!("+-----------------------------------------------------");
 
                 if realized_profit < 0 {
-                    return Err(anyhow!("Arb failed"));
+                    println!("UR DOWN IN MONEY LOSER");
+                    // return Err(anyhow!("Arb failed"));
                 }
             }
         }
