@@ -9,8 +9,8 @@ pub struct Tick {
     pub sqrt_price: u128, // Compute and insert this
     pub liquidity_gross: u128,
     pub liquidity_net: i128,
-    pub fee_growth_outside_a: u128,
-    pub fee_growth_outside_b: u128,
+    // pub fee_growth_outside_a: u128,
+    // pub fee_growth_outside_b: u128,
 }
 
 #[derive(Debug, Clone)]
@@ -47,25 +47,19 @@ pub fn compute_swap_result(
     amount_specified: u64,
     amount_specified_is_input: bool,
     sqrt_price_limit: u128,
-    simulating: bool
 ) -> ComputeSwapState {
 
     let tick_keys = pool.ticks.keys();
     let tick_values = pool.ticks.values().cloned().collect::<Vec<_>>();
-    
-    let tick_current_index = pool.tick_current_index as i32;
-    let sqrt_price = pool.sqrt_price;
-    let amount_specified_remaining = amount_specified;
-    
+    let tick_len = tick_values.len();
+
     let mut compute_swap_state = ComputeSwapState {
         amount_a: 0,
         amount_b: 0, 
-        amount_specified_remaining,
+        amount_specified_remaining: amount_specified,
         amount_calculated: 0,
-        sqrt_price,
-        tick_current_index,
-        // fee_growth_global: 0,
-        // protocol_fee: 0,
+        sqrt_price: pool.sqrt_price,
+        tick_current_index: pool.tick_current_index,
         liquidity: pool.liquidity,
         fee_amount: 0,
     };
@@ -81,7 +75,8 @@ pub fn compute_swap_result(
         // include current tick if it is initialized since this is 
         // the a_to_b direction
         for (i, tick_index) in tick_keys.enumerate() {
-            if tick_index <= &tick_current_index {
+            // while less update
+            if tick_index <= & compute_swap_state.tick_current_index {
                 ret = i;
             }
         }
@@ -92,7 +87,8 @@ pub fn compute_swap_result(
         let mut ret = 0;
         // order of enumerate() and rev() is important!
         for (i, tick_index) in tick_keys.enumerate().rev() {
-            if tick_index < &tick_current_index {
+            // while greater update
+            if tick_index > &compute_swap_state.tick_current_index {
                 ret = i;
             }
         }
@@ -103,10 +99,18 @@ pub fn compute_swap_result(
     while compute_swap_state.amount_specified_remaining > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
         let next_tick = &tick_values[tick_next_index];
 
+        println!("a_to_b: {} next_tick: {:#?}", a_to_b, next_tick);
         // VEC
         tick_next_index = if a_to_b {
-            tick_next_index - 1
+            if tick_next_index != 0 {
+                tick_next_index - 1
+            } else {
+                // The first tick won't be crossed again
+                // So it's ok to use this to prevent underflow
+                0
+            }
         } else {
+            // The last tick won't be crossed again
             tick_next_index + 1
         };
 
@@ -209,6 +213,110 @@ pub fn cross_by_swap(
     liquidity
 }
 
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use super::*;
+
+    #[test]
+    fn test_compute_swap_b_to_a() {
+        let mut ticks = BTreeMap::new();
+        ticks.insert(
+            84222,
+            Tick {
+                index: 84222,
+                sqrt_price: tick_math::sqrt_price_from_tick_index(84222),
+                liquidity_net: 1517882343751509868544,
+                liquidity_gross: 1517882343751509868544,
+            }
+        );
+        ticks.insert(
+            86129,
+            Tick {
+                index: 86129,
+                sqrt_price: tick_math::sqrt_price_from_tick_index(86129),
+                liquidity_net: -1517882343751509868544,
+                liquidity_gross: 1517882343751509868544,
+            }
+        );
+
+        // println!("ticks: {:#?}", ticks);
+
+        let mut pool = Pool {
+            sqrt_price: 1304381782533278269440,
+            tick_current_index: 85176,
+            tick_spacing: 1,
+            fee: 0,
+            unlocked: true,
+            liquidity: 1517882343751509868544,
+            ticks,
+        };
+
+        println!("{:#?}", pool);
+
+        let swap_result = compute_swap_result(
+            &mut pool,
+            false,
+            42_000_000_000_000_000,
+            true,
+            tick_math::MAX_SQRT_PRICE_X64 + 1,
+        );
+
+        println!("swap result: {:#?}", swap_result);
+        println!("expected amt out: 8399996712957");
+    }
+
+    #[test]
+    fn test_compute_swap_buy_a_to_b() {
+        let mut ticks = BTreeMap::new();
+        ticks.insert(
+            84222,
+            Tick {
+                index: 84222,
+                sqrt_price: tick_math::sqrt_price_from_tick_index(84222),
+                liquidity_net: 1517882343751509868544,
+                liquidity_gross: 1517882343751509868544,
+            }
+        );
+        ticks.insert(
+            86129,
+            Tick {
+                index: 86129,
+                sqrt_price: tick_math::sqrt_price_from_tick_index(86129),
+                liquidity_net: -1517882343751509868544,
+                liquidity_gross: 1517882343751509868544,
+            }
+        );
+
+        // println!("ticks: {:#?}", ticks);
+
+        let mut pool = Pool {
+            sqrt_price: 1304381782533278269440,
+            tick_current_index: 85176,
+            tick_spacing: 1,
+            fee: 0,
+            unlocked: true,
+            liquidity: 1517882343751509868544,
+            ticks,
+        };
+
+        println!("{:#?}", pool);
+
+        let swap_result = compute_swap_result(
+            &mut pool,
+            true,
+            13_370_000_000_000,
+            true,
+            tick_math::MIN_SQRT_PRICE_X64 + 1,
+        );
+
+        println!("swap result: {:#?}", swap_result);
+        println!("expected amt out: 66849958362998925");
+
+    }
+
+}
+
 mod clmm_math {
     use super::{
         full_math_u64,
@@ -229,9 +337,9 @@ mod clmm_math {
         amount_specified_is_input: bool
     ) -> (u64, u64, u128, u64) {
         if a_to_b {
-            assert!(sqrt_price_current >= sqrt_price_target);
+            assert!(sqrt_price_current >= sqrt_price_target, "A_TO_B sqrt_price_current: {}, sqrt_price_target: {}", sqrt_price_current, sqrt_price_target);
         } else {
-            assert!(sqrt_price_current < sqrt_price_target);
+            assert!(sqrt_price_current < sqrt_price_target, "B_TO_A sqrt_price_current: {}, sqrt_price_target: {}", sqrt_price_current, sqrt_price_target);
         }
 
         if amount_specified_is_input {
