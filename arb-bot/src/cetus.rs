@@ -34,8 +34,8 @@ use std::format;
 
 use crate::markets::{Exchange, Market};
 use crate::sui_sdk_utils::{self, sui_move_value};
-use crate::{cetus_pool, cetus};
-// use crate::fast_v3_pool;
+// use crate::{cetus_pool, cetus};
+use crate::fast_v3_pool;
 use crate::sui_json_utils::move_value_to_json;
 
 // const GLOBAL: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
@@ -196,7 +196,7 @@ impl Cetus {
         sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await
     }
 
-    pub async fn computing_pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<cetus_pool::Pool, anyhow::Error> {
+    pub async fn computing_pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<fast_v3_pool::Pool, anyhow::Error> {
         // println!("{:#?}", response);
         
         let fields = sui_sdk_utils::read_fields_from_object_response(response).context("missing fields")?;
@@ -222,21 +222,21 @@ impl Cetus {
             "bits"
         )? as i32;
 
-        let fee_growth_global_a = u128::from_str(
-            &sui_move_value::get_string(&fields, "fee_growth_global_a")?
-        )?;
+        // let fee_growth_global_a = u128::from_str(
+        //     &sui_move_value::get_string(&fields, "fee_growth_global_a")?
+        // )?;
 
-        let fee_growth_global_b = u128::from_str(
-            &sui_move_value::get_string(&fields, "fee_growth_global_b")?
-        )?;
+        // let fee_growth_global_b = u128::from_str(
+        //     &sui_move_value::get_string(&fields, "fee_growth_global_b")?
+        // )?;
 
-        let fee_protocol_coin_a = u64::from_str(
-            &sui_move_value::get_string(&fields, "fee_protocol_coin_a")?
-        )?;
+        // let fee_protocol_coin_a = u64::from_str(
+        //     &sui_move_value::get_string(&fields, "fee_protocol_coin_a")?
+        // )?;
 
-        let fee_protocol_coin_b = u64::from_str(
-            &sui_move_value::get_string(&fields, "fee_protocol_coin_a")?
-        )?;
+        // let fee_protocol_coin_b = u64::from_str(
+        //     &sui_move_value::get_string(&fields, "fee_protocol_coin_a")?
+        // )?;
 
         let tick_manager_struct = sui_move_value::get_struct(&fields, "tick_manager")?;
 
@@ -254,21 +254,23 @@ impl Cetus {
         let is_pause = sui_move_value::get_bool(&fields, "is_pause")?;
 
         Ok(
-            cetus_pool::Pool {
+            fast_v3_pool::Pool {
                 tick_spacing,
-                fee_rate,
+                fee: fee_rate,
                 liquidity,
-                current_sqrt_price,
-                current_tick_index,
-                fee_growth_global_a,
-                fee_growth_global_b,
-                fee_protocol_coin_a,
-                fee_protocol_coin_b,
-                tick_manager: cetus_pool::tick::TickManager {
-                    tick_spacing: tick_manager_tick_spacing,
-                    ticks
-                },
-                is_pause,
+                sqrt_price: current_sqrt_price,
+                tick_current_index: current_tick_index,
+                ticks,
+                unlocked: !is_pause
+                // fee_growth_global_a,
+                // fee_growth_global_b,
+                // fee_protocol_coin_a,
+                // fee_protocol_coin_b,
+                // tick_manager: cetus_pool::tick::TickManager {
+                //     tick_spacing: tick_manager_tick_spacing,
+                //     ticks
+                // },
+                // is_pause,
             }
         )
     }
@@ -277,7 +279,7 @@ impl Cetus {
         &self,
         sui_client: &SuiClient, 
         ticks_skip_list_id: &ObjectID
-    ) -> Result<BTreeMap<i32, cetus_pool::tick::Tick>, anyhow::Error> {
+    ) -> Result<BTreeMap<i32, fast_v3_pool::Tick>, anyhow::Error> {
 
         // let aa = sui_client
         //     .read_api()
@@ -366,34 +368,34 @@ impl Cetus {
                     &sui_move_value::get_string(&tick_fields, "liquidity_gross")?
                 )?;
 
-                // println!("5");
+                // // println!("5");
 
-                let fee_growth_outside_a = u128::from_str(
-                    &sui_move_value::get_string(&tick_fields,"fee_growth_outside_a")?
-                )?;
+                // let fee_growth_outside_a = u128::from_str(
+                //     &sui_move_value::get_string(&tick_fields,"fee_growth_outside_a")?
+                // )?;
 
-                // println!("6");
+                // // println!("6");
 
-                let fee_growth_outside_b = u128::from_str(
-                    &sui_move_value::get_string(&tick_fields,"fee_growth_outside_b")?
-                )?;
+                // let fee_growth_outside_b = u128::from_str(
+                //     &sui_move_value::get_string(&tick_fields,"fee_growth_outside_b")?
+                // )?;
 
                 // println!("7");
 
                 // println!("tick_fields: {:#?}", tick_fields);
 
-                let tick = cetus_pool::tick::Tick{
+                let tick = fast_v3_pool::Tick{
                     index,
                     sqrt_price,
                     liquidity_net,
                     liquidity_gross,
-                    fee_growth_outside_a,
-                    fee_growth_outside_b,
+                    // fee_growth_outside_a,
+                    // fee_growth_outside_b,
                 };
 
                 Ok((index, tick))
             })
-            .collect::<Result<BTreeMap<i32, cetus_pool::tick::Tick>, anyhow::Error>>()?;
+            .collect::<Result<BTreeMap<i32, fast_v3_pool::Tick>, anyhow::Error>>()?;
 
         Ok(tick_index_to_tick)
 
@@ -428,7 +430,7 @@ pub struct CetusMarket {
     pub pool_id: ObjectID,
     pub coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
     pub coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
-    pub computing_pool: Option<cetus_pool::Pool>
+    pub computing_pool: Option<fast_v3_pool::Pool>
 }
 
 impl CetusMarket {
@@ -492,85 +494,71 @@ impl CetusMarket {
         &self.parent_exchange.periphery_id
     }
 
+    // // Better handling of computing pool being None
+    // fn compute_swap_x_to_y_mut(&mut self, amount_specified: u64) -> (u64, u64) {
+    //     // println!("cetus compute_swap_x_to_y()");
+
+    //     let swap_result = cetus_pool::swap_in_pool(
+    //         self.computing_pool.as_mut().unwrap(),
+    //         true,
+    //         true,
+    //         cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
+    //         amount_specified,
+    //         0, // It's hard coded to 0 for now (replace with global config value)
+    //         0,
+    //         false
+    //     );
+
+    //     (swap_result.amount_in, swap_result.amount_out)
+    // }
+
+    // fn compute_swap_y_to_x_mut(&mut self, amount_specified: u64) -> (u64, u64) {
+    //     // println!("cetus compute_swap_y_to_x()");
+
+    //     let swap_result = cetus_pool::swap_in_pool(
+    //         self.computing_pool.as_mut().unwrap(),
+    //         false,
+    //         true,
+    //         cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
+    //         amount_specified,
+    //         0, // It's hard coded to 0 for now (replace with global config value)
+    //         0,
+    //         false
+    //     );
+
+    //     (swap_result.amount_out, swap_result.amount_in)
+    // }
+
     // Better handling of computing pool being None
-    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u64) -> (u64, u64) {
-        // println!("cetus compute_swap_x_to_y()");
-
-        let swap_result = cetus_pool::swap_in_pool(
-            self.computing_pool.as_mut().unwrap(),
-            true,
-            true,
-            cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
-            amount_specified,
-            0, // It's hard coded to 0 for now (replace with global config value)
-            0,
-            false
+    fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
+        let swap_state = fast_v3_pool::compute_swap_result(
+            self.computing_pool.as_ref().unwrap(), 
+            true, 
+            amount_specified as u64, 
+            true, 
+            fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
         );
 
-        (swap_result.amount_in, swap_result.amount_out)
+        (swap_state.amount_a as u128, swap_state.amount_b as u128)
     }
 
-    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u64) -> (u64, u64) {
-        // println!("cetus compute_swap_y_to_x()");
-
-        let swap_result = cetus_pool::swap_in_pool(
-            self.computing_pool.as_mut().unwrap(),
-            false,
-            true,
-            cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
-            amount_specified,
-            0, // It's hard coded to 0 for now (replace with global config value)
-            0,
-            false
+    fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
+        let swap_state = fast_v3_pool::compute_swap_result(
+            self.computing_pool.as_ref().unwrap(), 
+            false, 
+            amount_specified as u64, 
+            true, 
+            fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
         );
 
-        (swap_result.amount_out, swap_result.amount_in)
-    }
-
-    // Better handling of computing pool being None
-    fn compute_swap_x_to_y(&self, amount_specified: u64) -> (u64, u64) {
-        // println!("cetus compute_swap_x_to_y()");
-
-        let swap_result = cetus_pool::swap_in_pool(
-            &mut self.computing_pool.clone().unwrap(),
-            true,
-            true,
-            cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
-            amount_specified,
-            0, // It's hard coded to 0 for now (replace with global config value)
-            0,
-            true
-        );
-
-        (swap_result.amount_in, swap_result.amount_out)
-    }
-
-    fn compute_swap_y_to_x(&self, amount_specified: u64) -> (u64, u64) {
-        // println!("cetus compute_swap_y_to_x()");
-
-        let swap_result = cetus_pool::swap_in_pool(
-            &mut self.computing_pool.clone().unwrap(),
-            false,
-            true,
-            cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
-            amount_specified,
-            0, // It's hard coded to 0 for now (replace with global config value)
-            0,
-            true
-        );
-
-        (swap_result.amount_out, swap_result.amount_in)
+        (swap_state.amount_a as u128, swap_state.amount_b as u128)
     }
 
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
             // println!("liquidity: {}", cp.liquidity);
-            if cp.liquidity > 0 {
-                if cp.is_pause {
-                    false
-                } else {
-                    true
-                }
+            if cp.liquidity > 0 && cp.unlocked {
+                true
             } else {
                 false
             }
@@ -666,9 +654,9 @@ impl CetusMarket {
                 move_value_to_json(
                     &MoveValue::U128(
                         if x_to_y {
-                            cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1
+                            fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1
                         } else {
-                            cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1
+                            fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1
                         }
                     )
                 )
@@ -755,28 +743,24 @@ impl Market for CetusMarket {
     //     self.router_id()
     // }
 
-    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
-        let result = self.compute_swap_x_to_y_mut(amount_specified as u64);
+    // fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+    //     let result = self.compute_swap_x_to_y_mut(amount_specified as u64);
 
-        (result.0 as u128, result.1 as u128)
-    }
+    //     (result.0 as u128, result.1 as u128)
+    // }
 
-    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
-        let result = self.compute_swap_y_to_x_mut(amount_specified as u64);
+    // fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+    //     let result = self.compute_swap_y_to_x_mut(amount_specified as u64);
 
-        (result.0 as u128, result.1 as u128)
-    }
+    //     (result.0 as u128, result.1 as u128)
+    // }
 
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
-        let result = self.compute_swap_x_to_y(amount_specified as u64);
-
-        (result.0 as u128, result.1 as u128)
+        self.compute_swap_x_to_y(amount_specified)
     }
 
     fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
-        let result = self.compute_swap_y_to_x(amount_specified as u64);
-
-        (result.0 as u128, result.1 as u128)
+        self.compute_swap_y_to_x(amount_specified)
     }
 
     fn viable(&self) -> bool {

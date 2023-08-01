@@ -549,30 +549,30 @@ impl TurbosMarket {
     //     &self.parent_exchange.router_id
     // }
 
-    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+    // fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
         
-        let swap_state = fast_v3_pool::compute_swap_result(
-            self.computing_pool.as_ref().unwrap(), 
-            true, 
-            amount_specified as u64,
-            true, 
-            fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
-        );
+    //     let swap_state = fast_v3_pool::compute_swap_result(
+    //         self.computing_pool.as_ref().unwrap(), 
+    //         true, 
+    //         amount_specified as u64,
+    //         true, 
+    //         fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
+    //     );
 
-        (swap_state.amount_a as u128, swap_state.amount_b as u128)
-    }
+    //     (swap_state.amount_a as u128, swap_state.amount_b as u128)
+    // }
 
-    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
-        let swap_state = fast_v3_pool::compute_swap_result(
-            self.computing_pool.as_ref().unwrap(), 
-            false, 
-            amount_specified as u64, 
-            true, 
-            fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
-        );
+    // fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+    //     let swap_state = fast_v3_pool::compute_swap_result(
+    //         self.computing_pool.as_ref().unwrap(), 
+    //         false, 
+    //         amount_specified as u64, 
+    //         true, 
+    //         fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
+    //     );
 
-        (swap_state.amount_a as u128, swap_state.amount_b as u128)
-    }
+    //     (swap_state.amount_a as u128, swap_state.amount_b as u128)
+    // }
 
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
         
@@ -840,13 +840,13 @@ impl Market for TurbosMarket {
     //     self.router_id()
     // }
 
-    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
-        self.compute_swap_x_to_y_mut(amount_specified)
-    }
+    // fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+    //     self.compute_swap_x_to_y_mut(amount_specified)
+    // }
 
-    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
-        self.compute_swap_y_to_x_mut(amount_specified)
-    }
+    // fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
+    //     self.compute_swap_y_to_x_mut(amount_specified)
+    // }
 
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
         self.compute_swap_x_to_y(amount_specified)

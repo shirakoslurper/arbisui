@@ -42,8 +42,8 @@ pub trait Market: Send + Sync + DynClone {
     // fn router_id(&self) -> &ObjectID;
     // fn compute_swap_x_to_y(&mut self, amount_specified: u128) -> (u128, u128);
     // fn compute_swap_y_to_x(&mut self, amount_specified: u128) -> (u128, u128);
-    fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128);
-    fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128);
+    // fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128);
+    // fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128);
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128);
     fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128);
     async fn add_swap_to_programmable_transaction(
