@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::cmp;
+use anyhow::anyhow;
 
 // INITIALIZED BY DEFAULT
 #[derive(Debug, Clone)]
@@ -24,7 +25,8 @@ pub struct Pool {
     pub fee: u64,
     pub unlocked: bool,
     pub liquidity: u128,
-    pub ticks: BTreeMap<i32, Tick>, // ONLY INITIALIZED TICKS
+    // ONLY INITIALIZED TICKS, BTREEMAP so we know we're dealing with sorted ticks
+    pub ticks: BTreeMap<i32, Tick>,
 }
 
 #[derive(Clone, Debug)]
@@ -42,7 +44,7 @@ pub struct ComputeSwapState {
 }
 
 pub fn compute_swap_result(
-    pool: &mut Pool,
+    pool: &Pool,
     a_to_b: bool,
     amount_specified: u64,
     amount_specified_is_input: bool,
@@ -68,7 +70,7 @@ pub fn compute_swap_result(
     // For out next ticks later they will all be initialized
     // Blah blah bin search is faster but should be negligible
     // Vec
-    let mut tick_next_index = if a_to_b {
+    let mut tick_next_vec_index = if a_to_b {
         // last tick less than the tick current index
         let mut ret = 0;
 
@@ -76,7 +78,7 @@ pub fn compute_swap_result(
         // the a_to_b direction
         for (i, tick_index) in tick_keys.enumerate() {
             // while less update
-            if tick_index <= & compute_swap_state.tick_current_index {
+            if tick_index <= &compute_swap_state.tick_current_index {
                 ret = i;
             }
         }
@@ -96,22 +98,45 @@ pub fn compute_swap_result(
         ret
     };
 
-    while compute_swap_state.amount_specified_remaining > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
-        let next_tick = &tick_values[tick_next_index];
+    let mut steps = 0;
+    let mut reached_last_tick = false;
 
-        println!("a_to_b: {} next_tick: {:#?}", a_to_b, next_tick);
+    // what happens if we have more left to swap but copmute_swap_state.sqrt_price never reaches sqrt_price_limit
+    while compute_swap_state.amount_specified_remaining > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
+        steps += 1;
+
+        // Oh shit we're not adding the liquidity of this tick first "next tick" innit
+        let next_tick = &tick_values[tick_next_vec_index];
+        let next_tick_vec_index = tick_next_vec_index;
+
+        // println!("a_to_b: {} next_tick: {:#?}", a_to_b, next_tick);
         // VEC
-        tick_next_index = if a_to_b {
-            if tick_next_index != 0 {
-                tick_next_index - 1
+        tick_next_vec_index = if a_to_b {
+            // if tick_next_vec_index - 1 == 0 {
+            //     reached_last_tick = true;
+            // }
+
+            if tick_next_vec_index != 0 {
+                tick_next_vec_index - 1
             } else {
                 // The first tick won't be crossed again
                 // So it's ok to use this to prevent underflow
-                0
+                // sqrt_price_limit = tick_math::MIN_SQRT_PRICE_X64;
+                // reached_last_tick = true;
+                break;
             }
         } else {
             // The last tick won't be crossed again
-            tick_next_index + 1
+            // sqrt_price_limit = 
+            if tick_next_vec_index != tick_len - 1 {
+                // preemptive
+                // reached_last_tick = true;
+                // break;
+                tick_next_vec_index + 1
+            } else {
+                break;
+            }
+            // tick_next_vec_index + 1
         };
 
         let sqrt_price_next_tick_w_limit = if a_to_b {
@@ -152,6 +177,7 @@ pub fn compute_swap_result(
         compute_swap_state.fee_amount += fee_amount;
 
         if sqrt_price_next_computed == next_tick.sqrt_price {
+            // Case: Current price does not stay in range
             compute_swap_state.sqrt_price = sqrt_price_next_tick_w_limit;
             
             compute_swap_state.tick_current_index = if a_to_b {
@@ -162,9 +188,15 @@ pub fn compute_swap_result(
 
             compute_swap_state.liquidity = cross_by_swap(
                 &tick_values,
-                tick_next_index, // loc9! fixed from current_swap_state.current tick index which would fail in the a to b direction
+                next_tick_vec_index, // loc9! fixed from current_swap_state.current tick index which would fail in the a to b direction
                 a_to_b,
                 compute_swap_state.liquidity
+            ).expect(
+                &format!(
+                    "steps: {}\n{:#?}",
+                    steps,
+                    compute_swap_state
+                )
             );
         } else if compute_swap_state.sqrt_price != next_tick.sqrt_price {
             compute_swap_state.sqrt_price = sqrt_price_next_computed;
@@ -181,9 +213,17 @@ pub fn cross_by_swap(
     vec_index: usize,
     a_to_b: bool,
     liquidity: u128,
-) -> u128 {
+) -> Result<u128, anyhow::Error> {
 
-    let tick = tick_vec.get(vec_index).expect("cross_by_swap: tick you are crossing does not exist");
+    let tick = tick_vec
+        .get(vec_index)
+        .expect(
+            &format!(
+                "cross_by_swap: tick ({}) you are crossing does not exist in vec of len {}",
+                vec_index,
+                tick_vec.len()
+            )
+        );
 
     let directional_liquidity_net = if a_to_b {
         -tick.liquidity_net
@@ -195,22 +235,42 @@ pub fn cross_by_swap(
     let abs_directional_liquidity_net = directional_liquidity_net.abs() as u128;
 
     let liquidity = if directional_liquidity_net >= 0 {
-        assert!(
-            u128::MAX - abs_directional_liquidity_net >= liquidity,
-            "u128::MAX - abs_directional_liquidity_net >= liquidity: liquidity: {}, abs_directional_liquidity_net: {}",
-            liquidity, abs_directional_liquidity_net
-        );
+        // assert!(
+        //     u128::MAX - abs_directional_liquidity_net >= liquidity,
+        //     "u128::MAX - abs_directional_liquidity_net >= liquidity: liquidity: {}, abs_directional_liquidity_net: {}",
+        //     liquidity, abs_directional_liquidity_net
+        // );
+        if !(u128::MAX - abs_directional_liquidity_net >= liquidity) {
+            return Err(
+                anyhow!(
+                    "u128::MAX - abs_directional_liquidity_net >= liquidity: liquidity: {}, abs_directional_liquidity_net: {}",
+                    liquidity, abs_directional_liquidity_net
+                )
+            );
+        }
+
         liquidity + abs_directional_liquidity_net
     } else {
-        assert!(
-            liquidity >= abs_directional_liquidity_net,
-            "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}",
-            liquidity, abs_directional_liquidity_net
-        );
+        // assert!(
+        //     liquidity >= abs_directional_liquidity_net,
+        //     "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}",
+        //     liquidity, abs_directional_liquidity_net
+        // );
+        if !(liquidity >= abs_directional_liquidity_net) {
+            return Err(
+                anyhow!(
+                    format!(
+                        "liquidity >= abs_directional_liquidity_net: liquidity: {}, abs_directional_liquidity_net: {}",
+                        liquidity, abs_directional_liquidity_net
+                    )
+                )
+            );
+        }
+
         liquidity - abs_directional_liquidity_net
     };
 
-    liquidity
+    Ok(liquidity)
 }
 
 #[cfg(test)]

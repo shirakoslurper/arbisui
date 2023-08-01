@@ -45,7 +45,8 @@ use std::time::{Duration, Instant};
 
 use crate::{markets::{Exchange, Market}, sui_sdk_utils::get_fields_from_object_response};
 use crate::sui_sdk_utils::{self, sui_move_value};
-use crate::turbos_pool;
+// use crate::turbos_pool;
+use crate::fast_v3_pool;
 use crate::sui_json_utils::move_value_to_json;
 
 #[derive(Debug, Clone)]
@@ -210,17 +211,17 @@ impl Turbos {
 
     // For all intents and purposes
     // "pool" is an object that can perform the computations
-    pub async fn computing_pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<turbos_pool::Pool, anyhow::Error> {
+    pub async fn computing_pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<fast_v3_pool::Pool, anyhow::Error> {
 
         let fields = sui_sdk_utils::read_fields_from_object_response(response).context("missing fields")?;
 
-        let protocol_fees_a = u64::from_str(
-            &sui_move_value::get_string(&fields, "protocol_fees_a")?
-        )?;
+        // let protocol_fees_a = u64::from_str(
+        //     &sui_move_value::get_string(&fields, "protocol_fees_a")?
+        // )?;
 
-        let protocol_fees_b = u64::from_str(
-            &sui_move_value::get_string(&fields, "protocol_fees_b")?
-        )?;
+        // let protocol_fees_b = u64::from_str(
+        //     &sui_move_value::get_string(&fields, "protocol_fees_b")?
+        // )?;
 
         let sqrt_price = u128::from_str(
             &sui_move_value::get_string(&fields, "sqrt_price")?
@@ -228,23 +229,23 @@ impl Turbos {
 
         let tick_spacing = sui_move_value::get_number(&fields, "tick_spacing")?;
 
-        let max_liquidity_per_tick = u128::from_str(
-            &sui_move_value::get_string(&fields, "max_liquidity_per_tick")?
-        )?;
+        // let max_liquidity_per_tick = u128::from_str(
+        //     &sui_move_value::get_string(&fields, "max_liquidity_per_tick")?
+        // )?;
 
         let fee = sui_move_value::get_number(&fields, "fee")?;
 
-        let fee_protocol = sui_move_value::get_number(&fields, "fee_protocol")?;
+        // let fee_protocol = sui_move_value::get_number(&fields, "fee_protocol")?;
 
         let unlocked = sui_move_value::get_bool(&fields, "unlocked")?;
 
-        let fee_growth_global_a = u128::from_str(
-            &sui_move_value::get_string(&fields, "fee_growth_global_a")?
-        )?;
+        // let fee_growth_global_a = u128::from_str(
+        //     &sui_move_value::get_string(&fields, "fee_growth_global_a")?
+        // )?;
 
-        let fee_growth_global_b = u128::from_str(
-            &sui_move_value::get_string(&fields, "fee_growth_global_b")?
-        )?;
+        // let fee_growth_global_b = u128::from_str(
+        //     &sui_move_value::get_string(&fields, "fee_growth_global_b")?
+        // )?;
 
         let liquidity = u128::from_str(
             &sui_move_value::get_string(&fields, "liquidity")?
@@ -260,36 +261,34 @@ impl Turbos {
         // let init_tick_duration = init_tick_start.elapsed();
         // println!("get_ticks(): {:?}", init_tick_duration);
 
-        let tick_map_id = sui_move_value::get_uid(
-            &sui_move_value::get_struct(&fields, "tick_map")?,
-            "id"
-        )?;
+        // let tick_map_id = sui_move_value::get_uid(
+        //     &sui_move_value::get_struct(&fields, "tick_map")?,
+        //     "id"
+        // )?;
 
         // println!("response id: {}", response.data.as_ref().unwrap().object_id);
 
-        // let tick_map_start = Instant::now();
-        let tick_map = Self::get_tick_map(sui_client, &tick_map_id).await?;
-        // let tick_map_duration = tick_map_start.elapsed();
+        // let tick_map = Self::get_tick_map(sui_client, &tick_map_id).await?;
         // println!("get_tick_map(): {:?}", tick_map_duration);
 
         // println!("pool end!");
 
         Ok(
-            turbos_pool::Pool {
-                protocol_fees_a,
-                protocol_fees_b,
+            fast_v3_pool::Pool {
+                // protocol_fees_a,
+                // protocol_fees_b,
                 sqrt_price,
                 tick_current_index,
                 tick_spacing,
-                max_liquidity_per_tick,
-                fee,
-                fee_protocol,
+                // max_liquidity_per_tick,
+                fee: fee as u64,
+                // fee_protocol,
                 unlocked,
-                fee_growth_global_a,
-                fee_growth_global_b,
+                // fee_growth_global_a,
+                // fee_growth_global_b,
                 liquidity,
                 ticks, // new
-                tick_map
+                // tick_map
             }
         )
     }
@@ -347,7 +346,7 @@ impl Turbos {
         Ok(word_pos_to_word)
     }
 
-    pub async fn get_ticks(&self, sui_client: &SuiClient, pool_id: &ObjectID) -> Result<BTreeMap<i32, turbos_pool::Tick>, anyhow::Error>{
+    pub async fn get_ticks(&self, sui_client: &SuiClient, pool_id: &ObjectID) -> Result<BTreeMap<i32, fast_v3_pool::Tick>, anyhow::Error>{
         let pool_dynamic_field_infos = sui_client
             .read_api()
             .pages(
@@ -380,6 +379,7 @@ impl Turbos {
         // println!("    POOL {}:\n        NUM RECEIVED TICK OBJECT IDS: {}\n        NUM RECEIVED TICK OBJECT RESPONSES: {}", pool_id, tick_object_ids.len(), tick_object_responses.len());
         // Consider some checks to make sure we're gettin complete responses
 
+        // We collect into a BTreeMap for the sort on insertion
         let tick_index_to_tick = tick_object_responses
             .into_iter()
             .map(|tick_object_response| {
@@ -392,7 +392,15 @@ impl Turbos {
                     "bits"
                 )? as i32;
 
+                let sqrt_price = fast_v3_pool::tick_math::sqrt_price_from_tick_index(tick_index);
+
                 let tick_fields = sui_move_value::get_struct(&fields, "value").context("turbos struct")?;
+
+                let initialized = sui_move_value::get_bool(&tick_fields, "initialized")?;
+
+                if !initialized {
+                    return Ok(None)
+                }
 
                 let liquidity_gross = u128::from_str(
                     &sui_move_value::get_string(&tick_fields, "liquidity_gross")?
@@ -408,29 +416,36 @@ impl Turbos {
                     )?
                 )? as i128;
 
-                // Moving the casts/conversions to outside the if let makes this more modular
-                let fee_growth_outside_a = u128::from_str(
-                    &sui_move_value::get_string(&tick_fields,"fee_growth_outside_a")?
-                )?;
+                // // Moving the casts/conversions to outside the if let makes this more modular
+                // let fee_growth_outside_a = u128::from_str(
+                //     &sui_move_value::get_string(&tick_fields,"fee_growth_outside_a")?
+                // )?;
                 
-                // Moving the casts/conversions to outside the if let would make this more modular
-                let fee_growth_outside_b = u128::from_str(
-                    &sui_move_value::get_string(&tick_fields,"fee_growth_outside_b")?
-                )?;
+                // // Moving the casts/conversions to outside the if let would make this more modular
+                // let fee_growth_outside_b = u128::from_str(
+                //     &sui_move_value::get_string(&tick_fields,"fee_growth_outside_b")?
+                // )?;
                 
-                let initialized = sui_move_value::get_bool(&tick_fields, "initialized")?;
+                // let initialized = sui_move_value::get_bool(&tick_fields, "initialized")?;
 
-                let tick = turbos_pool::Tick {
+                let tick = fast_v3_pool::Tick {
+                    index: tick_index,
+                    sqrt_price,
                     liquidity_gross,
                     liquidity_net,
-                    fee_growth_outside_a,
-                    fee_growth_outside_b,
-                    initialized,
+                    // fee_growth_outside_a,
+                    // fee_growth_outside_b,
+                    // initialized,
                 };
 
-                Ok((tick_index, tick))
+                Ok(Some((tick_index, tick)))
             })
-            .collect::<Result<BTreeMap<i32, turbos_pool::Tick>, anyhow::Error>>()?;
+            .filter_map(|x| x.transpose())
+            .collect::<Result<BTreeMap<i32, fast_v3_pool::Tick>, anyhow::Error>>()?;
+            // .iter()
+            // .filter(|(_, _, initialized)| {
+            //     initialized
+            // });
 
         Ok(tick_index_to_tick)
     }
@@ -465,7 +480,7 @@ pub struct TurbosMarket {
     pub pool_id: ObjectID,
     pub coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
     pub coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
-    pub computing_pool: Option<turbos_pool::Pool>
+    pub computing_pool: Option<fast_v3_pool::Pool>
 }
 
 const SUI_STD_LIB_PACKAGE_ID: &str = "0x0000000000000000000000000000000000000000000000000000000000000002";
@@ -536,69 +551,64 @@ impl TurbosMarket {
 
     fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
         
-        let swap_state = turbos_pool::compute_swap_result(
-            self.computing_pool.as_mut().unwrap(), 
+        let swap_state = fast_v3_pool::compute_swap_result(
+            self.computing_pool.as_ref().unwrap(), 
             true, 
-            amount_specified, 
+            amount_specified as u64,
             true, 
-            turbos_pool::math_tick::MIN_SQRT_PRICE_X64 + 1,
-            false
+            fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
         );
 
-        (swap_state.amount_a, swap_state.amount_b)
+        (swap_state.amount_a as u128, swap_state.amount_b as u128)
     }
 
     fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
-        
-        let swap_state = turbos_pool::compute_swap_result(
-            self.computing_pool.as_mut().unwrap(), 
+        let swap_state = fast_v3_pool::compute_swap_result(
+            self.computing_pool.as_ref().unwrap(), 
             false, 
-            amount_specified, 
+            amount_specified as u64, 
             true, 
-            turbos_pool::math_tick::MAX_SQRT_PRICE_X64 - 1,
-            false
+            fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
         );
 
-        (swap_state.amount_a, swap_state.amount_b)
+        (swap_state.amount_a as u128, swap_state.amount_b as u128)
     }
 
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
         
-        let swap_state = turbos_pool::compute_swap_result(
-            &mut self.computing_pool.clone().unwrap(), 
+        let swap_state = fast_v3_pool::compute_swap_result(
+            self.computing_pool.as_ref().unwrap(), 
             true, 
-            amount_specified, 
+            amount_specified as u64, 
             true, 
-            turbos_pool::math_tick::MIN_SQRT_PRICE_X64 + 1,
-            true
+            fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
         );
 
-        (swap_state.amount_a, swap_state.amount_b)
+        (swap_state.amount_a as u128, swap_state.amount_b as u128)
     }
 
     fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
         
-        let swap_state = turbos_pool::compute_swap_result(
-            &mut self.computing_pool.clone().unwrap(), 
+        let swap_state = fast_v3_pool::compute_swap_result(
+            self.computing_pool.as_ref().unwrap(), 
             false, 
-            amount_specified, 
+            amount_specified as u64, 
             true, 
-            turbos_pool::math_tick::MAX_SQRT_PRICE_X64 - 1,
-            true
+            fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
         );
 
-        (swap_state.amount_a, swap_state.amount_b)
+        (swap_state.amount_a as u128, swap_state.amount_b as u128)
     }
 
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
             // println!("liquidity: {}", cp.liquidity);
-            let tick_map_set = turbos_pool::count_init_ticks_in_tick_map(cp);
-            let ticks_set = turbos_pool::count_init_tick_in_ticks(cp);
+            // let tick_map_set = turbos_pool::count_init_ticks_in_tick_map(cp);
+            // let ticks_set = turbos_pool::count_init_tick_in_ticks(cp);
 
-            let diff = tick_map_set.difference(&ticks_set).cloned().collect::<Vec<i32>>().len();
+            // let diff = tick_map_set.difference(&ticks_set).cloned().collect::<Vec<i32>>().len();
 
-            if cp.liquidity > 0  && cp.unlocked && diff == 0 {
+            if cp.liquidity > 0  && cp.unlocked {
                 true
             } else {
                 false
@@ -717,9 +727,9 @@ impl TurbosMarket {
                 move_value_to_json(
                     &MoveValue::U128(
                         if x_to_y {
-                            turbos_pool::math_tick::MIN_SQRT_PRICE_X64 + 1
+                            fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1
                         } else {
-                            turbos_pool::math_tick::MAX_SQRT_PRICE_X64 - 1
+                            fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1
                         }
                     )
                 )
