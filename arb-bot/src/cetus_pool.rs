@@ -211,7 +211,8 @@ pub fn swap_in_pool(
                 next_tick_index
             };
 
-            compute_swap_state.liquidity = tick::cross_by_swap(
+            compute_swap_state.liquidity = tick::
+            (
                 &mut pool.tick_manager,
                 next_tick_index, // loc9! fixed from current_swap_state.current tick index which would fail in the a to b direction
                 a_to_b,

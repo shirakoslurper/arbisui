@@ -198,6 +198,8 @@ impl Cetus {
 
     pub async fn computing_pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<fast_v3_pool::Pool, anyhow::Error> {
         // println!("{:#?}", response);
+
+        let id = response.data.as_ref().context("data field from object response is None")?.object_id;
         
         let fields = sui_sdk_utils::read_fields_from_object_response(response).context("missing fields")?;
 
@@ -255,6 +257,7 @@ impl Cetus {
 
         Ok(
             fast_v3_pool::Pool {
+                id,
                 tick_spacing,
                 fee: fee_rate,
                 liquidity,
@@ -557,7 +560,7 @@ impl CetusMarket {
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
             // println!("liquidity: {}", cp.liquidity);
-            if cp.liquidity > 0 && cp.unlocked {
+            if cp.liquidity > 0 && cp.unlocked && fast_v3_pool::liquidity_sanity_check(cp) {
                 true
             } else {
                 false

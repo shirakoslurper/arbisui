@@ -1,6 +1,7 @@
 // #![feature(async_fn_in_trait)]
 
 use anyhow::{anyhow, Context, Result};
+use fixed::consts::E;
 use sui_sdk::rpc_types::EventFilter;
 
 use clap::Parser;
@@ -39,7 +40,7 @@ pub mod constants;
 pub mod sui_sdk_utils;
 pub mod sui_json_utils;
 pub mod turbos_pool;
-pub mod cetus_pool; 
+// pub mod cetus_pool; 
 pub mod arbitrage;
 pub mod fast_v3_pool;
 pub use crate::markets::*;
@@ -139,8 +140,8 @@ pub async fn loop_blocks<'a>(
         
         if let Ok(event) = event_result {
             // // println!("Event parsed_json: {:#?}", event.parsed_json);
-            println!("New event pool id: {:#?}", event.parsed_json.get("pool").context("missing pool field")?);
-            println!("Event package id: {}", event.package_id);
+            // println!("New event pool id: {:#?}", event.parsed_json.get("pool").context("missing pool field")?);
+            // println!("Event package id: {}", event.package_id);
 
             let pool_id = if let Value::String(pool_id_str) = 
                 event.parsed_json.get("pool").context("missing pool field")? {
@@ -152,6 +153,10 @@ pub async fn loop_blocks<'a>(
             if skip_event_pools.contains(&pool_id) {
                 continue;
             }
+
+            // Only print events we are not skipping
+            println!("!NEW EVENT!\n    POOL: {}\n    PACKAGE: {}", pool_id, event.package_id);
+            // println!("Event package id: {}", event.package_id);
 
             // pool_set.insert(pool_id);
             // println!("[{:?}]", pool_set);
@@ -296,12 +301,27 @@ pub async fn loop_blocks<'a>(
                     )
                     .await?;
         
-                if optimized_result.amount_in > start_source_coin_balance.total_balance / 2 {
+                let allowance = (start_source_coin_balance.total_balance * 4) / 5;
+
+                // Adjust and check profitibility or skip
+                if optimized_result.amount_in > allowance  {
                     println!("profitable optimized result amount_in: {}", optimized_result.amount_in);
                     // Skip so that we don't fail
                     // optimized_result.amount_in = start_source_coin_balance.total_balance / 2;
                     // panic!();
-                    continue;
+                    // continue;
+
+                    let amount_in = allowance;
+                    let amount_out = arbitrage::amount_out(&optimized_result.path, allowance)?;
+                    let profit = I256::from(amount_out) - I256::from(amount_in);
+
+                    if profit > I256::from(10_000_000u128 * optimized_result.path.len() as u128) {
+                        optimized_result.amount_in = amount_in;
+                        optimized_result.amount_out = amount_out;
+                        optimized_result.profit = profit;
+                    } else {
+                        continue;
+                    }
                 }
 
                 println!("+-----------------------------------------------------");

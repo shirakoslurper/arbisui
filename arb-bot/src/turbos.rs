@@ -222,6 +222,8 @@ impl Turbos {
         // let protocol_fees_b = u64::from_str(
         //     &sui_move_value::get_string(&fields, "protocol_fees_b")?
         // )?;
+        
+        let id = response.data.as_ref().context("data field from object response is None")?.object_id;
 
         let sqrt_price = u128::from_str(
             &sui_move_value::get_string(&fields, "sqrt_price")?
@@ -277,6 +279,7 @@ impl Turbos {
             fast_v3_pool::Pool {
                 // protocol_fees_a,
                 // protocol_fees_b,
+                id,
                 sqrt_price,
                 tick_current_index,
                 tick_spacing,
@@ -608,7 +611,7 @@ impl TurbosMarket {
 
             // let diff = tick_map_set.difference(&ticks_set).cloned().collect::<Vec<i32>>().len();
 
-            if cp.liquidity > 0  && cp.unlocked {
+            if cp.liquidity > 0  && cp.unlocked && fast_v3_pool::liquidity_sanity_check(cp){
                 true
             } else {
                 false

@@ -117,6 +117,15 @@ async fn main() -> Result<(), anyhow::Error> {
     target_markets.insert(ObjectID::from_str("0x5eb2dfcdd1b15d2021328258f6d5ec081e9a0cdcfa9e13a0eaeb9b5f7505ca78")?);
     target_markets.insert(ObjectID::from_str("0x9b2a5da1310657a622f22c2fb54e7be2eb0a858a511b8c4987c9dd5df96d11f3")?);
 
+    // let usdc_weth_pool = ObjectID::from_str("0x84fa8fe46a41151396beeabc9167a114c06e1f882d827c4a7f5ab8676de63e14")?;
+
+    // markets = markets
+    //     .into_iter()
+    //     .filter(|market| {
+    //         market.pool_id() != &usdc_weth_pool
+    //     })
+    //     .collect::<Vec<_>>();
+
     markets = markets
         .into_iter()
         .filter(|market| {
