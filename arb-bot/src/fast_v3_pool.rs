@@ -47,6 +47,82 @@ pub struct ComputeSwapState {
     pub fee_amount: u64,
 }
 
+impl Pool {
+    pub fn apply_add_liquidity(
+        &mut self,
+        tick_lower_index: i32,
+        tick_upper_index: i32,
+        liquidity_delta: u128,
+    ) {
+        let liquidity_delta_i128 = liquidity_delta as i128;
+
+        let tick_lower = self
+            .ticks
+            .entry(tick_lower_index)
+            .or_insert(
+                Tick {
+                    index: tick_lower_index,
+                    sqrt_price: tick_math::sqrt_price_from_tick_index(tick_lower_index),
+                    liquidity_gross: liquidity_delta,
+                    liquidity_net: -liquidity_delta_i128
+                }
+            );
+
+        tick_lower.liquidity_gross += liquidity_delta;
+        tick_lower.liquidity_net -= liquidity_delta_i128;
+
+        let tick_upper = self
+            .ticks
+            .entry(tick_upper_index)
+            .or_insert(
+                Tick {
+                    index: tick_upper_index,
+                    sqrt_price: tick_math::sqrt_price_from_tick_index(tick_upper_index),
+                    liquidity_gross: liquidity_delta,
+                    liquidity_net: liquidity_delta_i128
+                }
+            );
+
+        tick_upper.liquidity_gross += liquidity_delta;
+        tick_upper.liquidity_net += liquidity_delta_i128;
+    }
+
+    pub fn apply_remove_liquidity(
+        &mut self,
+        tick_lower_index: i32,
+        tick_upper_index: i32,
+        liquidity_delta: u128,
+    ) {
+        let liquidity_delta_i128 = liquidity_delta as i128;
+
+        let tick_lower = self
+            .ticks
+            .get_mut(&tick_lower_index)
+            .expect("fast_v3_pool::remove_liquidity(): tick_lower does not exist.");
+
+        tick_lower.liquidity_gross -= liquidity_delta;
+        tick_lower.liquidity_net += liquidity_delta_i128;
+
+        let tick_upper = self
+            .ticks
+            .get_mut(&tick_upper_index)
+            .expect("fast_v3_pool::remove_liquidity(): tick_upper does not exist.");
+
+        tick_upper.liquidity_gross -= liquidity_delta;
+        tick_upper.liquidity_net -= liquidity_delta_i128;
+    }
+
+    pub fn apply_swap(
+        &mut self,
+        a_to_b: bool,
+        amount_specified: u64,
+        amount_specified_is_input: bool,
+        sqrt_price_limit: u128,
+    ) {
+
+    }
+}
+
 pub fn liquidity_sanity_check(
     pool: &Pool
 ) -> bool {
@@ -694,7 +770,7 @@ mod clmm_math {
             let fee_amount = full_math_u64::mul_div_ceil(
                 amount_in.as_u64(),
                 fee_rate,
-                1000000 - fee_rate
+                1_000_000 - fee_rate
             );
 
             (amount_in.as_u64(), amount_out, next_sqrt_price, fee_amount)

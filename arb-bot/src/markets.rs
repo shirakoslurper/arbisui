@@ -1,4 +1,4 @@
-use move_core_types::language_storage::TypeTag;
+use move_core_types::language_storage::{TypeTag, StructTag};
 use sui_sdk::{
     types::{
         base_types::{
@@ -14,7 +14,7 @@ use custom_sui_sdk::{
 };
 use async_trait::async_trait;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{HashSet, HashMap};
 
 use fixed::types::U64F64;
 
@@ -24,8 +24,10 @@ use dyn_clone::DynClone;
 #[async_trait]
 pub trait Exchange: Send + Sync {
     fn package_id(&self) -> &ObjectID;
-    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error>;
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error>; // -> Result<Vec<Box<dyn Market>>>
+    fn event_filters(&self) -> Vec<EventFilter>;
+    fn event_struct_tag_to_pool_field(&self) -> &HashMap<StructTag, String>;
+    fn event_package_id(&self) -> &ObjectID;
+    async fn get_all_markets(&mut self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error>; // -> Result<Vec<Box<dyn Market>>>
     // async fn get_pool_id_to_fields(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, BTreeMap<String, SuiMoveValue>>, anyhow::Error>;
     async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error>;
 }

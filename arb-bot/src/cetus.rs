@@ -29,7 +29,7 @@ use sui_sdk::types::programmable_transaction_builder::ProgrammableTransactionBui
 use move_core_types::language_storage::{StructTag, TypeTag};
 use move_core_types::value::MoveValue;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::format;
 
 use crate::markets::{Exchange, Market};
@@ -47,33 +47,34 @@ pub struct Cetus {
     package_id: ObjectID,
     periphery_id: ObjectID,
     global_config_id: ObjectID,
+    event_struct_tag_to_pool_field: HashMap<StructTag, String>
 }
 
 impl Cetus {
     pub fn new(package_id: ObjectID, periphery_id: ObjectID, global_config_id: ObjectID) -> Self {
+        let mut event_struct_tag_to_pool_field = HashMap::new();
+        event_struct_tag_to_pool_field.insert(
+            StructTag::from_str(
+                &format!("{}::pool::SwapEvent", package_id)
+            ).expect("Cetus: failed to create event struct tag"),
+            "pool".to_string()
+        );
+        
         Cetus {
             package_id,
             periphery_id,
-            global_config_id
+            global_config_id,
+            event_struct_tag_to_pool_field
         }
     }
 }
 
-// impl FromStr for Cetus {
-//     type Err = anyhow::Error;
-
-//     fn from_str(package_id_str: &str, router_id_str: &str) -> Result<Self, anyhow::Error> {
-//         Ok(
-//             Cetus {
-//                 package_id: ObjectID::from_str(package_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
-//                 router_id: ObjectID::from_str(router_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
-//             }
-//         )
-//     }
-// }
-
 impl Cetus {
     fn package_id(&self) -> &ObjectID {
+        &self.package_id
+    }
+
+    fn event_package_id(&self) -> &ObjectID {
         &self.package_id
     }
 
@@ -85,45 +86,25 @@ impl Cetus {
         &self.global_config_id
     }
 
-    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error> {
-        Ok(
-            vec![
+    fn event_filters(&self) -> Vec<EventFilter> {
+        self
+            .event_struct_tag_to_pool_field()
+            .keys()
+            .cloned()
+            .map(|event_struct_tag| {
                 EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::OpenPositionEvent", self.package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::ClosePositionEvent", self.package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::AddLiquidityEvent", self.package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::RemoveLiquidityEvent", self.package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::SwapEvent", self.package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::UpdateFeeRateEvent", self.package_id)
-                    )?
-                ),
-            ]
-        )
+                    event_struct_tag
+                )
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn event_struct_tag_to_pool_field(&self) -> &HashMap<StructTag, String> {
+        &self.event_struct_tag_to_pool_field
     }
 
     // Cetus has us query for events
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
+    async fn get_all_markets_(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
 
         let pool_created_events = sui_client
             .event_api()
@@ -157,7 +138,7 @@ impl Cetus {
                     (
                         parsed_json.get("coin_type_a").context("Failed to get coin_type_a for a CetusMarket")?,
                         parsed_json.get("coin_type_b").context("Failed to get coin_type_b for a CetusMarket")?,
-                        parsed_json.get("pool_id").context("Failed to get pool_id for a CetusMarket")?
+                        parsed_json.get("pool_id").context(format!("Failed to get pool_id for a CetusMarket: {:#?}", parsed_json))?
                     ) {
                         let coin_x = TypeTag::from_str(&format!("0x{}", coin_x_value))?;
                         let coin_y = TypeTag::from_str(&format!("0x{}", coin_y_value))?;
@@ -403,6 +384,7 @@ impl Cetus {
         Ok(tick_index_to_tick)
 
     }
+
 }
 
 #[async_trait]
@@ -411,18 +393,28 @@ impl Exchange for Cetus {
         self.package_id()
     }
 
-    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error> {
+    fn event_package_id(&self) -> &ObjectID {
+        &self.event_package_id()
+    }
+
+
+    fn event_filters(&self) -> Vec<EventFilter> {
         self.event_filters()
     }
 
+    fn event_struct_tag_to_pool_field(&self) -> &HashMap<StructTag, String> {
+        self.event_struct_tag_to_pool_field()
+    }
+
     // Cetus has us query for events
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
-        self.get_all_markets(sui_client).await
+    async fn get_all_markets(&mut self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
+        self.get_all_markets_(sui_client).await
     }
 
     async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
         self.get_pool_id_to_object_response(sui_client, markets).await
     }
+
 }
 
 #[derive(Debug, Clone)]

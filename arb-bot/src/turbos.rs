@@ -40,7 +40,7 @@ use move_core_types::language_storage::{StructTag, TypeTag};
 use move_core_types::identifier::Identifier;
 use move_core_types::account_address::AccountAddress;
 use move_core_types::value::MoveValue;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use crate::{markets::{Exchange, Market}, sui_sdk_utils::get_fields_from_object_response};
@@ -53,31 +53,30 @@ use crate::sui_json_utils::move_value_to_json;
 pub struct Turbos {
     original_package_id: ObjectID,
     package_id: ObjectID,
-    versioned_id: ObjectID
+    versioned_id: ObjectID,
+    event_struct_tag_to_pool_field: HashMap<StructTag, String>
 }
 
 impl Turbos {
     pub fn new(original_package_id: ObjectID, package_id: ObjectID, versioned_id: ObjectID) -> Self {
+       
+        let mut event_struct_tag_to_pool_field = HashMap::new();
+        event_struct_tag_to_pool_field.insert(
+            StructTag::from_str(
+                &format!("{}::pool::SwapEvent", package_id)
+            ).expect("Turbos: failed to create event struct tag"),
+            "pool_id".to_string()
+        );
+
         Turbos {
             original_package_id,
             package_id,
             versioned_id,
+            event_struct_tag_to_pool_field,
         }
     }
 }
 
-// impl FromStr for Turbos {
-//     type Err = anyhow::Error;
-
-//     fn from_str(package_id_str: &str, router_id_str: &str) -> Result<Self, anyhow::Error> {
-//         Ok(
-//             Turbos {
-//                 package_id: ObjectID::from_str(package_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
-//                 router_id: ObjectID::from_str(router_id_str).map_err(<ObjectIDParseError as Into<anyhow::Error>>::into)?,
-//             }
-//         )
-//     }
-// }
 
 impl Turbos {
     fn original_package_id(&self) -> &ObjectID {
@@ -88,39 +87,28 @@ impl Turbos {
         &self.package_id
     }
 
-    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error> {
-        Ok(
-            vec![
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::SwapEvent", self.original_package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::MintEvent", self.original_package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::BurnEvent", self.original_package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::TogglePoolStatus", self.original_package_id)
-                    )?
-                ),
-                EventFilter::MoveEventType(
-                    StructTag::from_str(
-                        &format!("{}::pool::UpdateFeeProtocolEvent", self.original_package_id)
-                    )?
-                ),
-            ]
-        )
+    fn event_package_id(&self) -> &ObjectID {
+        &self.original_package_id
     }
 
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
+    fn event_filters(&self) -> Vec<EventFilter> {
+        self
+            .event_struct_tag_to_pool_field()
+            .keys()
+            .cloned()
+            .map(|event_struct_tag| {
+                EventFilter::MoveEventType(
+                    event_struct_tag
+                )
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn event_struct_tag_to_pool_field(&self) -> &HashMap<StructTag, String> {
+        &self.event_struct_tag_to_pool_field
+    }
+
+    async fn get_all_markets_(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
         let pool_created_events = sui_client
             .event_api()
             .pages(
@@ -143,7 +131,7 @@ impl Turbos {
             .into_iter()
             .map(|pool_created_event| {
                 let parsed_json = pool_created_event.parsed_json;
-                if let Value::String(pool_id_value) = parsed_json.get("pool").context("Failed to get pool_id for a CetusMarket")? {
+                if let Value::String(pool_id_value) = parsed_json.get("pool").context(format!("Failed to get pool for a TurbosMarket: {:#?}", parsed_json))? {
                     // println!("turbos: pool_id: {}", pool_id_value);
                     Ok(ObjectID::from_str(&format!("0x{}", pool_id_value))?)
                 } else {
@@ -461,12 +449,20 @@ impl Exchange for Turbos {
        self.package_id()
     }
 
-    fn event_filters(&self) -> Result<Vec<EventFilter>, anyhow::Error> {
+    fn event_package_id(&self) -> &ObjectID {
+        self.event_package_id()
+    }
+
+    fn event_filters(&self) -> Vec<EventFilter> {
         self.event_filters()
     }
 
-    async fn get_all_markets(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
-        self.get_all_markets(sui_client).await
+    fn event_struct_tag_to_pool_field(&self) -> &HashMap<StructTag, String> {
+        self.event_struct_tag_to_pool_field()
+    }
+
+    async fn get_all_markets(&mut self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
+        self.get_all_markets_(sui_client).await
     }
 
     async fn get_pool_id_to_object_response(&self, sui_client: &SuiClient, markets: &[Box<dyn Market>]) -> Result<HashMap<ObjectID, SuiObjectResponse>, anyhow::Error> {
@@ -547,35 +543,6 @@ impl TurbosMarket {
     fn package_id(&self) -> &ObjectID {
         &self.parent_exchange.package_id
     }
-
-    // fn router_id(&self) -> &ObjectID {
-    //     &self.parent_exchange.router_id
-    // }
-
-    // fn compute_swap_x_to_y_mut(&mut self, amount_specified: u128) -> (u128, u128) {
-        
-    //     let swap_state = fast_v3_pool::compute_swap_result(
-    //         self.computing_pool.as_ref().unwrap(), 
-    //         true, 
-    //         amount_specified as u64,
-    //         true, 
-    //         fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
-    //     );
-
-    //     (swap_state.amount_a as u128, swap_state.amount_b as u128)
-    // }
-
-    // fn compute_swap_y_to_x_mut(&mut self, amount_specified: u128) -> (u128, u128) {
-    //     let swap_state = fast_v3_pool::compute_swap_result(
-    //         self.computing_pool.as_ref().unwrap(), 
-    //         false, 
-    //         amount_specified as u64, 
-    //         true, 
-    //         fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
-    //     );
-
-    //     (swap_state.amount_a as u128, swap_state.amount_b as u128)
-    // }
 
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
         

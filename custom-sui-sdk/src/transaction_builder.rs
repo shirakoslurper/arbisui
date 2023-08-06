@@ -32,6 +32,7 @@ use sui_types::{coin, fp_ensure, SUI_FRAMEWORK_PACKAGE_ID, SUI_SYSTEM_PACKAGE_ID
 use crate::programmable_transaction_sui_json::{self, ProgrammableTransactionArg, ProgrammableTransactionResolvedCallArg};
 
 // Virtually the same as above!
+#[derive(Clone, Debug)]
 pub enum ProgrammableObjectArg {
     ObjectID(ObjectID),
     Argument(Argument)
@@ -989,62 +990,48 @@ impl TransactionBuilder {
         &self,
         builder: &mut ProgrammableTransactionBuilder,
         primary_coin: ProgrammableObjectArg,
-        coin_to_merge: ProgrammableObjectArg,
-        coin_type: SuiTypeTag,
-    ) -> anyhow::Result<()> {
+        coins_to_merge: Vec<ProgrammableObjectArg>,
+        // coin_type: SuiTypeTag,
+    ) -> anyhow::Result<Argument> {
 
         let primary_coin_arg = match primary_coin {
             ProgrammableObjectArg::ObjectID(coin_object_id) => {
-                ProgrammableTransactionArg::SuiJsonValue(
-                    SuiJsonValue::from_object_id(coin_object_id)
-                )
+                builder.obj(
+                    ObjectArg::ImmOrOwnedObject(
+                        self.get_object_ref(coin_object_id).await?
+                    )
+                )?
             },
             ProgrammableObjectArg::Argument(coin_arg) => {
-                ProgrammableTransactionArg::Argument(coin_arg)
+                coin_arg
             }
         };
 
-        let coin_to_merge_arg = match coin_to_merge {
-            ProgrammableObjectArg::ObjectID(coin_object_id) => {
-                ProgrammableTransactionArg::SuiJsonValue(
-                    SuiJsonValue::from_object_id(coin_object_id)
-                )
-            },
-            ProgrammableObjectArg::Argument(coin_arg) => {
-                ProgrammableTransactionArg::Argument(coin_arg)
-            }
-        };
-        // What do we do about these type args though?
-        let type_args = vec![coin_type.try_into()?];
-        let call_args = vec![
-            primary_coin_arg,
-            coin_to_merge_arg
-        ];
+        let mut coins_to_merge_args = Vec::new();
 
-        let package = SUI_FRAMEWORK_PACKAGE_ID;
-        let module = coin::PAY_MODULE_NAME.to_owned();
-        let function = coin::PAY_JOIN_FUNC_NAME.to_owned();
-
-        let call_args = self
-            .resolve_and_checks_programmable_transaction_args(
-                builder, 
-                package, 
-                &module, 
-                &function, 
-                &type_args, 
-                call_args,
+        for coin_to_merge in coins_to_merge {
+            coins_to_merge_args.push(
+                match coin_to_merge {
+                    ProgrammableObjectArg::ObjectID(coin_object_id) => {
+                        builder.obj(
+                            ObjectArg::ImmOrOwnedObject(
+                                self.get_object_ref(coin_object_id).await?
+                            )
+                        )?
+                    },
+                    ProgrammableObjectArg::Argument(coin_arg) => {
+                        coin_arg
+                    }
+                }
             )
-            .await?;
+        }
 
-            builder.command(Command::move_call(
-                package,
-                module,
-                function,
-                type_args, 
-                call_args,
-            ));
+        builder.command(Command::MergeCoins(
+            primary_coin_arg.clone(),
+            coins_to_merge_args
+        ));
 
-        Ok(())
+        Ok(primary_coin_arg)
     }
 
     // Maybe programmable split coins?

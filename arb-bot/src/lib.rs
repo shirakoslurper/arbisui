@@ -13,7 +13,7 @@ use ethnum::I256;
 
 use futures::{StreamExt, future};
 
-use move_core_types::language_storage::TypeTag;
+use move_core_types::language_storage::{TypeTag, StructTag};
 
 use rayon::prelude::*;
 
@@ -35,6 +35,7 @@ use sui_sdk::types::base_types::ObjectID;
 pub mod markets;
 pub mod market_graph;
 pub mod cetus;
+pub mod kriyadex;
 pub mod turbos;
 pub mod constants;
 pub mod sui_sdk_utils;
@@ -42,11 +43,13 @@ pub mod sui_json_utils;
 pub mod turbos_pool;
 // pub mod cetus_pool; 
 pub mod arbitrage;
+pub mod fast_v2_pool;
 pub mod fast_v3_pool;
 pub use crate::markets::*;
 pub use crate::market_graph::*;
 pub use crate::cetus::*;
 pub use crate::turbos::*;
+pub use crate::kriyadex::*;
 
 #[derive(Parser)]
 #[clap(
@@ -55,9 +58,9 @@ pub use crate::turbos::*;
     rename_all = "kebab-case"
 )]
 pub struct RunDataOpts {
-    #[clap(long, default_value = "wss://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f")]
+    #[clap(long, default_value = "wss://sui-mainnet.blastapi.io:443/338f3a96-cd39-41f8-88d9-4faefe2eee21")]
     pub wss_url: String,
-    #[clap(long, default_value = "https://sui-mainnet.blastapi.io:443/ac087eaa-c296-445e-bf12-203a06e4011f")]
+    #[clap(long, default_value = "https://sui-mainnet.blastapi.io:443/338f3a96-cd39-41f8-88d9-4faefe2eee21")]
     pub rpc_url: String,
     #[clap(long)]
     pub keystore_path: PathBuf,
@@ -107,12 +110,9 @@ pub async fn loop_blocks<'a>(
 
     let pool_state_changing_event_filters = exchanges
         .iter()
-        .map(|exchange| {
+        .flat_map(|exchange| {
             exchange.event_filters()
         })
-        .collect::<Result<Vec<Vec<EventFilter>>, anyhow::Error>>()?
-        .into_iter()
-        .flatten()
         .collect::<Vec<EventFilter>>();
 
     let mut subscribe_pool_state_changing_events = run_data
@@ -125,15 +125,41 @@ pub async fn loop_blocks<'a>(
         )
         .await?;
 
-    // let pool_to_cycles = market_graph.pool_to_cycles(source_coin)?.clone();
+    let event_struct_tag_to_pool_field = exchanges
+        .iter()
+        .flat_map(|exchange| {
+            exchange.event_struct_tag_to_pool_field()
+        })
+        .collect::<HashMap<_, _>>();
 
     // Very hacky skip
     let cetus_sui_pool_id = ObjectID::from_str("0x2e041f3fd93646dcc877f783c1f2b7fa62d30271bdef1f21ef002cebf857bded")?;
-
+    let cetus_usdc_pool_id = ObjectID::from_str("0x5eb2dfcdd1b15d2021328258f6d5ec081e9a0cdcfa9e13a0eaeb9b5f7505ca78")?;
+    let another_pool = ObjectID::from_str("0xcf994611fd4c48e277ce3ffd4d4364c914af2c3cbb05f7bf6facd371de688630")?;
+    let otra_pool = ObjectID::from_str("0x5eb2dfcdd1b15d2021328258f6d5ec081e9a0cdcfa9e13a0eaeb9b5f7505ca78")?;
     // let mut pool_set: HashSet<ObjectID> = HashSet::new();
+    let ignor_too = ObjectID::from_str("0x238f7e4648e62751de29c982cbf639b4225547c31db7bd866982d7d56fc2c7a8")?;
+    let delulu = ObjectID::from_str("0x79d2d20005eb8f8ad6f18008a757db50ca75d57d1aa7bcef1052e55a20b37b28")?;
+    let poro = ObjectID::from_str("0x9ddb0d269d1049caf7c872846cc6d9152618d1d3ce994fae84c1c051ee23b179")?;
 
-    let mut skip_event_pools = HashSet::new();
+    let mut skip_event_pools: HashSet<ObjectID> = HashSet::new();
     skip_event_pools.insert(cetus_sui_pool_id);
+    skip_event_pools.insert(another_pool);
+    // skip_event_pools.insert(otra_pool);
+    // skip_event_pools.insert(ignor_too);
+    // skip_event_pools.insert(delulu);
+    // skip_event_pools.insert(poro);
+    // skip_event_pools.insert(cetus_usdc_pool_id);
+    skip_event_pools.insert(ObjectID::from_str("0xd0086b7713e0487bbf5bb4a1e30a000794e570590a6041155cdbebee3cb1cb77")?);
+    skip_event_pools.insert(ObjectID::from_str("0x5af4976b871fa1813362f352fa4cada3883a96191bb7212db1bd5d13685ae305")?); 
+    // skip_event_pools.insert(ObjectID::from_str("0x517ee525c34fdfb2240342bd43fc07e1ec253c2442a7edd2482e6973700c6ef5")?);
+    // skip_event_pools.insert(ObjectID::from_str("0x238f7e4648e62751de29c982cbf639b4225547c31db7bd866982d7d56fc2c7a8")?);
+    // skip_event_pools.insert(ObjectID::from_str("0x06d8af9e6afd27262db436f0d37b304a041f710c3ea1fa4c3a9bab36b3569ad3")?);
+    skip_event_pools.insert(ObjectID::from_str("0x238f7e4648e62751de29c982cbf639b4225547c31db7bd866982d7d56fc2c7a8")?);
+
+
+
+    let mut last_seen_pool = cetus_sui_pool_id;
 
     // Equivalent to .is_some() except we can print events
     while let Some(event_result) = subscribe_pool_state_changing_events.next().await {
@@ -143,29 +169,41 @@ pub async fn loop_blocks<'a>(
             // println!("New event pool id: {:#?}", event.parsed_json.get("pool").context("missing pool field")?);
             // println!("Event package id: {}", event.package_id);
 
+            let event_pool_field = event_struct_tag_to_pool_field
+                .get(&event.type_)
+                .context(
+                    format!(
+                        "Missing event_pool_field for StructTag {} in map",
+                        &event.type_
+                    )
+                )?;
+
             let pool_id = if let Value::String(pool_id_str) = 
-                event.parsed_json.get("pool").context("missing pool field")? {
+                event.parsed_json.get(
+                    event_pool_field
+                ).context("loop_blocks: missing pool field")? {
                     ObjectID::from_str(pool_id_str)?
                 } else {
                     return Err(anyhow!("Pool field should match the Value::String variant."));
                 };
 
+            if pool_id == last_seen_pool {
+                // last_seen_pool = pool_id;
+                continue;
+            }
+
+            last_seen_pool = pool_id;
+
             if skip_event_pools.contains(&pool_id) {
                 continue;
             }
 
+
             // Only print events we are not skipping
-            println!("!NEW EVENT!\n    POOL: {}\n    PACKAGE: {}", pool_id, event.package_id);
-            // println!("Event package id: {}", event.package_id);
+            println!("!NEW EVENT!\n    POOL: {}\n    PACKAGE: {}\n    EVENT TYPE: {}", pool_id, event.package_id, event.type_);
 
             // pool_set.insert(pool_id);
             // println!("[{:?}]", pool_set);
-
-            // let pool_id = ObjectID::from_str("0xcf994611fd4c48e277ce3ffd4d4364c914af2c3cbb05f7bf6facd371de688630")?;
-
-            // if pool_id == cetus_sui_pool_id {
-            //     continue;
-            // }
 
             // All these events were chosen because they have a pool id
             // To be honest its probably best to come up with a way to have a per 
@@ -197,6 +235,10 @@ pub async fn loop_blocks<'a>(
                 .collect::<Vec<Vec<TypeTag>>>();
 
             println!("num cycles: {}", cycles.len());
+
+            // if cycles.len() > 45 {
+            //     continue;
+            // }
 
             let mut pool_ids_to_update = HashSet::new();
             
@@ -301,7 +343,7 @@ pub async fn loop_blocks<'a>(
                     )
                     .await?;
         
-                let allowance = (start_source_coin_balance.total_balance * 4) / 5;
+                let allowance = (start_source_coin_balance.total_balance * 1) / 2;
 
                 // Adjust and check profitibility or skip
                 if optimized_result.amount_in > allowance  {
@@ -350,6 +392,8 @@ pub async fn loop_blocks<'a>(
                     })?;
 
                 println!("|    +------------------------------------------------");
+
+                // panic!();
 
                 arbitrage::execute_arb(
                     &run_data.sui_client,
