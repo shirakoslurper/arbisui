@@ -25,6 +25,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{Instant, Duration};
 use std::collections::HashSet;
+use std::sync::mpsc;
+use std::thread;
 
 use sui_keys::keystore::{Keystore, AccountKeystore};
 use sui_sdk::types::object::Object;
@@ -45,6 +47,7 @@ pub mod turbos_pool;
 pub mod arbitrage;
 pub mod fast_v2_pool;
 pub mod fast_v3_pool;
+pub mod fast_cronje_pool;
 pub use crate::markets::*;
 pub use crate::market_graph::*;
 pub use crate::cetus::*;
@@ -75,6 +78,94 @@ pub struct RunData {
     pub sui_client: SuiClient,
     pub keystore: Keystore,
     pub key_index: usize,
+}
+
+pub async fn run<'a>(
+    run_data: &RunData, 
+    exchanges: &Vec<Box<dyn Exchange>>, 
+    market_graph: &mut MarketGraph<'a>,
+    source_coin: &TypeTag
+    // paths: Vec<Vec<&TypeTag>>
+) -> Result<(), anyhow::Error> {
+
+    let owner_address = run_data
+        .keystore
+        .addresses()
+        .get(run_data.key_index)
+        .context(format!("No address for key index {} in keystore", run_data.key_index))?
+        .clone();
+
+    let pool_state_changing_event_filters = exchanges
+        .iter()
+        .flat_map(|exchange| {
+            exchange.event_filters()
+        })
+        .collect::<Vec<EventFilter>>();
+
+    let mut subscribe_pool_state_changing_events = run_data
+        .sui_client
+        .event_api()
+        .subscribe_event(
+            EventFilter::Any(
+                pool_state_changing_event_filters
+            )
+        )
+        .await?;
+
+    let event_struct_tag_to_pool_field = exchanges
+        .iter()
+        .flat_map(|exchange| {
+            exchange.event_struct_tag_to_pool_field()
+        })
+        .collect::<HashMap<_, _>>();
+
+    // let (executor_tx, executor_rx) = mpsc::channel();
+    // let (bookkeeper_tx, bookkeeper_rx) = mpsc::channel();
+
+    // thread::spawn(move || {
+        
+    // });
+
+    tokio::spawn({
+        async move {
+
+        }
+    });
+
+    let event_cache = Vec::new();
+
+    while let Some(event_result) = subscribe_pool_state_changing_events.next().await {
+
+        event_cache.push(event_result?);
+
+        // let event = event_result?;
+
+        // let event_pool_field = event_struct_tag_to_pool_field
+        //         .get(&event.type_)
+        //         .context(
+        //             format!(
+        //                 "Missing event_pool_field for StructTag {} in map",
+        //                 &event.type_
+        //             )
+        //         )?;
+
+        // let pool_id = if let Value::String(pool_id_str) = 
+        //     event.parsed_json.get(
+        //         event_pool_field
+        //     ).context("loop_blocks: missing pool field")? {
+        //         ObjectID::from_str(pool_id_str)?
+        //     } else {
+        //         return Err(anyhow!("Pool field should match the Value::String variant."));
+        //     };
+
+        // let (coin_a, coin_b) = market_graph.pool_id_to_coin_pair.get(&pool_id).context("Missing coin pair for pool id.");
+        // let a_to_b = market_graph.graph.edge_weight_mut(, b)
+
+
+    }
+
+    Ok(())
+
 }
 
 pub async fn loop_blocks<'a>(
@@ -177,6 +268,8 @@ pub async fn loop_blocks<'a>(
                         &event.type_
                     )
                 )?;
+
+            // println!("{:#?}", &event.parsed_json);
 
             let pool_id = if let Value::String(pool_id_str) = 
                 event.parsed_json.get(

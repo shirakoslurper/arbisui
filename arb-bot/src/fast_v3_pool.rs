@@ -48,6 +48,22 @@ pub struct ComputeSwapState {
 }
 
 impl Pool {
+    pub fn apply_update_fee(
+        &mut self,
+        fee: u64 // rate
+    ) {
+        self.fee = fee;
+    }
+
+    pub fn apply_update_unlocked (
+        &mut self,
+        unlocked: bool
+    ) {
+        self.unlocked = unlocked;
+    }
+
+    // Remember liuidity is added as we cross ticks left to right
+
     pub fn apply_add_liquidity(
         &mut self,
         tick_lower_index: i32,
@@ -69,7 +85,7 @@ impl Pool {
             );
 
         tick_lower.liquidity_gross += liquidity_delta;
-        tick_lower.liquidity_net -= liquidity_delta_i128;
+        tick_lower.liquidity_net += liquidity_delta_i128;
 
         let tick_upper = self
             .ticks
@@ -84,7 +100,7 @@ impl Pool {
             );
 
         tick_upper.liquidity_gross += liquidity_delta;
-        tick_upper.liquidity_net += liquidity_delta_i128;
+        tick_upper.liquidity_net -= liquidity_delta_i128;
     }
 
     pub fn apply_remove_liquidity(
@@ -101,7 +117,13 @@ impl Pool {
             .expect("fast_v3_pool::remove_liquidity(): tick_lower does not exist.");
 
         tick_lower.liquidity_gross -= liquidity_delta;
-        tick_lower.liquidity_net += liquidity_delta_i128;
+        tick_lower.liquidity_net -= liquidity_delta_i128;
+
+        if tick_lower.liquidity_gross == 0 {
+            self
+                .ticks
+                .remove(&tick_lower_index);
+        }
 
         let tick_upper = self
             .ticks
@@ -109,7 +131,13 @@ impl Pool {
             .expect("fast_v3_pool::remove_liquidity(): tick_upper does not exist.");
 
         tick_upper.liquidity_gross -= liquidity_delta;
-        tick_upper.liquidity_net -= liquidity_delta_i128;
+        tick_upper.liquidity_net += liquidity_delta_i128;
+
+        if tick_upper.liquidity_gross == 0 {
+            self
+                .ticks
+                .remove(&tick_upper_index);
+        }
     }
 
     pub fn apply_swap(
@@ -119,336 +147,326 @@ impl Pool {
         amount_specified_is_input: bool,
         sqrt_price_limit: u128,
     ) {
-
-    }
-}
-
-pub fn liquidity_sanity_check(
-    pool: &Pool
-) -> bool {
-    let tick_keys = pool.ticks.keys();
-    let tick_values = pool.ticks.values().cloned().collect::<Vec<_>>();
-    let tick_len = tick_values.len();
-
-    // First tick index: Get nearest initialized tick
-    // The first tick to cross!
-    // Blah blah bin search is faster but should be negligible
-    let tick_first_vec_index_a_to_b = {
-        // last tick less than the tick current index
-        let mut ret = 0;
-
-        // include current tick if it is initialized since this is 
-        // the a_to_b direction
-        for (i, tick_index) in tick_keys.clone().enumerate() {
-            // while less update
-            if tick_index <= &pool.tick_current_index {
-                ret = i;
-            }
-        }
-
-        ret
-    };
-    
-    let tick_first_vec_index_b_to_a =  {
-        // first tick greater than the tick current index
-        let mut ret = tick_len - 1;
-        // order of enumerate() and rev() is important!
-        for (i, tick_index) in tick_keys.clone().enumerate().rev() {
-            // while greater update
-            if tick_index > &pool.tick_current_index {
-                ret = i;
-            }
-        }
-
-        ret
-    };
-
-    // The index at which the total directional liquidity equals the inverse of the current liquidity!
-    let liq_net_eq_index_a_to_b = {
-        let mut idx = 0;
-        assert!(pool.liquidity < i128::MAX as u128, "AA");
-        let mut tot = pool.liquidity as i128;
-        loop {
-            tot -= tick_values[idx].liquidity_net;
-            if tot == 0 {
-                break;
-            } else if idx == tick_len - 1 {
-                return false;
-            }
-            idx += 1;
-        }
-        idx
-    };
-    
-    let liq_net_eq_index_b_to_a = {
-        let mut idx = tick_len - 1;
-        assert!(pool.liquidity < i128::MAX as u128, "BB");
-        let mut tot = pool.liquidity as i128;
-        loop {
-            tot += tick_values[idx].liquidity_net;
-            if tot == 0 {
-                break;
-            } else if idx == 0 {
-                return false;
-            }
-            idx -= 1;
-        }
-        idx
-    };
-
-    tick_first_vec_index_a_to_b == liq_net_eq_index_a_to_b && tick_first_vec_index_b_to_a == liq_net_eq_index_b_to_a
-}
-
-pub fn compute_swap_result(
-    pool: &Pool,
-    a_to_b: bool,
-    amount_specified: u64,
-    amount_specified_is_input: bool,
-    sqrt_price_limit: u128,
-) -> ComputeSwapState {
-
-
-    let tick_keys = pool.ticks.keys();
-    let tick_values = pool.ticks.values().cloned().collect::<Vec<_>>();
-    let tick_len = tick_values.len();
-
-    let all_ticks_liq_net = tick_values.iter().fold(0, |all, tick| all + tick.liquidity_net);
-
-    let mut compute_swap_state = ComputeSwapState {
-        amount_a: 0,
-        amount_b: 0, 
-        amount_specified_remaining: amount_specified,
-        amount_calculated: 0,
-        sqrt_price: pool.sqrt_price,
-        tick_current_index: pool.tick_current_index,
-        liquidity: pool.liquidity,
-        fee_amount: 0,
-    };
-
-    // First tick index: Get nearest initialized tick
-    // The first tick to cross!
-    // Blah blah bin search is faster but should be negligible
-    let mut tick_next_vec_index = if a_to_b {
-        // last tick less than the tick current index
-        let mut ret = 0;
-
-        // include current tick if it is initialized since this is 
-        // the a_to_b direction
-        for (i, tick_index) in tick_keys.enumerate() {
-            // while less update
-            if tick_index <= &compute_swap_state.tick_current_index {
-                ret = i;
-            }
-        }
-
-        ret
-    } else {
-        // first tick greater than the tick current index
-        let mut ret = tick_len - 1;
-        // order of enumerate() and rev() is important!
-        for (i, tick_index) in tick_keys.enumerate().rev() {
-            // while greater update
-            if tick_index > &compute_swap_state.tick_current_index {
-                ret = i;
-            }
-        }
-
-        ret
-    };
-
-    let mut steps = 0;
-    let mut steps_liq = 0;
-    // let mut reached_last_tick = false;
-    let initial_liquidity = pool.liquidity;
-    let first_tick_index = tick_next_vec_index;
-    let first_tick = &tick_values[tick_next_vec_index];
-    let liquidity_to_cross = if a_to_b {
-        tick_values[..tick_next_vec_index+1].iter().rev().fold(0, |net, tick| {net - tick.liquidity_net})
-    } else {
-        tick_values[tick_next_vec_index..].iter().fold(0, |net, tick| {net + tick.liquidity_net})
-    };
-    let max_ticks_to_cross = if a_to_b {
-        // Includes given tick
-        tick_next_vec_index + 1
-    } else {
-        // includes given tick
-        tick_len - tick_next_vec_index
-    };
-
-    // The index at which the total directional liquidity equals the inverse of the current liquidity!
-    let liq_net_eq_index = if a_to_b {
-        let mut idx = 0;
-        assert!(pool.liquidity < i128::MAX as u128, "AA");
-        let mut tot = pool.liquidity as i128;
-        loop {
-            tot -= tick_values[idx].liquidity_net;
-            if tot == 0 {
-                break;
-            } else if idx == tick_len - 1 {
-                panic!(
-                    "No liq_net_eq_index found:\npool_id: {}\ntick_len: {}\ntick_next_vec_index: {}\na_to_b: {}\ntick_next: {:#?}\npool.tick_current_index: {}\n", 
-                    pool.id,
-                    tick_len,
-                    tick_next_vec_index, 
-                    a_to_b,
-                    tick_values[tick_next_vec_index],
-                    pool.tick_current_index
-                );
-            }
-            idx += 1;
-        }
-        idx
-    } else {
-        let mut idx = tick_len - 1;
-        assert!(pool.liquidity < i128::MAX as u128, "BB");
-        let mut tot = pool.liquidity as i128;
-        loop {
-            tot += tick_values[idx].liquidity_net;
-            if tot == 0 {
-                break;
-            } else if idx == 0 {
-                panic!(
-                    "No liq_net_eq_index found:\npool_id: {}\ntick_len: {}\ntick_next_vec_index: {}\na_to_b: {}\ntick_next: {:#?}\npool.tick_current_index: {}\n", 
-                    pool.id,
-                    tick_len,
-                    tick_next_vec_index, 
-                    a_to_b,
-                    tick_values[tick_next_vec_index],
-                    pool.tick_current_index
-                );
-            }
-            idx -= 1;
-        }
-        idx
-    };
-
-    // if tick_next_vec_index == liq_net_eq_index {
-    //     println!("PASSES (a_to_b: {}): {}", a_to_b, pool.id);
-    // }
-
-    let passes = tick_next_vec_index == liq_net_eq_index;
-
-    // assert!(
-    //     tick_next_vec_index == liq_net_eq_index, 
-    //     "tick_next_vec_index == liq_net_eq_index:\npool_id: {}\ntick_len: {}\ntick_next_vec_index: {} != liq_net_eq_index: {}\na_to_b: {}\ntick_next: {:#?}\ntick_liq_eq: {:#?}\npool.tick_current_index: {}\n", 
-    //     pool.id,
-    //     tick_len,
-    //     tick_next_vec_index, 
-    //     liq_net_eq_index,
-    //     a_to_b,
-    //     tick_values[tick_next_vec_index],
-    //     tick_values[liq_net_eq_index],
-    //     pool.tick_current_index
-    // );
-
-    let liq_net_eq_tick = &tick_values[liq_net_eq_index];
-
-    // what happens if we have more left to swap but copmute_swap_state.sqrt_price never reaches sqrt_price_limit
-    while compute_swap_state.amount_specified_remaining > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
-        steps += 1;
-
-        // Oh shit we're not adding the liquidity of this tick first "next tick" innit
-        // We're still skipping it...
-        let next_tick = &tick_values[tick_next_vec_index];
-        let next_tick_vec_index = tick_next_vec_index;
-
-        // Advance vec index for NEXT loop
-        // VEC
-        tick_next_vec_index = if a_to_b {
-            if tick_next_vec_index != 0 {
-                tick_next_vec_index - 1
-            } else {
-                break;
-            }
-        } else {
-            if tick_next_vec_index != tick_len - 1 {
-                tick_next_vec_index + 1
-            } else {
-                break;
-            }
-        };
-
-        let sqrt_price_next_tick_w_limit = if a_to_b {
-            cmp::max(sqrt_price_limit, next_tick.sqrt_price)
-        } else {
-            cmp::min(sqrt_price_limit, next_tick.sqrt_price)
-        };
-
-        let (amount_in, amount_out, sqrt_price_next_computed, fee_amount) = clmm_math::compute_swap_step(
-            compute_swap_state.sqrt_price,
-            sqrt_price_next_tick_w_limit,
-            compute_swap_state.liquidity,
-            compute_swap_state.amount_specified_remaining,
-            pool.fee,
-            a_to_b,
-            amount_specified_is_input
+        let swap_result = self.compute_swap_result(
+            a_to_b, 
+            amount_specified, 
+            amount_specified_is_input, 
+            sqrt_price_limit
         );
 
-        if amount_in != 0 || fee_amount != 0 {
-            if amount_specified_is_input {
-                compute_swap_state.amount_specified_remaining -= amount_in + fee_amount;
-                compute_swap_state.amount_calculated += amount_out
+        self.liquidity = swap_result.liquidity;
+        self.sqrt_price = swap_result.sqrt_price;
+        self.tick_current_index = swap_result.tick_current_index;
+    }
+    
+    pub fn compute_swap_result(
+        &self,
+        a_to_b: bool,
+        amount_specified: u64,
+        amount_specified_is_input: bool,
+        sqrt_price_limit: u128,
+    ) -> ComputeSwapState {
+        let tick_keys = self.ticks.keys();
+        let tick_values = self.ticks.values().cloned().collect::<Vec<_>>();
+        let tick_len = tick_values.len();
+    
+        let all_ticks_liq_net = tick_values.iter().fold(0, |all, tick| all + tick.liquidity_net);
+    
+        let mut compute_swap_state = ComputeSwapState {
+            amount_a: 0,
+            amount_b: 0, 
+            amount_specified_remaining: amount_specified,
+            amount_calculated: 0,
+            sqrt_price: self.sqrt_price,
+            tick_current_index: self.tick_current_index,
+            liquidity: self.liquidity,
+            fee_amount: 0,
+        };
+    
+        // First tick index: Get nearest initialized tick
+        // The first tick to cross!
+        // Blah blah bin search is faster but should be negligible
+        let mut tick_next_vec_index = if a_to_b {
+            // last tick less than the tick current index
+            let mut ret = 0;
+    
+            // include current tick if it is initialized since this is 
+            // the a_to_b direction
+            for (i, tick_index) in tick_keys.enumerate() {
+                // while less update
+                if tick_index <= &compute_swap_state.tick_current_index {
+                    ret = i;
+                }
+            }
+    
+            ret
+        } else {
+            // first tick greater than the tick current index
+            let mut ret = tick_len - 1;
+            // order of enumerate() and rev() is important!
+            for (i, tick_index) in tick_keys.enumerate().rev() {
+                // while greater update
+                if tick_index > &compute_swap_state.tick_current_index {
+                    ret = i;
+                }
+            }
+    
+            ret
+        };
+    
+        let mut steps = 0;
+        let mut steps_liq = 0;
+        // let mut reached_last_tick = false;
+        let initial_liquidity = self.liquidity;
+        let first_tick_index = tick_next_vec_index;
+        let first_tick = &tick_values[tick_next_vec_index];
+        let liquidity_to_cross = if a_to_b {
+            tick_values[..tick_next_vec_index+1].iter().rev().fold(0, |net, tick| {net - tick.liquidity_net})
+        } else {
+            tick_values[tick_next_vec_index..].iter().fold(0, |net, tick| {net + tick.liquidity_net})
+        };
+        let max_ticks_to_cross = if a_to_b {
+            // Includes given tick
+            tick_next_vec_index + 1
+        } else {
+            // includes given tick
+            tick_len - tick_next_vec_index
+        };
+    
+        // The index at which the total directional liquidity equals the inverse of the current liquidity!
+        let liq_net_eq_index = if a_to_b {
+            let mut idx = 0;
+            assert!(self.liquidity < i128::MAX as u128, "AA");
+            let mut tot = self.liquidity as i128;
+            loop {
+                tot -= tick_values[idx].liquidity_net;
+                if tot == 0 {
+                    break;
+                } else if idx == tick_len - 1 {
+                    panic!(
+                        "No liq_net_eq_index found:\npool_id: {}\ntick_len: {}\ntick_next_vec_index: {}\na_to_b: {}\ntick_next: {:#?}\npool.tick_current_index: {}\n", 
+                        self.id,
+                        tick_len,
+                        tick_next_vec_index, 
+                        a_to_b,
+                        tick_values[tick_next_vec_index],
+                        self.tick_current_index
+                    );
+                }
+                idx += 1;
+            }
+            idx
+        } else {
+            let mut idx = tick_len - 1;
+            assert!(self.liquidity < i128::MAX as u128, "BB");
+            let mut tot = self.liquidity as i128;
+            loop {
+                tot += tick_values[idx].liquidity_net;
+                if tot == 0 {
+                    break;
+                } else if idx == 0 {
+                    panic!(
+                        "No liq_net_eq_index found:\npool_id: {}\ntick_len: {}\ntick_next_vec_index: {}\na_to_b: {}\ntick_next: {:#?}\npool.tick_current_index: {}\n", 
+                        self.id,
+                        tick_len,
+                        tick_next_vec_index, 
+                        a_to_b,
+                        tick_values[tick_next_vec_index],
+                        self.tick_current_index
+                    );
+                }
+                idx -= 1;
+            }
+            idx
+        };
+    
+        let passes = tick_next_vec_index == liq_net_eq_index;
+    
+        let liq_net_eq_tick = &tick_values[liq_net_eq_index];
+    
+        // what happens if we have more left to swap but copmute_swap_state.sqrt_price never reaches sqrt_price_limit
+        while compute_swap_state.amount_specified_remaining > 0 && compute_swap_state.sqrt_price != sqrt_price_limit {
+            steps += 1;
+    
+            // Oh shit we're not adding the liquidity of this tick first "next tick" innit
+            // We're still skipping it...
+            let next_tick = &tick_values[tick_next_vec_index];
+            let next_tick_vec_index = tick_next_vec_index;
+    
+            // Advance vec index for NEXT loop
+            // VEC
+            tick_next_vec_index = if a_to_b {
+                if tick_next_vec_index != 0 {
+                    tick_next_vec_index - 1
+                } else {
+                    break;
+                }
             } else {
-
-                compute_swap_state.amount_specified_remaining -= amount_out;
-                compute_swap_state.amount_calculated += amount_in + fee_amount;
+                if tick_next_vec_index != tick_len - 1 {
+                    tick_next_vec_index + 1
+                } else {
+                    break;
+                }
+            };
+    
+            let sqrt_price_next_tick_w_limit = if a_to_b {
+                cmp::max(sqrt_price_limit, next_tick.sqrt_price)
+            } else {
+                cmp::min(sqrt_price_limit, next_tick.sqrt_price)
+            };
+    
+            let (amount_in, amount_out, sqrt_price_next_computed, fee_amount) = clmm_math::compute_swap_step(
+                compute_swap_state.sqrt_price,
+                sqrt_price_next_tick_w_limit,
+                compute_swap_state.liquidity,
+                compute_swap_state.amount_specified_remaining,
+                self.fee,
+                a_to_b,
+                amount_specified_is_input
+            );
+    
+            if amount_in != 0 || fee_amount != 0 {
+                if amount_specified_is_input {
+                    compute_swap_state.amount_specified_remaining -= amount_in + fee_amount;
+                    compute_swap_state.amount_calculated += amount_out
+                } else {
+    
+                    compute_swap_state.amount_specified_remaining -= amount_out;
+                    compute_swap_state.amount_calculated += amount_in + fee_amount;
+                }
+            }
+    
+            if a_to_b {
+                compute_swap_state.amount_a += amount_in;
+                compute_swap_state.amount_b += amount_out;
+            } else {
+                compute_swap_state.amount_b += amount_in;
+                compute_swap_state.amount_a += amount_out;
+            };
+    
+            compute_swap_state.fee_amount += fee_amount;
+    
+            if sqrt_price_next_computed == next_tick.sqrt_price {
+                // Case: Current price does not stay in range
+                compute_swap_state.sqrt_price = sqrt_price_next_tick_w_limit;
+                
+                compute_swap_state.tick_current_index = if a_to_b {
+                    next_tick.index - 1
+                } else {
+                    next_tick.index
+                };
+    
+                steps_liq += 1;
+    
+                compute_swap_state.liquidity = cross_by_swap(
+                    &tick_values,
+                    next_tick_vec_index, // loc9! fixed from current_swap_state.current tick index which would fail in the a to b direction
+                    a_to_b,
+                    compute_swap_state.liquidity
+                ).expect(
+                    &format!(
+                        "\npasses: {}\na_to_b: {}\ntick_len: {}\nfirst_tick_index: {}\nliq_net_eq_idx: {}\nmax_ticks_to_cross: {}\nsteps: {}\nsteps_liq: {}\nall_ticks_liq_net: {} \ninitial_liquidity: {}\nliquidity_to_cross: {}\nfirst_tick: {:#?}\nliq_net_eq_tick: {:#?}\n{:#?}",
+                        passes,
+                        a_to_b,
+                        tick_len,
+                        first_tick_index,
+                        liq_net_eq_index,
+                        max_ticks_to_cross,
+                        steps,
+                        steps_liq,
+                        all_ticks_liq_net,
+                        initial_liquidity,
+                        liquidity_to_cross,
+                        first_tick,
+                        liq_net_eq_tick,
+                        compute_swap_state,
+                    )
+                );
+            } else if compute_swap_state.sqrt_price != next_tick.sqrt_price {
+                compute_swap_state.sqrt_price = sqrt_price_next_computed;
+                compute_swap_state.tick_current_index = tick_math::tick_index_from_sqrt_price(compute_swap_state.sqrt_price);
             }
         }
-
-        if a_to_b {
-            compute_swap_state.amount_a += amount_in;
-            compute_swap_state.amount_b += amount_out;
-        } else {
-            compute_swap_state.amount_b += amount_in;
-            compute_swap_state.amount_a += amount_out;
-        };
-
-        compute_swap_state.fee_amount += fee_amount;
-
-        if sqrt_price_next_computed == next_tick.sqrt_price {
-            // Case: Current price does not stay in range
-            compute_swap_state.sqrt_price = sqrt_price_next_tick_w_limit;
-            
-            compute_swap_state.tick_current_index = if a_to_b {
-                next_tick.index - 1
-            } else {
-                next_tick.index
-            };
-
-            steps_liq += 1;
-
-            compute_swap_state.liquidity = cross_by_swap(
-                &tick_values,
-                next_tick_vec_index, // loc9! fixed from current_swap_state.current tick index which would fail in the a to b direction
-                a_to_b,
-                compute_swap_state.liquidity
-            ).expect(
-                &format!(
-                    "\npasses: {}\na_to_b: {}\ntick_len: {}\nfirst_tick_index: {}\nliq_net_eq_idx: {}\nmax_ticks_to_cross: {}\nsteps: {}\nsteps_liq: {}\nall_ticks_liq_net: {} \ninitial_liquidity: {}\nliquidity_to_cross: {}\nfirst_tick: {:#?}\nliq_net_eq_tick: {:#?}\n{:#?}",
-                    passes,
-                    a_to_b,
-                    tick_len,
-                    first_tick_index,
-                    liq_net_eq_index,
-                    max_ticks_to_cross,
-                    steps,
-                    steps_liq,
-                    all_ticks_liq_net,
-                    initial_liquidity,
-                    liquidity_to_cross,
-                    first_tick,
-                    liq_net_eq_tick,
-                    compute_swap_state,
-                )
-            );
-        } else if compute_swap_state.sqrt_price != next_tick.sqrt_price {
-            compute_swap_state.sqrt_price = sqrt_price_next_computed;
-            compute_swap_state.tick_current_index = tick_math::tick_index_from_sqrt_price(compute_swap_state.sqrt_price);
-        }
+    
+        compute_swap_state
+    
     }
 
-    compute_swap_state
-
+    pub fn liquidity_sanity_check(
+        &self
+    ) -> bool {
+        let tick_keys = self.ticks.keys();
+        let tick_values = self.ticks.values().cloned().collect::<Vec<_>>();
+        let tick_len = tick_values.len();
+    
+        // First tick index: Get nearest initialized tick
+        // The first tick to cross!
+        // Blah blah bin search is faster but should be negligible
+        let tick_first_vec_index_a_to_b = {
+            // last tick less than the tick current index
+            let mut ret = 0;
+    
+            // include current tick if it is initialized since this is 
+            // the a_to_b direction
+            for (i, tick_index) in tick_keys.clone().enumerate() {
+                // while less update
+                if tick_index <= &self.tick_current_index {
+                    ret = i;
+                }
+            }
+    
+            ret
+        };
+        
+        let tick_first_vec_index_b_to_a =  {
+            // first tick greater than the tick current index
+            let mut ret = tick_len - 1;
+            // order of enumerate() and rev() is important!
+            for (i, tick_index) in tick_keys.clone().enumerate().rev() {
+                // while greater update
+                if tick_index > &self.tick_current_index {
+                    ret = i;
+                }
+            }
+    
+            ret
+        };
+    
+        // The index at which the total directional liquidity equals the inverse of the current liquidity!
+        let liq_net_eq_index_a_to_b = {
+            let mut idx = 0;
+            assert!(self.liquidity < i128::MAX as u128, "AA");
+            let mut tot = self.liquidity as i128;
+            loop {
+                tot -= tick_values[idx].liquidity_net;
+                if tot == 0 {
+                    break;
+                } else if idx == tick_len - 1 {
+                    return false;
+                }
+                idx += 1;
+            }
+            idx
+        };
+        
+        let liq_net_eq_index_b_to_a = {
+            let mut idx = tick_len - 1;
+            assert!(self.liquidity < i128::MAX as u128, "BB");
+            let mut tot = self.liquidity as i128;
+            loop {
+                tot += tick_values[idx].liquidity_net;
+                if tot == 0 {
+                    break;
+                } else if idx == 0 {
+                    return false;
+                }
+                idx -= 1;
+            }
+            idx
+        };
+    
+        tick_first_vec_index_a_to_b == liq_net_eq_index_a_to_b && tick_first_vec_index_b_to_a == liq_net_eq_index_b_to_a
+    }
 }
 
 pub fn cross_by_swap(
@@ -522,6 +540,7 @@ pub fn cross_by_swap(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::str::FromStr;
     use super::*;
 
     #[test]
@@ -549,6 +568,7 @@ mod tests {
         // println!("ticks: {:#?}", ticks);
 
         let mut pool = Pool {
+            id: ObjectID::from_str("0x1").unwrap(),
             sqrt_price: 1304381782533278269440,
             tick_current_index: 85176,
             tick_spacing: 1,
@@ -560,8 +580,7 @@ mod tests {
 
         println!("{:#?}", pool);
 
-        let swap_result = compute_swap_result(
-            &mut pool,
+        let swap_result = pool.compute_swap_result(
             false,
             42_000_000_000_000_000,
             true,
@@ -597,6 +616,7 @@ mod tests {
         // println!("ticks: {:#?}", ticks);
 
         let mut pool = Pool {
+            id: ObjectID::from_str("0x1").unwrap(),
             sqrt_price: 1304381782533278269440,
             tick_current_index: 85176,
             tick_spacing: 1,
@@ -608,8 +628,7 @@ mod tests {
 
         println!("{:#?}", pool);
 
-        let swap_result = compute_swap_result(
-            &mut pool,
+        let swap_result = pool.compute_swap_result(
             true,
             13_370_000_000_000,
             true,

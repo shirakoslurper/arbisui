@@ -40,6 +40,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::markets::{Exchange, Market};
 use crate::sui_sdk_utils::{self, sui_move_value};
 use crate::fast_v2_pool;
+use crate::fast_cronje_pool;
 use crate::sui_json_utils::move_value_to_json;
 
 #[derive(Debug, Clone)]
@@ -146,16 +147,17 @@ impl KriyaDex {
                         "pool_id".to_string()
                     );
 
-                    let is_stable = sui_move_value::get_bool(
-                        &fields,
-                        "is_stable"
-                    )?;
+                    // let is_stable = sui_move_value::get_bool(
+                    //     &fields,
+                    //     "is_stable"
+                    // )?;
 
-                    // Filtering for uncorrelated pools ONLY right now
-                    // SKIP STABLE
-                    if is_stable {
-                        return Ok(None);
-                    }
+                    // // Filtering for uncorrelated pools ONLY right now
+                    // // SKIP STABLE
+                    // if is_stable {
+                    //     // println!("{:#?}", object_response);
+                    //     return Ok(None);
+                    // }
 
                     Ok(
                         Some(
@@ -188,7 +190,7 @@ impl KriyaDex {
         sui_sdk_utils::get_object_id_to_object_response(sui_client, &pool_ids).await
     }
 
-    pub fn computing_pool_from_object_response(&self, response: &SuiObjectResponse) -> Result<fast_v2_pool::Pool, anyhow::Error> {
+    pub fn computing_pool_from_object_response(&self, response: &SuiObjectResponse) -> Result<KriyaComputingPool, anyhow::Error> {
 
         let fields = sui_sdk_utils::read_fields_from_object_response(response).context("missing fields")?;
         
@@ -229,15 +231,53 @@ impl KriyaDex {
             "is_swap_enabled"
         )?;
 
+        let is_stable = sui_move_value::get_bool(
+            &fields, 
+            "is_stable"
+        )?;
+
+        let scale_x = u64::from_str(
+            &sui_move_value::get_string(
+                &fields, 
+                "scaleX"
+            )?
+        )?;
+
+        let scale_y = u64::from_str(
+            &sui_move_value::get_string(
+                &fields, 
+                "scaleY"
+            )?
+        )?;
+
+        let pool = if !is_stable {
+            KriyaComputingPool::Uncorrelated(
+                fast_v2_pool::Pool {
+                    id,
+                    reserve_x: token_x,
+                    reserve_y: token_y,
+                    protocol_fee: protocol_fee_percent,
+                    lp_fee: lp_fee_percent,
+                    unlocked: is_swap_enabled,
+                }
+            )
+        } else {
+            KriyaComputingPool::Stable(
+                fast_cronje_pool::Pool {
+                    id,
+                    reserve_x: token_x,
+                    reserve_y: token_y,
+                    protocol_fee: protocol_fee_percent,
+                    lp_fee: lp_fee_percent,
+                    scale_x,
+                    scale_y,
+                    unlocked: is_swap_enabled,
+                }
+            )
+        };
+
         Ok(
-            fast_v2_pool::Pool {
-                id,
-                reserve_x: token_x,
-                reserve_y: token_y,
-                protocol_fee: protocol_fee_percent,
-                lp_fee: lp_fee_percent,
-                unlocked: is_swap_enabled,
-            }
+            pool
         )
     }
 }
@@ -270,12 +310,117 @@ impl Exchange for KriyaDex {
 }
 
 #[derive(Debug, Clone)]
+pub enum KriyaComputingPool {
+    Uncorrelated(fast_v2_pool::Pool),
+    Stable(fast_cronje_pool::Pool)
+}
+
+impl KriyaComputingPool {
+    fn coin_x_price(&self) -> U64F64 {
+        match self {
+            KriyaComputingPool::Uncorrelated(cp) => {
+                U64F64::from_num(cp.reserve_x / cp.reserve_y)
+            },
+            KriyaComputingPool::Stable(cp) => {
+                U64F64::from_num(cp.reserve_x / cp.reserve_y)
+            },
+        }
+    }
+
+    fn coin_y_price(&self) -> U64F64 {
+        match self {
+            KriyaComputingPool::Uncorrelated(cp) => {
+                U64F64::from_num(cp.reserve_y / cp.reserve_x)
+            },
+            KriyaComputingPool::Stable(cp) => {
+                U64F64::from_num(cp.reserve_y / cp.reserve_x)
+            },
+        }
+    }
+
+    fn apply_swap_effects(
+        &mut self,
+        x_to_y: bool,
+        amount_in: u64,
+        amount_out: u64
+    ) {
+        match self {
+            KriyaComputingPool::Uncorrelated(cp) => {
+                cp.apply_swap_effects(x_to_y, amount_in, amount_out)
+            },
+            KriyaComputingPool::Stable(cp) => {
+                cp.apply_swap_effects(x_to_y, amount_in, amount_out)
+            },
+        }
+    }
+
+    fn apply_add_liquidity_effects(
+        &mut self,
+        amount_x: u64,
+        amount_y: u64
+    ) {
+        match self {
+            KriyaComputingPool::Uncorrelated(cp) => {
+                cp.apply_add_liquidity_effects(amount_x, amount_y)
+            },
+            KriyaComputingPool::Stable(cp) => {
+                cp.apply_add_liquidity_effects(amount_x, amount_y)
+            },
+        }
+    }
+
+    fn apply_remove_liquidity_effects(
+        &mut self,
+        amount_x: u64,
+        amount_y: u64
+    ) {
+        match self {
+            KriyaComputingPool::Uncorrelated(cp) => {
+                cp.apply_remove_liquidity_effects(amount_x, amount_y)
+            },
+            KriyaComputingPool::Stable(cp) => {
+                cp.apply_remove_liquidity_effects(amount_x, amount_y)
+            },
+        }
+    }
+
+    fn unlocked(
+        &self
+    ) -> bool{
+        match self {
+            KriyaComputingPool::Uncorrelated(cp) => {
+                cp.unlocked
+            },
+            KriyaComputingPool::Stable(cp) => {
+                cp.unlocked
+            },
+        }
+    }
+
+    fn calc_swap_exact_amount_in(
+        &self,
+        amount_in: u64,
+        x_to_y: bool
+    ) -> (u64, u64) {
+        match self {
+            KriyaComputingPool::Uncorrelated(cp) => {
+                cp.calc_swap_exact_amount_in(amount_in, x_to_y)
+            },
+            KriyaComputingPool::Stable(cp) => {
+                cp.calc_swap_exact_amount_in(amount_in, x_to_y)
+            },
+        }
+    }
+
+}
+
+#[derive(Debug, Clone)]
 struct KriyaDexMarket {
     parent_exchange: KriyaDex,
     coin_x: TypeTag,
     coin_y: TypeTag,
     pool_id: ObjectID,
-    computing_pool: Option<fast_v2_pool::Pool>
+    computing_pool: Option<KriyaComputingPool>
 }
 
 impl KriyaDexMarket {
@@ -288,9 +433,9 @@ impl KriyaDexMarket {
     }
 
     fn coin_x_price(&self) -> Option<U64F64> {
-        if let Some(cp) = &self.computing_pool {
-            Some(
-                U64F64::from_num(cp.reserve_x / cp.reserve_y)
+        if let Some(kcp) = &self.computing_pool {
+            Some (
+                kcp.coin_x_price()
             )
         } else {
             None
@@ -298,9 +443,9 @@ impl KriyaDexMarket {
     }
 
     fn coin_y_price(&self) -> Option<U64F64> {
-        if let Some(cp) = &self.computing_pool {
-            Some(
-                U64F64::from_num(cp.reserve_y / cp.reserve_x)
+        if let Some(kcp) = &self.computing_pool {
+            Some (
+                kcp.coin_y_price()
             )
         } else {
             None
@@ -316,6 +461,140 @@ impl KriyaDexMarket {
         Ok(())
     }
 
+    fn update_with_event(&mut self, event: &SuiEvent) -> Result<(), anyhow::Error> {
+        let type_ = &event.type_;
+        let event_parsed_json = &event.parsed_json;
+        let computing_pool = self
+            .computing_pool
+            .as_mut()
+            .context("computing_pool is None")?;
+
+        // Amortize this so we only allocate these once. Cant be computed at compile time.
+        let swap_coin_x_event_type = StructTag::from_str(
+                &format!("{}::spot_dex::SwapEvent<{}>", &self.parent_exchange.package_id, &self.coin_x)
+            ).context("KriyaDEX: failed to create event struct tag")?;
+
+        let swap_coin_y_event_type = StructTag::from_str(
+                &format!("{}::spot_dex::SwapEvent<{}>", &self.parent_exchange.package_id, &self.coin_y)
+            ).context("KriyaDEX: failed to create event struct tag")?;
+
+        let add_liq_event_type = StructTag::from_str(
+                &format!("{}::spot_dex::LiquidityAddedEvent", &self.parent_exchange.package_id)
+            ).context("KriyaDEX: failed to create event struct tag")?;
+
+        let remove_liq_event_type = StructTag::from_str(
+                &format!("{}::spot_dex::LiquidityRemovedEvent", &self.parent_exchange.package_id)
+            ).context("KriyaDEX: failed to create event struct tag")?;
+
+        // let update_config_event_type = StructTag::from_str(
+        //         &format!("{}::spot_dex::ConfigUpdatedEvent", &self.parent_exchange.package_id)
+        //     ).context("KriyaDEX: failed to create event struct tag")?;
+
+        match type_ {
+            swap_coin_x_event_type => {
+                let amount_in = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_in").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_in is not Value::String."))
+                    }
+                )?;
+                let amount_out = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_out").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_out is not Value::String."))
+                    }
+                )?;
+
+                computing_pool.apply_swap_effects(
+                    true,
+                    amount_in,
+                    amount_out
+                );
+
+            },
+            swap_coin_y_event_type => {
+                let amount_in = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_in").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_in is not Value::String."))
+                    }
+                )?;
+                let amount_out = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_out").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_out is not Value::String."))
+                    }
+                )?;
+
+                // coin x
+                let x_to_y = false;
+                
+                computing_pool.apply_swap_effects(
+                    x_to_y,
+                    amount_in,
+                    amount_out
+                );
+
+            },
+            add_liq_event_type => {
+                let amount_x = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_x").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_in is not Value::String."))
+                    }
+                )?;
+                let amount_y = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_y").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_out is not Value::String."))
+                    }
+                )?;
+
+                computing_pool.apply_add_liquidity_effects(
+                    amount_x,
+                    amount_y
+                );
+            },
+            remove_liq_event_type => {
+                let amount_x = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_x").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_in is not Value::String."))
+                    }
+                )?;
+                let amount_y = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_y").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_out is not Value::String."))
+                    }
+                )?;
+
+                computing_pool.apply_remove_liquidity_effects(
+                    amount_x,
+                    amount_y
+                );
+            },
+            // update_config_event_type => {
+            //     // return Err(anyhow!());
+            //     // This is an update to all pools....
+            // },
+            _ => {
+                // do nothing
+            }
+        }
+
+        Ok(())
+
+    }
+
     fn pool_id(&self) -> &ObjectID {
         &self.pool_id
     }
@@ -326,7 +605,7 @@ impl KriyaDexMarket {
 
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
         
-        let amount_out = self
+        let (amount_x_delta, amount_y_delta) = self
             .computing_pool
             .as_ref()
             .unwrap()
@@ -335,12 +614,12 @@ impl KriyaDexMarket {
                 true
             );
 
-        (amount_specified, amount_out as u128)
+        (amount_x_delta as u128, amount_y_delta as u128)
     }
 
     fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
         
-        let amount_out = self
+        let (amount_x_delta, amount_y_delta) = self
             .computing_pool
             .as_ref()
             .unwrap()
@@ -349,7 +628,7 @@ impl KriyaDexMarket {
                 false
             );
 
-        (amount_out as u128, amount_specified)
+        (amount_x_delta as u128, amount_y_delta as u128)
     }
 
     async fn add_swap_to_programmable_transaction(
@@ -465,7 +744,7 @@ impl KriyaDexMarket {
 
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
-            cp.unlocked
+            cp.unlocked()
         } else {
             false
         }

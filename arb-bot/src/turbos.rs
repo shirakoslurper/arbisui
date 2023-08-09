@@ -54,7 +54,7 @@ pub struct Turbos {
     original_package_id: ObjectID,
     package_id: ObjectID,
     versioned_id: ObjectID,
-    event_struct_tag_to_pool_field: HashMap<StructTag, String>
+    event_struct_tag_to_pool_field: HashMap<StructTag, String>,
 }
 
 impl Turbos {
@@ -63,9 +63,9 @@ impl Turbos {
         let mut event_struct_tag_to_pool_field = HashMap::new();
         event_struct_tag_to_pool_field.insert(
             StructTag::from_str(
-                &format!("{}::pool::SwapEvent", package_id)
+                &format!("{}::pool::SwapEvent", original_package_id)
             ).expect("Turbos: failed to create event struct tag"),
-            "pool_id".to_string()
+            "pool".to_string()
         );
 
         Turbos {
@@ -202,14 +202,6 @@ impl Turbos {
     pub async fn computing_pool_from_object_response(&self, sui_client: &SuiClient, response: &SuiObjectResponse) -> Result<fast_v3_pool::Pool, anyhow::Error> {
 
         let fields = sui_sdk_utils::read_fields_from_object_response(response).context("missing fields")?;
-
-        // let protocol_fees_a = u64::from_str(
-        //     &sui_move_value::get_string(&fields, "protocol_fees_a")?
-        // )?;
-
-        // let protocol_fees_b = u64::from_str(
-        //     &sui_move_value::get_string(&fields, "protocol_fees_b")?
-        // )?;
         
         let id = response.data.as_ref().context("data field from object response is None")?.object_id;
 
@@ -219,23 +211,9 @@ impl Turbos {
 
         let tick_spacing = sui_move_value::get_number(&fields, "tick_spacing")?;
 
-        // let max_liquidity_per_tick = u128::from_str(
-        //     &sui_move_value::get_string(&fields, "max_liquidity_per_tick")?
-        // )?;
-
         let fee = sui_move_value::get_number(&fields, "fee")?;
 
-        // let fee_protocol = sui_move_value::get_number(&fields, "fee_protocol")?;
-
         let unlocked = sui_move_value::get_bool(&fields, "unlocked")?;
-
-        // let fee_growth_global_a = u128::from_str(
-        //     &sui_move_value::get_string(&fields, "fee_growth_global_a")?
-        // )?;
-
-        // let fee_growth_global_b = u128::from_str(
-        //     &sui_move_value::get_string(&fields, "fee_growth_global_b")?
-        // )?;
 
         let liquidity = u128::from_str(
             &sui_move_value::get_string(&fields, "liquidity")?
@@ -246,22 +224,7 @@ impl Turbos {
             "bits"
         )? as i32;
 
-        // let init_tick_start = Instant::now();
         let ticks = self.get_ticks(sui_client, &response.object_id()?).await?;
-        // let init_tick_duration = init_tick_start.elapsed();
-        // println!("get_ticks(): {:?}", init_tick_duration);
-
-        // let tick_map_id = sui_move_value::get_uid(
-        //     &sui_move_value::get_struct(&fields, "tick_map")?,
-        //     "id"
-        // )?;
-
-        // println!("response id: {}", response.data.as_ref().unwrap().object_id);
-
-        // let tick_map = Self::get_tick_map(sui_client, &tick_map_id).await?;
-        // println!("get_tick_map(): {:?}", tick_map_duration);
-
-        // println!("pool end!");
 
         Ok(
             fast_v3_pool::Pool {
@@ -407,36 +370,18 @@ impl Turbos {
                     )?
                 )? as i128;
 
-                // // Moving the casts/conversions to outside the if let makes this more modular
-                // let fee_growth_outside_a = u128::from_str(
-                //     &sui_move_value::get_string(&tick_fields,"fee_growth_outside_a")?
-                // )?;
-                
-                // // Moving the casts/conversions to outside the if let would make this more modular
-                // let fee_growth_outside_b = u128::from_str(
-                //     &sui_move_value::get_string(&tick_fields,"fee_growth_outside_b")?
-                // )?;
-                
-                // let initialized = sui_move_value::get_bool(&tick_fields, "initialized")?;
 
                 let tick = fast_v3_pool::Tick {
                     index: tick_index,
                     sqrt_price,
                     liquidity_gross,
                     liquidity_net,
-                    // fee_growth_outside_a,
-                    // fee_growth_outside_b,
-                    // initialized,
                 };
 
                 Ok(Some((tick_index, tick)))
             })
             .filter_map(|x| x.transpose())
             .collect::<Result<BTreeMap<i32, fast_v3_pool::Tick>, anyhow::Error>>()?;
-            // .iter()
-            // .filter(|(_, _, initialized)| {
-            //     initialized
-            // });
 
         Ok(tick_index_to_tick)
     }
@@ -536,6 +481,158 @@ impl TurbosMarket {
         Ok(())
     }
 
+    fn update_with_event(&mut self, event: &SuiEvent) -> Result<(), anyhow::Error> {
+        let type_ = &event.type_;
+        let event_parsed_json = &event.parsed_json;
+        let computing_pool = self
+            .computing_pool
+            .as_mut()
+            .context("computing_pool is None")?;
+
+        // Amortize this so we only allocate these once. Cant be computed at compile time.
+        let swap_event_type = StructTag::from_str(
+                &format!("{}::pool::SwapEvent", &self.parent_exchange.original_package_id)
+            ).context("Turbos: failed to create event struct tag")?;
+
+        let add_liq_event_type = StructTag::from_str(
+                &format!("{}::pool::MintEvent", &self.parent_exchange.original_package_id)
+            ).context("Turbos: failed to create event struct tag")?;
+
+        let remove_liq_event_type = StructTag::from_str(
+                &format!("{}::pool::BurnEvent", &self.parent_exchange.original_package_id)
+            ).context("Turbos: failed to create event struct tag")?;
+
+        let update_status_event_type = StructTag::from_str(
+                &format!("{}::pool::TogglePoolStatusEvent", &self.parent_exchange.original_package_id)
+            ).context("Turbos: failed to create event struct tag")?;
+
+        match type_ {
+            swap_event_type => {
+                let amount_a = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_a").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_a is not Value::String."))
+                    }
+                )?;
+                let amount_b = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_b").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_b is not Value::String."))
+                    }
+                )?;
+                let fee_amount = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("fee_amount").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent fee_amount is not Value::String."))
+                    }
+                )?;
+                let a_to_b = *if let serde_json::Value::Bool(bool_inner) = event_parsed_json.get("a_to_b").context("")? {
+                    bool_inner
+                } else {
+                    return Err(anyhow!("SwapEvent a_to_b is not Value::Bool."))
+                };
+
+                let amount_specified = if a_to_b {
+                    amount_a + fee_amount
+                } else {
+                    amount_b + fee_amount
+                };
+
+                let sqrt_price_limit = if a_to_b {
+                    fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1
+                } else {
+                    fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1
+                };
+
+                computing_pool.apply_swap(
+                    a_to_b,
+                    amount_specified, 
+                    true, 
+                    sqrt_price_limit
+                );
+
+            },
+            add_liq_event_type => {
+                let tick_lower_index = u32::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("tick_lower_index").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent tick_lower_index is not Value::String."))
+                    }
+                )? as i32;
+                let tick_upper_index = u32::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("tick_upper_index").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent tick_upper_index is not Value::String."))
+                    }
+                )? as i32;
+                let liquidity_delta = u128::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("liquidity_delta").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent liquidity_delta is not Value::String."))
+                    }
+                )?;
+
+                computing_pool.apply_add_liquidity(
+                    tick_lower_index, 
+                    tick_upper_index, 
+                    liquidity_delta
+                );
+            },
+            remove_liq_event_type => {
+                let tick_lower_index = u32::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("tick_lower_index").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent tick_lower_index is not Value::String."))
+                    }
+                )? as i32;
+                let tick_upper_index = u32::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("tick_upper_index").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent tick_upper_index is not Value::String."))
+                    }
+                )? as i32;
+                let liquidity_delta = u128::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("liquidity_delta").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent liquidity_delta is not Value::String."))
+                    }
+                )?;
+
+                computing_pool.apply_remove_liquidity(
+                    tick_lower_index, 
+                    tick_upper_index, 
+                    liquidity_delta
+                );
+            },
+            update_status_event_type => {
+                let status = *if let serde_json::Value::Bool(bool_inner) = event_parsed_json.get("status").context("")? {
+                    bool_inner
+                } else {
+                    return Err(anyhow!("SwapEvent status is not Value::Bool."))
+                };
+
+                computing_pool.apply_update_unlocked(
+                    status
+                );
+            },
+            _ => {
+                // do nothing
+            }
+        }
+
+        Ok(())
+
+    }
+
     fn pool_id(&self) -> &ObjectID {
         &self.pool_id
     }
@@ -546,8 +643,7 @@ impl TurbosMarket {
 
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
         
-        let swap_state = fast_v3_pool::compute_swap_result(
-            self.computing_pool.as_ref().unwrap(), 
+        let swap_state = self.computing_pool.as_ref().unwrap().compute_swap_result(
             true, 
             amount_specified as u64, 
             true, 
@@ -559,8 +655,7 @@ impl TurbosMarket {
 
     fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
         
-        let swap_state = fast_v3_pool::compute_swap_result(
-            self.computing_pool.as_ref().unwrap(), 
+        let swap_state = self.computing_pool.as_ref().unwrap().compute_swap_result(
             false, 
             amount_specified as u64, 
             true, 
@@ -578,7 +673,7 @@ impl TurbosMarket {
 
             // let diff = tick_map_set.difference(&ticks_set).cloned().collect::<Vec<i32>>().len();
 
-            if cp.liquidity > 0  && cp.unlocked && fast_v3_pool::liquidity_sanity_check(cp){
+            if cp.liquidity > 0  && cp.unlocked && cp.liquidity_sanity_check() {
                 true
             } else {
                 false

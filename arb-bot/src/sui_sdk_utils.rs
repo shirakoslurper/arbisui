@@ -9,7 +9,7 @@ use move_core_types::language_storage::TypeTag;
 use std::str::FromStr;
 use std::collections::{HashMap, BTreeMap};
 
-use sui_sdk::types::base_types::{ObjectID, ObjectType};
+use sui_sdk::types::base_types::{ObjectID, ObjectType, SequenceNumber};
 use sui_sdk::rpc_types::{SuiObjectResponse, SuiObjectDataOptions, SuiParsedData, SuiMoveStruct, SuiMoveValue};
 
 use crate::constants::OBJECT_REQUEST_LIMIT;
@@ -56,6 +56,16 @@ pub fn read_fields_from_object_response(
         } else {
             None
         }
+    } else {
+        None
+    }
+}
+
+pub fn read_version_from_object_response(
+    response: &SuiObjectResponse
+) -> Option<SequenceNumber> {
+    if let Some(object_data) = response.data {
+        Some(object_data.version)
     } else {
         None
     }

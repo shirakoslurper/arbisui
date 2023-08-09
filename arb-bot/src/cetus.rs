@@ -205,21 +205,6 @@ impl Cetus {
             "bits"
         )? as i32;
 
-        // let fee_growth_global_a = u128::from_str(
-        //     &sui_move_value::get_string(&fields, "fee_growth_global_a")?
-        // )?;
-
-        // let fee_growth_global_b = u128::from_str(
-        //     &sui_move_value::get_string(&fields, "fee_growth_global_b")?
-        // )?;
-
-        // let fee_protocol_coin_a = u64::from_str(
-        //     &sui_move_value::get_string(&fields, "fee_protocol_coin_a")?
-        // )?;
-
-        // let fee_protocol_coin_b = u64::from_str(
-        //     &sui_move_value::get_string(&fields, "fee_protocol_coin_a")?
-        // )?;
 
         let tick_manager_struct = sui_move_value::get_struct(&fields, "tick_manager")?;
 
@@ -477,6 +462,154 @@ impl CetusMarket {
         Ok(())
     }
 
+    fn update_with_event(&mut self, event: &SuiEvent) -> Result<(), anyhow::Error> {
+        let type_ = &event.type_;
+        let event_parsed_json = &event.parsed_json;
+        let computing_pool = self
+            .computing_pool
+            .as_mut()
+            .context("computing_pool is None")?;
+
+        // Amortize this so we only allocate these once. Cant be computed at compile time.
+        let swap_event_type = StructTag::from_str(
+                &format!("{}::pool::SwapEvent", &self.parent_exchange.package_id)
+            ).context("Cetus: failed to create event struct tag")?;
+
+        let add_liq_event_type = StructTag::from_str(
+                &format!("{}::pool::AddLiquidityEvent", &self.parent_exchange.package_id)
+            ).context("Cetus: failed to create event struct tag")?;
+
+        let remove_liq_event_type = StructTag::from_str(
+                &format!("{}::pool::RemoveLiquidityEvent", &self.parent_exchange.package_id)
+            ).context("Cetus: failed to create event struct tag")?;
+
+        let update_fee_rate_event_type = StructTag::from_str(
+                &format!("{}::pool::UpdateFeeRateEvent", &self.parent_exchange.package_id)
+            ).context("Cetus: failed to create event struct tag")?;
+
+        match type_ {
+            swap_event_type => {
+                let amount_in = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_in").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_in is not Value::String."))
+                    }
+                )?;
+                let amount_out = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("amount_out").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent amount_out is not Value::String."))
+                    }
+                )?;
+                let fee_amount = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("fee_amount").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent fee_amount is not Value::String."))
+                    }
+                )?;
+                let atob = *if let serde_json::Value::Bool(bool_inner) = event_parsed_json.get("atob").context("")? {
+                    bool_inner
+                } else {
+                    return Err(anyhow!("SwapEvent atob is not Value::Bool."))
+                };
+
+                let amount_specified = amount_in + fee_amount;
+
+                let sqrt_price_limit = if atob {
+                    fast_v3_pool::tick_math::MIN_SQRT_PRICE_X64 + 1
+                } else {
+                    fast_v3_pool::tick_math::MAX_SQRT_PRICE_X64 - 1
+                };
+
+                computing_pool.apply_swap(
+                    atob,
+                    amount_specified, 
+                    true, 
+                    sqrt_price_limit
+                );
+
+            },
+            add_liq_event_type => {
+                let tick_lower = u32::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("tick_lower").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent tick_lower is not Value::String."))
+                    }
+                )? as i32;
+                let tick_upper = u32::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("tick_upper").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent tick_upper_index is not Value::String."))
+                    }
+                )? as i32;
+                let liquidity_delta = u128::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("liquidity").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent liquidity is not Value::String."))
+                    }
+                )?;
+
+                computing_pool.apply_add_liquidity(
+                    tick_lower, 
+                    tick_upper, 
+                    liquidity_delta
+                );
+            },
+            remove_liq_event_type => {
+                let tick_lower_index = u32::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("tick_lower").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent tick_lower is not Value::String."))
+                    }
+                )? as i32;
+                let tick_upper_index = u32::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("tick_upper").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent tick_upper is not Value::String."))
+                    }
+                )? as i32;
+                let liquidity_delta = u128::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("liquidity").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent liquidity is not Value::String."))
+                    }
+                )?;
+
+                computing_pool.apply_remove_liquidity(
+                    tick_lower_index, 
+                    tick_upper_index, 
+                    liquidity_delta
+                );
+            },
+            update_fee_rate_event_type => {
+                let new_fee_rate = u64::from_str(
+                    if let serde_json::Value::String(str) = event_parsed_json.get("new_fee_rate").context("")? {
+                        str
+                    } else {
+                        return Err(anyhow!("SwapEvent new_fee_rate is not Value::String."))
+                    }
+                )?;
+
+                computing_pool.apply_update_fee(new_fee_rate);
+            },
+            _ => {
+                // do nothing
+            }
+        }
+
+        Ok(())
+
+    }
+
     fn pool_id(&self) -> &ObjectID {
         &self.pool_id
     }
@@ -489,45 +622,9 @@ impl CetusMarket {
         &self.parent_exchange.periphery_id
     }
 
-    // // Better handling of computing pool being None
-    // fn compute_swap_x_to_y_mut(&mut self, amount_specified: u64) -> (u64, u64) {
-    //     // println!("cetus compute_swap_x_to_y()");
-
-    //     let swap_result = cetus_pool::swap_in_pool(
-    //         self.computing_pool.as_mut().unwrap(),
-    //         true,
-    //         true,
-    //         cetus_pool::tick_math::MIN_SQRT_PRICE_X64 + 1,
-    //         amount_specified,
-    //         0, // It's hard coded to 0 for now (replace with global config value)
-    //         0,
-    //         false
-    //     );
-
-    //     (swap_result.amount_in, swap_result.amount_out)
-    // }
-
-    // fn compute_swap_y_to_x_mut(&mut self, amount_specified: u64) -> (u64, u64) {
-    //     // println!("cetus compute_swap_y_to_x()");
-
-    //     let swap_result = cetus_pool::swap_in_pool(
-    //         self.computing_pool.as_mut().unwrap(),
-    //         false,
-    //         true,
-    //         cetus_pool::tick_math::MAX_SQRT_PRICE_X64 - 1,
-    //         amount_specified,
-    //         0, // It's hard coded to 0 for now (replace with global config value)
-    //         0,
-    //         false
-    //     );
-
-    //     (swap_result.amount_out, swap_result.amount_in)
-    // }
-
     // Better handling of computing pool being None
     fn compute_swap_x_to_y(&self, amount_specified: u128) -> (u128, u128) {
-        let swap_state = fast_v3_pool::compute_swap_result(
-            self.computing_pool.as_ref().unwrap(), 
+        let swap_state = self.computing_pool.as_ref().unwrap().compute_swap_result(
             true, 
             amount_specified as u64, 
             true, 
@@ -538,8 +635,7 @@ impl CetusMarket {
     }
 
     fn compute_swap_y_to_x(&self, amount_specified: u128) -> (u128, u128) {
-        let swap_state = fast_v3_pool::compute_swap_result(
-            self.computing_pool.as_ref().unwrap(), 
+        let swap_state = self.computing_pool.as_ref().unwrap().compute_swap_result(
             false, 
             amount_specified as u64, 
             true, 
@@ -552,7 +648,7 @@ impl CetusMarket {
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
             // println!("liquidity: {}", cp.liquidity);
-            if cp.liquidity > 0 && cp.unlocked && fast_v3_pool::liquidity_sanity_check(cp) {
+            if cp.liquidity > 0 && cp.unlocked && cp.liquidity_sanity_check() {
                 true
             } else {
                 false

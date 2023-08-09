@@ -156,7 +156,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     loop_blocks(
         &run_data,
-        // &vec![Box::new(cetus), Box::new(turbos)],
+        // &vec![Box::new(turbos)],
         &vec![Box::new(cetus), Box::new(turbos), Box::new(kriyadex)],
         &mut market_graph,
         &source_coin
