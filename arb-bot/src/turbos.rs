@@ -19,7 +19,7 @@ use custom_sui_sdk::{
     programmable_transaction_sui_json::ProgrammableTransactionArg
 };
 
-use sui_sdk::types::{base_types::{ObjectID, ObjectIDParseError, ObjectType, SuiAddress}, object::Object};
+use sui_sdk::{types::{base_types::{ObjectID, ObjectIDParseError, ObjectType, SuiAddress, SequenceNumber}, object::Object}, rpc_types::SuiGetPastObjectRequest};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 use sui_sdk::types::programmable_transaction_builder::{ProgrammableTransactionBuilder};
 use sui_sdk::types::transaction::Argument;
@@ -300,6 +300,92 @@ impl Turbos {
         Ok(word_pos_to_word)
     }
 
+    // pub async fn get_ticks(&self, sui_client: &SuiClient, pool_id: &ObjectID, version: &SequenceNumber) -> Result<BTreeMap<i32, fast_v3_pool::Tick>, anyhow::Error> {
+    //     let pool_dynamic_field_infos = sui_client
+    //         .read_api()
+    //         .pages(
+    //             GetDynamicFieldsRequest {
+    //                 object_id: pool_id.clone(),
+    //                 cursor: None,
+    //                 limit: None,
+    //             }
+    //         )
+    //         .items()
+    //         .try_collect::<Vec<DynamicFieldInfo>>()
+    //         .await?;
+
+
+    //     let tick_object_type = format!("{}::pool::Tick", self.original_package_id);
+
+    //     let tick_past_object_requests = pool_dynamic_field_infos
+    //         .into_iter()
+    //         .filter(|dynamic_field_info| {
+    //             tick_object_type == dynamic_field_info.object_type
+    //         })
+    //         .map(|tick_dynamic_field_info| {
+    //             SuiGetPastObjectRequest{
+    //                 object_id: tick_dynamic_field_info.object_id,
+    //                 version: version.clone()
+    //             }
+    //         })
+    //         .collect::<Vec<SuiGetPastObjectRequest>>();
+
+    //     let tick_past_object_responses = sui_sdk_utils::get_past_object_responses(sui_client, &tick_past_object_requests).await?;
+
+    //     let tick_index_to_tick = tick_past_object_responses
+    //         .into_iter()
+    //         .map(|tick_past_object_response| {
+    //             let data = tick_past_object_response.into_object()?;
+
+    //             let fields = sui_sdk_utils::read_fields_from_object_data(&data).context("Missing fields.")?;
+
+    //             let tick_index = sui_move_value::get_number(
+    //                 &sui_move_value::get_struct(
+    //                     &fields, 
+    //                     "name")?, 
+    //                 "bits"
+    //             )? as i32;
+
+    //             let sqrt_price = fast_v3_pool::tick_math::sqrt_price_from_tick_index(tick_index);
+
+    //             let tick_fields = sui_move_value::get_struct(&fields, "value").context("turbos struct")?;
+
+    //             let initialized = sui_move_value::get_bool(&tick_fields, "initialized")?;
+
+    //             if !initialized {
+    //                 return Ok(None)
+    //             }
+
+    //             let liquidity_gross = u128::from_str(
+    //                 &sui_move_value::get_string(&tick_fields, "liquidity_gross")?
+    //             )?;
+
+    //             let liquidity_net = u128::from_str(
+    //                 &sui_move_value::get_string(
+    //                     &sui_move_value::get_struct(
+    //                         &tick_fields, 
+    //                         "liquidity_net"
+    //                     )?, 
+    //                     "bits"
+    //                 )?
+    //             )? as i128;
+
+
+    //             let tick = fast_v3_pool::Tick {
+    //                 index: tick_index,
+    //                 sqrt_price,
+    //                 liquidity_gross,
+    //                 liquidity_net,
+    //             };
+
+    //             Ok(Some((tick_index, tick)))
+    //         })
+    //         .filter_map(|x| x.transpose())
+    //         .collect::<Result<BTreeMap<i32, fast_v3_pool::Tick>, anyhow::Error>>()?;
+
+    //     Ok(tick_index_to_tick)
+    // }
+
     pub async fn get_ticks(&self, sui_client: &SuiClient, pool_id: &ObjectID) -> Result<BTreeMap<i32, fast_v3_pool::Tick>, anyhow::Error>{
         let pool_dynamic_field_infos = sui_client
             .read_api()
@@ -424,7 +510,8 @@ pub struct TurbosMarket {
     pub pool_id: ObjectID,
     pub coin_x_sqrt_price: Option<U64F64>, // In terms of y. x / y
     pub coin_y_sqrt_price: Option<U64F64>, // In terms of x. y / x
-    pub computing_pool: Option<fast_v3_pool::Pool>
+    pub computing_pool: Option<fast_v3_pool::Pool>,
+    // pub version: SequenceNumber
 }
 
 const SUI_STD_LIB_PACKAGE_ID: &str = "0x0000000000000000000000000000000000000000000000000000000000000002";
@@ -473,10 +560,9 @@ impl TurbosMarket {
         // println!("sq then mult: {}", U64F64::from_num(1) * (coin_x_sqrt_price * coin_x_sqrt_price) * (coin_y_sqrt_price * coin_y_sqrt_price));
         // println!("mult then sq: {}", U64F64::from_num(1) * (coin_x_sqrt_price * coin_y_sqrt_price) * (coin_x_sqrt_price * coin_y_sqrt_price));
 
-        // let start = Instant::now();
         self.computing_pool = Some(self.parent_exchange.computing_pool_from_object_response(sui_client, object_response).await?);
-        // let duration = start.elapsed();
-        // println!("computing_pool_from_response(): {:?}", duration);
+
+        // self.version = sui_sdk_utils::read_version_from_object_response(object_response).context("data field from object response is None")?;
 
         Ok(())
     }
@@ -628,6 +714,8 @@ impl TurbosMarket {
                 // do nothing
             }
         }
+
+        // self.version = 
 
         Ok(())
 

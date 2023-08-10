@@ -132,7 +132,7 @@ pub async fn run<'a>(
         }
     });
 
-    let event_cache = Vec::new();
+    let mut event_cache = Vec::new();
 
     while let Some(event_result) = subscribe_pool_state_changing_events.next().await {
 

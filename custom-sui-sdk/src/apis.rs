@@ -13,15 +13,15 @@ use crate::error::{Error, SuiRpcResult};
 use crate::{RpcClient, WAIT_FOR_TX_TIMEOUT_SEC};
 use sui_json_rpc::api::GovernanceReadApiClient;
 use sui_json_rpc::api::{
-    CoinReadApiClient, IndexerApiClient, MoveUtilsClient, ReadApiClient, WriteApiClient,
+    CoinReadApiClient, IndexerApiClient, MoveUtilsClient, ReadApiClient, WriteApiClient, ExtendedApiClient
 };
 use sui_json_rpc_types::{
-    Balance, Checkpoint, CheckpointId, Coin, CoinPage, DelegatedStake,
-    DryRunTransactionBlockResponse, DynamicFieldPage, EventFilter, EventPage, ObjectsPage,
-    SuiCoinMetadata, SuiCommittee, SuiEvent, SuiGetPastObjectRequest, SuiMoveNormalizedModule,
-    SuiObjectDataOptions, SuiObjectResponse, SuiObjectResponseQuery, SuiPastObjectResponse,
-    SuiTransactionBlockEffectsAPI, SuiTransactionBlockResponse, SuiTransactionBlockResponseOptions,
-    SuiTransactionBlockResponseQuery, TransactionBlocksPage,
+    Balance, Checkpoint, CheckpointId, CheckpointedObjectID, Coin, CoinPage, EpochInfo, 
+    EpochPage, DelegatedStake, DryRunTransactionBlockResponse, DynamicFieldPage, EventFilter, EventPage, 
+    ObjectsPage, QueryObjectsPage, SuiCoinMetadata, SuiCommittee, SuiEvent, 
+    SuiGetPastObjectRequest, SuiMoveNormalizedModule, SuiObjectDataOptions, SuiObjectResponse, 
+    SuiObjectResponseQuery, SuiPastObjectResponse, SuiTransactionBlockEffectsAPI, SuiTransactionBlockResponse, 
+    SuiTransactionBlockResponseOptions, SuiTransactionBlockResponseQuery, TransactionBlocksPage,
 };
 use sui_json_rpc_types::{CheckpointPage, SuiLoadedChildObjectsResponse};
 use sui_types::balance::Supply;
@@ -726,5 +726,116 @@ impl GovernanceApi {
         self.rate_limiter.until_ready().await;
 
         Ok(*self.api.http.get_reference_gas_price().await?)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtendedApi {
+    api: Arc<RpcClient>,
+    rate_limiter: Arc<DefaultDirectRateLimiter>
+}
+
+impl ExtendedApi {
+    pub(crate) fn new(api: Arc<RpcClient>, rate_limiter: Arc<DefaultDirectRateLimiter>) -> Self {
+        Self {
+            api,
+            rate_limiter,
+        }
+    }
+
+    pub async fn get_epochs(
+        &self,
+        cursor: Option<BigInt<u64>>,
+        limit: Option<usize>,
+        descending_order: Option<bool>,
+    ) -> SuiRpcResult<EpochPage> {
+        self.rate_limiter.until_ready().await;
+
+        Ok(self.api.http.get_epochs(cursor, limit, descending_order).await?)
+    }
+
+    async fn get_current_epoch(&self) -> SuiRpcResult<EpochInfo> {
+        self.rate_limiter.until_ready().await;
+
+        Ok(self.api.http.get_current_epoch().await?)
+    }
+
+    /// Return the list of queried objects. Note that this is an enhanced full node only api.
+    pub async fn query_objects(
+        &self,
+        query: SuiObjectResponseQuery,
+        cursor: Option<CheckpointedObjectID>,
+        limit: Option<usize>,
+    ) -> SuiRpcResult<QueryObjectsPage> {
+        self.rate_limiter.until_ready().await;
+
+        Ok(self.api.http.query_objects(query, cursor, limit).await?)
+    }
+
+    // pub async fn get_network_metrics(&self) -> SuiRpcResult<NetworkMetrics> {
+    //     self.rate_limiter.until_ready().await;
+
+    //     Ok(self.api.http.get_network_metrics().await?)
+    // }
+
+    // pub async fn get_move_call_metrics(&self) -> RpcResult<MoveCallMetrics> {
+    //     self.rate_limiter.until_ready().await;
+
+    //     Ok(self.api.http.get_move_call_metrics().await?)
+    // }
+
+    // pub async fn get_latest_address_metrics(&self) -> SUiRpcResult<AddressMetrics> {
+    //     self.rate_limiter.until_ready().await;
+
+    //     Ok(self.api.http.get_latest_address_metrics().await?)
+    // }
+
+    // pub async fn get_checkpoint_address_metrics(&self, checkpoint: u64) -> SuiRpcResult<AddressMetrics> {
+    //     self.rate_limiter.until_ready().await;
+
+    //     Ok(self.api.http.get_checkpoint_address_metrics(checkpoint).await?)
+    // }
+
+    // pub async fn get_all_epoch_address_metrics(
+    //     &self,
+    //     descending_order: Option<bool>,
+    // ) -> SuiRpcResult<Vec<AddressMetrics>> {
+    //     self.rate_limiter.until_ready().await;
+
+    //     Ok(self.api.http.get_all_epoch_address_metrics(descending_order).await?)
+    // }
+
+    // async fn get_total_transactions(&self) -> RpcResult<BigInt<u64>> {
+    //     self.rate_limiter.until_ready().await;
+        
+    //     Ok(self.api.http.get_total_transactions().await?)
+    // }
+}
+
+#[derive(Clone, Debug)]
+pub struct QueryObjectsRequest {
+    pub query: SuiObjectResponseQuery,
+    pub cursor: Option<CheckpointedObjectID>,
+    pub limit: Option<usize>,
+}
+
+#[async_trait]
+impl PageTurner<QueryObjectsRequest> for ExtendedApi {
+    type PageItem = SuiObjectResponse;
+    type PageError = anyhow::Error;
+
+    async fn turn_page(&self, mut request: QueryObjectsRequest) -> PageTurnerOutput<Self, QueryObjectsRequest> {
+        let response = self.query_objects(
+            request.query.clone(), 
+            request.cursor, 
+            request.limit,
+        ).await?;
+        
+        if response.has_next_page {
+            request.cursor = response.next_cursor;
+            Ok(TurnedPage::next(response.data, request))
+        } else {
+            Ok(TurnedPage::last(response.data))
+        }
     }
 }

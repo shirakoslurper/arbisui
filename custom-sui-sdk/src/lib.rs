@@ -23,7 +23,7 @@ use sui_json_rpc_types::{
 // };
 use sui_types::base_types::{ObjectID, ObjectInfo, SuiAddress};
 
-use crate::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi};
+use crate::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi, ExtendedApi};
 use crate::error::{Error, SuiRpcResult};
 
 use crate::transaction_builder::{
@@ -129,6 +129,7 @@ impl SuiClientBuilder {
         let transaction_builder = TransactionBuilder::new(read_api.clone());
         let coin_read_api = CoinReadApi::new(api.clone(), rate_limiter.clone());
         let governance_api = GovernanceApi::new(api.clone(), rate_limiter.clone());
+        let extended_api = ExtendedApi::new(api.clone(), rate_limiter.clone());
 
         Ok(SuiClient {
             api,
@@ -138,6 +139,7 @@ impl SuiClientBuilder {
             event_api,
             quorum_driver_api,
             governance_api,
+            extended_api
             // rate_limiter
         })
     }
@@ -170,6 +172,7 @@ pub struct SuiClient {
     event_api: EventApi,
     quorum_driver_api: QuorumDriverApi,
     governance_api: GovernanceApi,
+    extended_api: ExtendedApi
     // rate_limiter: &'a Arc<DefaultDirectRateLimiter>,
 }
 
@@ -206,6 +209,9 @@ impl SuiClient {
     }
     pub fn governance_api(&self) -> &GovernanceApi {
         &self.governance_api
+    }
+    pub fn extended_api(&self) -> &ExtendedApi {
+        &self.extended_api
     }
 }
 

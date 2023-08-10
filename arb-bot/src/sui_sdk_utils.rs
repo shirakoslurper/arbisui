@@ -10,7 +10,7 @@ use std::str::FromStr;
 use std::collections::{HashMap, BTreeMap};
 
 use sui_sdk::types::base_types::{ObjectID, ObjectType, SequenceNumber};
-use sui_sdk::rpc_types::{SuiObjectResponse, SuiObjectDataOptions, SuiParsedData, SuiMoveStruct, SuiMoveValue};
+use sui_sdk::rpc_types::{SuiObjectResponse, SuiObjectData, SuiObjectDataOptions, SuiParsedData, SuiMoveStruct, SuiMoveValue, SuiGetPastObjectRequest, SuiPastObjectResponse};
 
 use crate::constants::OBJECT_REQUEST_LIMIT;
 
@@ -18,11 +18,11 @@ use crate::constants::OBJECT_REQUEST_LIMIT;
 pub fn get_fields_from_object_response(
     object_response: &SuiObjectResponse
 ) -> Option<BTreeMap<String, SuiMoveValue>> {
-    if let Some(object_data) = object_response.clone().data {
-        if let Some(parsed_data) = object_data.content {
+    if let Some(object_data) = &object_response.data {
+        if let Some(parsed_data) = &object_data.content {
             if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
-                if let SuiMoveStruct::WithFields(field_map) = parsed_move_object.fields {
-                    Some(field_map)
+                if let SuiMoveStruct::WithFields(field_map) = &parsed_move_object.fields {
+                    Some(field_map.clone())
                 } else {
                     None
                 }
@@ -46,10 +46,10 @@ pub fn get_fields_from_object_response(
 pub fn read_fields_from_object_response(
     response: &SuiObjectResponse
 ) -> Option<SuiMoveStruct> {
-    if let Some(object_data) = response.clone().data {
-        if let Some(parsed_data) = object_data.content {
+    if let Some(object_data) = &response.data {
+        if let Some(parsed_data) = &object_data.content {
             if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
-                Some(parsed_move_object.fields)
+                Some(parsed_move_object.fields.clone())
             } else {
                 None
             }
@@ -61,10 +61,24 @@ pub fn read_fields_from_object_response(
     }
 }
 
+pub fn read_fields_from_object_data(
+    object_data: &SuiObjectData
+) -> Option<SuiMoveStruct> {
+    if let Some(parsed_data) = &object_data.content {
+        if let SuiParsedData::MoveObject(parsed_move_object) = parsed_data {
+            Some(parsed_move_object.fields.clone())
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 pub fn read_version_from_object_response(
     response: &SuiObjectResponse
 ) -> Option<SequenceNumber> {
-    if let Some(object_data) = response.data {
+    if let Some(object_data) = &response.data {
         Some(object_data.version)
     } else {
         None
@@ -100,6 +114,37 @@ pub async fn get_object_responses(
         .collect::<Vec<SuiObjectResponse>>();
 
     Ok(object_responses)
+}
+
+pub async fn get_past_object_responses(
+    sui_client: &SuiClient, 
+    past_object_requests: &[SuiGetPastObjectRequest]
+) -> Result<Vec<SuiPastObjectResponse>, anyhow::Error> {
+    let chunked_past_object_responses = future::try_join_all(
+        past_object_requests
+        .chunks(OBJECT_REQUEST_LIMIT)
+        .map(|past_object_requests| {
+            async {
+                let object_responses = sui_client
+                    .read_api()
+                    .try_multi_get_parsed_past_object(
+                        past_object_requests.to_vec(),
+                        SuiObjectDataOptions::full_content()
+                    )
+                    .await?;
+
+                Ok::<Vec<SuiPastObjectResponse>, anyhow::Error>(object_responses)
+            }
+        })
+    )
+    .await?;
+
+    let past_object_responses = chunked_past_object_responses
+        .into_iter()
+        .flatten()
+        .collect::<Vec<SuiPastObjectResponse>>();
+
+    Ok(past_object_responses)
 }
 
 pub async fn get_object_id_to_object_response(
