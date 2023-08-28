@@ -9,6 +9,7 @@ use petgraph::graphmap::DiGraphMap;
 
 use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
+use std::time::{Instant, Duration};
 
 use custom_sui_sdk::SuiClient;
 
@@ -115,6 +116,7 @@ impl <'data> MarketGraph<'data> {
         sui_client: &SuiClient, 
         pool_id_to_object_response: &HashMap<ObjectID, SuiObjectResponse>
     ) -> Result<(), anyhow::Error> {
+
         future::try_join_all(
             self
             .graph
@@ -130,7 +132,9 @@ impl <'data> MarketGraph<'data> {
                                 // let object_response = pool_id_to_object_response.get(&pool_id).context("Missing fields for pool.")?;
                                 // market_info.market.update_with_object_response(sui_client, object_response).await?;
                                 if let Some(object_response) = pool_id_to_object_response.get(&pool_id) {
+                                    // let now = Instant::now();
                                     market_info.market.update_with_object_response(sui_client, object_response).await?;
+                                    // println!("time elapsed to update {}: {:#?}", market_info.market.pool_id(), now.elapsed());
                                 }
 
                                 Ok::<(), anyhow::Error>(())
@@ -171,6 +175,7 @@ impl <'data> MarketGraph<'data> {
         pool_id: &ObjectID,
         response: &SuiObjectResponse
     ) -> Result<(), anyhow::Error>{
+        let now = Instant::now();
 
         let (coin_a, coin_b) = self
             .pool_id_to_coin_pair
@@ -200,6 +205,8 @@ impl <'data> MarketGraph<'data> {
             .context("Missing market for pool.")?;
 
         b_to_a_market.market.update_with_object_response(sui_client, response).await?;
+
+        println!("time elapsed to update single market: {:#?}", now.elapsed());
 
         Ok(())
     }

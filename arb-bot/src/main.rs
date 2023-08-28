@@ -135,6 +135,8 @@ async fn main() -> Result<(), anyhow::Error> {
     println!("{}", markets[0].package_id());
 
     let usdc_weth_pool = ObjectID::from_str("0x84fa8fe46a41151396beeabc9167a114c06e1f882d827c4a7f5ab8676de63e14")?;
+    let avoid_pool = ObjectID::from_str("0x5eb2dfcdd1b15d2021328258f6d5ec081e9a0cdcfa9e13a0eaeb9b5f7505ca78")?;
+    let avoid = ObjectID::from_str("0x3c334f9d1b969767007d26bc886786f9f197ffb14771f7903cd8772c46d08dea")?;
 
     markets = markets
         .into_iter()
@@ -142,7 +144,19 @@ async fn main() -> Result<(), anyhow::Error> {
             market.pool_id() != &usdc_weth_pool
         })
         .collect::<Vec<_>>();
-
+    markets = markets
+        .into_iter()
+        .filter(|market| {
+            market.pool_id() != &avoid_pool
+        })
+        .collect::<Vec<_>>();
+    markets = markets
+        .into_iter()
+        .filter(|market| {
+            market.pool_id() != &avoid
+        })
+        .collect::<Vec<_>>();
+    
     println!("markets.len(): {}", markets.len());
 
     let mut market_graph = MarketGraph::new(&markets)?;
@@ -158,6 +172,7 @@ async fn main() -> Result<(), anyhow::Error> {
         &run_data,
         // &vec![Box::new(turbos)],
         &vec![Box::new(cetus), Box::new(turbos), Box::new(kriyadex)],
+        // &vec![Box::new(kriyadex)],
         &mut market_graph,
         &source_coin
     ).await?;

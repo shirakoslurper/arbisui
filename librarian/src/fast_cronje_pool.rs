@@ -302,8 +302,8 @@ mod tests {
         );
 
         // let amount_in = 100000000u64;
-        // let amount_in = u64::MAX;
-        let amount_in = u32::MAX as u64 / 2;
+        let amount_in = u64::MAX;
+        // let amount_in = u32::MAX as u64;
         // y in. x out.
 
         let (real_amount_in, amount_out) = pool.calc_swap_exact_amount_in(amount_in, true);

@@ -374,39 +374,13 @@ impl KriyaComputingPool {
 
     fn unlocked(
         &self
-    ) -> bool {
+    ) -> bool{
         match self {
             KriyaComputingPool::Uncorrelated(cp) => {
                 cp.unlocked
             },
             KriyaComputingPool::Stable(cp) => {
                 cp.unlocked
-            },
-        }
-    }
-
-    fn reserve_x(
-        &self
-    ) -> u64 {
-        match self {
-            KriyaComputingPool::Uncorrelated(cp) => {
-                cp.reserve_x
-            },
-            KriyaComputingPool::Stable(cp) => {
-                cp.reserve_x
-            },
-        }
-    }
-
-    fn reserve_y(
-        &self
-    ) -> u64 {
-        match self {
-            KriyaComputingPool::Uncorrelated(cp) => {
-                cp.reserve_y
-            },
-            KriyaComputingPool::Stable(cp) => {
-                cp.reserve_y
             },
         }
     }
@@ -628,9 +602,6 @@ impl KriyaDexMarket {
                 true
             );
 
-        // println!("compute_swap_x_to_y: ({}, {}) {}", amount_specified, amount_y_delta, self.pool_id);
-        // panic!();
-
         (amount_x_delta as u128, amount_y_delta as u128)
     }
 
@@ -644,9 +615,6 @@ impl KriyaDexMarket {
                 amount_specified as u64,
                 false
             );
-
-            // println!("compute_swap_y_to_x: ({}, {}), {}", amount_x_delta, amount_specified, self.pool_id);
-            // panic!();
 
         (amount_x_delta as u128, amount_y_delta as u128)
     }
@@ -764,7 +732,7 @@ impl KriyaDexMarket {
 
     fn viable(&self) -> bool {
         if let Some(cp) = &self.computing_pool {
-            cp.reserve_x() > 0 && cp.reserve_y() > 0 && cp.unlocked()
+            cp.unlocked()
         } else {
             false
         }

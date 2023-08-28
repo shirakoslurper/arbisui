@@ -19,7 +19,7 @@ use custom_sui_sdk::{
     programmable_transaction_sui_json::ProgrammableTransactionArg
 };
 
-use sui_sdk::{types::{base_types::{ObjectID, ObjectIDParseError, ObjectType, SuiAddress, SequenceNumber}, object::Object}, rpc_types::SuiGetPastObjectRequest};
+use sui_sdk::{types::{base_types::{ObjectID, ObjectIDParseError, ObjectType, SuiAddress, SequenceNumber}, object::Object, messages_checkpoint::CheckpointSequenceNumber}, rpc_types::{SuiGetPastObjectRequest, SuiObjectResponseQuery}};
 use sui_sdk::types::dynamic_field::DynamicFieldInfo;
 use sui_sdk::types::programmable_transaction_builder::{ProgrammableTransactionBuilder};
 use sui_sdk::types::transaction::Argument;
@@ -107,6 +107,50 @@ impl Turbos {
     fn event_struct_tag_to_pool_field(&self) -> &HashMap<StructTag, String> {
         &self.event_struct_tag_to_pool_field
     }
+
+    // async fn get_all_markets_checkpointed_(
+    //     &self, 
+    //     sui_client: &SuiClient, 
+    //     checkpoint_sequence_number: &CheckpointSequenceNumber
+    // ) {
+
+    //     let pool_created_events = sui_client
+    //         .event_api()
+    //         .pages(
+    //             QueryEventsRequest {
+    //                 query: EventFilter::MoveEventType(
+    //                     StructTag::from_str(
+    //                         &format!("{}::pool_factory::PoolCreatedEvent", self.original_package_id)
+    //                     )?
+    //                 ),
+    //                 cursor: None,
+    //                 limit: None,
+    //                 descending_order: true,
+    //             }
+    //         )
+    //         .items()
+    //         .try_collect::<Vec<SuiEvent>>()
+    //         .await?;
+
+    //     let pool_object_response_queries = pool_created_events
+    //         .into_iter()
+    //         .map(|pool_created_event| {
+    //             let parsed_json = pool_created_event.parsed_json;
+    //             if let Value::String(pool_id_value) = parsed_json.get("pool").context(format!("Failed to get pool for a TurbosMarket: {:#?}", parsed_json))? {
+    //                 // println!("turbos: pool_id: {}", pool_id_value);
+    //                 Ok(
+    //                     SuiObjectResponseQuery {
+    //                         object_id: ObjectID::from_str(&format!("0x{}", pool_id_value))?,
+
+    //                     }                    
+    //                 )
+    //             } else {
+    //                 Err(anyhow!("Failed to match pattern."))
+    //             }
+    //         })
+    //         .collect::<Result<Vec<SuiObjectResponseQuery>, anyhow::Error>>()?;
+
+    // }
 
     async fn get_all_markets_(&self, sui_client: &SuiClient) -> Result<Vec<Box<dyn Market>>, anyhow::Error> {
         let pool_created_events = sui_client

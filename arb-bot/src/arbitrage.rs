@@ -343,7 +343,7 @@ pub async fn execute_arb<'a>(
             .await?;
 
         let gcs = dry_run_result.effects.gas_cost_summary();
-        let gas_budget = (gcs.computation_cost + gcs.storage_cost + gcs.non_refundable_storage_fee) * 10;
+        let gas_budget = (gcs.computation_cost + gcs.storage_cost + gcs.non_refundable_storage_fee) * 3;
 
         // // println!("Gas Budget: {}", gas_budget);
         // // panic!();

@@ -1,5 +1,5 @@
 [package]
-name = "arb-bot"
+name = "librarian"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,12 +10,14 @@ anyhow.workspace = true
 async-trait.workspace = true
 bcs.workspace = true
 clap.workspace = true
+crossbeam.workspace = true
 custom-sui-sdk = { path = "../custom-sui-sdk" }
 dyn-clone.workspace = true
 ethnum.workspace = true
 indexmap.workspace = true
 itertools.workspace = true
 futures.workspace = true
+futures-core.workspace = true
 fixed.workspace = true
 governor.workspace = true
 move-core-types.workspace = true
