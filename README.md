@@ -8,10 +8,12 @@ I call this Pasha's Asylum because it drove me insane.
 Ok so a little rundown is due.
 
 Directory:
-- arb-bot
+- `arb-bot`
     - This contains all of the bot logic and contains the path finding logic, the optimization logic, the order construction logic, and the order execution logic.
-- custom-sui-sdk
+- `custom-sui-sdk`
     - This contains a mix of modified and new doohickies I built for interacting with the Sui chain and its contracts. This is not project specific, but it enables me to do things I wasn't able to do with the currently available Rust SDK. These doohickies are essential for writing the contract bindings I need.
+- `librarian`
+    - Our implementation of a "level ii" orderbook implementation of our client side representations of on-chain markets.
 
 > Admittedly I could've done a lot better in terms of organizing the directory structure but my priority when building this was to get something that could actually make money, even if it was not very good at it.
 
@@ -96,7 +98,7 @@ Directory:
     - Provides an API for interactinf with the Cetus markets.
     - Supports calculation (`cetus_pool` underlies it).
     - Supports fetching information from the chain and building our client side representations of on-chain market.
-    - Supports applying deltas to our client-side representations of on-chain markets. We aren't using this at the moment.
+    - The versions of these that support applying deltas to our client-side representations of on-chain markets exists in the `librarian` folder.
     - Contains the bindings I wrote to construct function calls.
 - `market_graph.rs`
     - Supports building the grpah of markets given the markets.
