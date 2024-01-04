@@ -1,0 +1,31 @@
+entry public swap_a2b<Ty0, Ty1>(Arg0: &GlobalConfig, Arg1: &mut Pool<Ty0, Ty1>, Arg2: vector<Coin<Ty0>>, Arg3: bool, Arg4: u64, Arg5: u64, Arg6: u128, Arg7: &Clock, Arg8: &mut TxContext) {
+B0:
+	0: MoveLoc[0](Arg0: &GlobalConfig)
+	1: MoveLoc[1](Arg1: &mut Pool<Ty0, Ty1>)
+	2: MoveLoc[2](Arg2: vector<Coin<Ty0>>)
+	3: VecPack(53, 0)
+	4: LdTrue
+	5: MoveLoc[3](Arg3: bool)
+	6: MoveLoc[4](Arg4: u64)
+	7: MoveLoc[5](Arg5: u64)
+	8: MoveLoc[6](Arg6: u128)
+	9: MoveLoc[7](Arg7: &Clock)
+	10: MoveLoc[8](Arg8: &mut TxContext)
+	11: Call swap<Ty0, Ty1>(&GlobalConfig, &mut Pool<Ty0, Ty1>, vector<Coin<Ty0>>, vector<Coin<Ty1>>, bool, bool, u64, u64, u128, &Clock, &mut TxContext)
+	12: Ret
+}
+entry public swap_b2a<Ty0, Ty1>(Arg0: &GlobalConfig, Arg1: &mut Pool<Ty0, Ty1>, Arg2: vector<Coin<Ty1>>, Arg3: bool, Arg4: u64, Arg5: u64, Arg6: u128, Arg7: &Clock, Arg8: &mut TxContext) {
+B0:
+	0: MoveLoc[0](Arg0: &GlobalConfig)
+	1: MoveLoc[1](Arg1: &mut Pool<Ty0, Ty1>)
+	2: VecPack(37, 0)
+	3: MoveLoc[2](Arg2: vector<Coin<Ty1>>)
+	4: LdFalse
+	5: MoveLoc[3](Arg3: bool)
+	6: MoveLoc[4](Arg4: u64)
+	7: MoveLoc[5](Arg5: u64)
+	8: MoveLoc[6](Arg6: u128)
+	9: MoveLoc[7](Arg7: &Clock)
+	10: MoveLoc[8](Arg8: &mut TxContext)
+	11: Call swap<Ty0, Ty1>(&GlobalConfig, &mut Pool<Ty0, Ty1>, vector<Coin<Ty0>>, vector<Coin<Ty1>>, bool, bool, u64, u64, u128, &Clock, &mut TxContext)
+	12: Ret

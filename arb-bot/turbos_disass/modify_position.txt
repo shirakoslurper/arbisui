@@ -1,0 +1,93 @@
+modify_position<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: address, Arg2: I32, Arg3: I32, Arg4: I128, Arg5: &Clock, Arg6: &mut TxContext): I128 * I128 {
+B0:
+	0: CopyLoc[2](Arg2: I32)
+	1: CopyLoc[3](Arg3: I32)
+	2: Call check_ticks(I32, I32)
+	3: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	4: MoveLoc[1](Arg1: address)
+	5: CopyLoc[2](Arg2: I32)
+	6: CopyLoc[3](Arg3: I32)
+	7: CopyLoc[4](Arg4: I128)
+	8: MoveLoc[5](Arg5: &Clock)
+	9: MoveLoc[6](Arg6: &mut TxContext)
+	10: Call update_position<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, address, I32, I32, I128, &Clock, &mut TxContext)
+	11: Call i128::zero(): I128
+	12: StLoc[7](loc0: I128)
+	13: Call i128::zero(): I128
+	14: StLoc[8](loc1: I128)
+	15: CopyLoc[4](Arg4: I128)
+	16: Call i128::zero(): I128
+	17: Call i128::eq(I128, I128): bool
+	18: Not
+	19: BrFalse(77)
+B1:
+	20: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	21: ImmBorrowFieldGeneric[2](Pool.tick_current_index: I32)
+	22: ReadRef
+	23: CopyLoc[2](Arg2: I32)
+	24: Call i32::lt(I32, I32): bool
+	25: BrFalse(36)
+B2:
+	26: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	27: Pop
+	28: MoveLoc[2](Arg2: I32)
+	29: Call math_tick::sqrt_price_from_tick_index(I32): u128
+	30: MoveLoc[3](Arg3: I32)
+	31: Call math_tick::sqrt_price_from_tick_index(I32): u128
+	32: MoveLoc[4](Arg4: I128)
+	33: Call math_sqrt_price::get_amount_a_delta(u128, u128, I128): I128
+	34: StLoc[7](loc0: I128)
+	35: Branch(76)
+B3:
+	36: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	37: ImmBorrowFieldGeneric[2](Pool.tick_current_index: I32)
+	38: ReadRef
+	39: CopyLoc[3](Arg3: I32)
+	40: Call i32::lt(I32, I32): bool
+	41: BrFalse(67)
+B4:
+	42: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	43: ImmBorrowFieldGeneric[1](Pool.sqrt_price: u128)
+	44: ReadRef
+	45: MoveLoc[3](Arg3: I32)
+	46: Call math_tick::sqrt_price_from_tick_index(I32): u128
+	47: CopyLoc[4](Arg4: I128)
+	48: Call math_sqrt_price::get_amount_a_delta(u128, u128, I128): I128
+	49: StLoc[7](loc0: I128)
+	50: MoveLoc[2](Arg2: I32)
+	51: Call math_tick::sqrt_price_from_tick_index(I32): u128
+	52: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	53: ImmBorrowFieldGeneric[1](Pool.sqrt_price: u128)
+	54: ReadRef
+	55: CopyLoc[4](Arg4: I128)
+	56: Call math_sqrt_price::get_amount_b_delta(u128, u128, I128): I128
+	57: StLoc[8](loc1: I128)
+	58: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	59: ImmBorrowFieldGeneric[5](Pool.liquidity: u128)
+	60: ReadRef
+	61: MoveLoc[4](Arg4: I128)
+	62: Call math_liquidity::add_delta(u128, I128): u128
+	63: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	64: MutBorrowFieldGeneric[5](Pool.liquidity: u128)
+	65: WriteRef
+	66: Branch(76)
+B5:
+	67: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	68: Pop
+	69: MoveLoc[2](Arg2: I32)
+	70: Call math_tick::sqrt_price_from_tick_index(I32): u128
+	71: MoveLoc[3](Arg3: I32)
+	72: Call math_tick::sqrt_price_from_tick_index(I32): u128
+	73: MoveLoc[4](Arg4: I128)
+	74: Call math_sqrt_price::get_amount_b_delta(u128, u128, I128): I128
+	75: StLoc[8](loc1: I128)
+B6:
+	76: Branch(79)
+B7:
+	77: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	78: Pop
+B8:
+	79: MoveLoc[7](loc0: I128)
+	80: MoveLoc[8](loc1: I128)
+	81: Ret
+}

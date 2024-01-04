@@ -1,0 +1,167 @@
+cross_tick<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: I32, Arg2: u128, Arg3: u128, Arg4: &vector<u128>, Arg5: bool, Arg6: &mut TxContext): I128 {
+B0:
+	0: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	1: ImmBorrowFieldGeneric[15](Pool.id: UID)
+	2: CopyLoc[1](Arg1: I32)
+	3: Call dynamic_field::exists_<I32>(&UID, I32): bool
+	4: Not
+	5: BrFalse(12)
+B1:
+	6: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	7: MoveLoc[1](Arg1: I32)
+	8: MoveLoc[6](Arg6: &mut TxContext)
+	9: Call init_tick<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32, &mut TxContext): &mut Tick
+	10: StLoc[11](loc4: &mut Tick)
+	11: Branch(19)
+B2:
+	12: MoveLoc[6](Arg6: &mut TxContext)
+	13: Pop
+	14: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	15: MutBorrowFieldGeneric[15](Pool.id: UID)
+	16: MoveLoc[1](Arg1: I32)
+	17: Call dynamic_field::borrow_mut<I32, Tick>(&mut UID, I32): &mut Tick
+	18: StLoc[11](loc4: &mut Tick)
+B3:
+	19: MoveLoc[5](Arg5: bool)
+	20: Not
+	21: BrFalse(72)
+B4:
+	22: MoveLoc[2](Arg2: u128)
+	23: CopyLoc[11](loc4: &mut Tick)
+	24: ImmBorrowField[37](Tick.fee_growth_outside_a: u128)
+	25: ReadRef
+	26: Call math_u128::wrapping_sub(u128, u128): u128
+	27: CopyLoc[11](loc4: &mut Tick)
+	28: MutBorrowField[37](Tick.fee_growth_outside_a: u128)
+	29: WriteRef
+	30: MoveLoc[3](Arg3: u128)
+	31: CopyLoc[11](loc4: &mut Tick)
+	32: ImmBorrowField[38](Tick.fee_growth_outside_b: u128)
+	33: ReadRef
+	34: Call math_u128::wrapping_sub(u128, u128): u128
+	35: CopyLoc[11](loc4: &mut Tick)
+	36: MutBorrowField[38](Tick.fee_growth_outside_b: u128)
+	37: WriteRef
+	38: LdU64(0)
+	39: StLoc[7](loc0: u64)
+	40: CopyLoc[4](Arg4: &vector<u128>)
+	41: VecLen(56)
+	42: StLoc[8](loc1: u64)
+B5:
+	43: CopyLoc[7](loc0: u64)
+	44: CopyLoc[8](loc1: u64)
+	45: Lt
+	46: BrFalse(69)
+B6:
+	47: Branch(48)
+B7:
+	48: CopyLoc[4](Arg4: &vector<u128>)
+	49: CopyLoc[7](loc0: u64)
+	50: VecImmBorrow(56)
+	51: StLoc[10](loc3: &u128)
+	52: CopyLoc[11](loc4: &mut Tick)
+	53: MutBorrowField[39](Tick.reward_growths_outside: vector<u128>)
+	54: CopyLoc[7](loc0: u64)
+	55: VecMutBorrow(56)
+	56: StLoc[9](loc2: &mut u128)
+	57: MoveLoc[10](loc3: &u128)
+	58: ReadRef
+	59: CopyLoc[9](loc2: &mut u128)
+	60: ReadRef
+	61: Call math_u128::wrapping_sub(u128, u128): u128
+	62: MoveLoc[9](loc2: &mut u128)
+	63: WriteRef
+	64: MoveLoc[7](loc0: u64)
+	65: LdU64(1)
+	66: Add
+	67: StLoc[7](loc0: u64)
+	68: Branch(43)
+B8:
+	69: MoveLoc[4](Arg4: &vector<u128>)
+	70: Pop
+	71: Branch(74)
+B9:
+	72: MoveLoc[4](Arg4: &vector<u128>)
+	73: Pop
+B10:
+	74: MoveLoc[11](loc4: &mut Tick)
+	75: ImmBorrowField[41](Tick.liquidity_net: I128)
+	76: ReadRef
+	77: Ret
+}
+clear_tick<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: I32, Arg2: &mut TxContext) {
+B0:
+	0: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	1: MutBorrowFieldGeneric[15](Pool.id: UID)
+	2: MoveLoc[1](Arg1: I32)
+	3: Call dynamic_field::borrow_mut<I32, Tick>(&mut UID, I32): &mut Tick
+	4: StLoc[3](loc0: &mut Tick)
+	5: LdU128(0)
+	6: CopyLoc[3](loc0: &mut Tick)
+	7: MutBorrowField[36](Tick.liquidity_gross: u128)
+	8: WriteRef
+	9: Call i128::zero(): I128
+	10: CopyLoc[3](loc0: &mut Tick)
+	11: MutBorrowField[41](Tick.liquidity_net: I128)
+	12: WriteRef
+	13: LdU128(0)
+	14: CopyLoc[3](loc0: &mut Tick)
+	15: MutBorrowField[37](Tick.fee_growth_outside_a: u128)
+	16: WriteRef
+	17: LdU128(0)
+	18: CopyLoc[3](loc0: &mut Tick)
+	19: MutBorrowField[38](Tick.fee_growth_outside_b: u128)
+	20: WriteRef
+	21: LdFalse
+	22: MoveLoc[3](loc0: &mut Tick)
+	23: MutBorrowField[40](Tick.initialized: bool)
+	24: WriteRef
+	25: Ret
+}
+flip_tick<Ty0, Ty1, Ty2>(Arg0: &mut Pool<Ty0, Ty1, Ty2>, Arg1: I32, Arg2: &mut TxContext) {
+L0:	loc3: I32
+B0:
+	0: CopyLoc[1](Arg1: I32)
+	1: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	2: ImmBorrowFieldGeneric[13](Pool.tick_spacing: u32)
+	3: ReadRef
+	4: Call i32::mod_euclidean(I32, u32): I32
+	5: Call i32::zero(): I32
+	6: Call i32::eq(I32, I32): bool
+	7: BrFalse(9)
+B1:
+	8: Branch(13)
+B2:
+	9: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	10: Pop
+	11: LdConst[12](U64: [12, 0, 0, 0, 0, 0, 0, 0])
+	12: Abort
+B3:
+	13: MoveLoc[1](Arg1: I32)
+	14: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	15: ImmBorrowFieldGeneric[13](Pool.tick_spacing: u32)
+	16: ReadRef
+	17: Call i32::from(u32): I32
+	18: Call i32::div(I32, I32): I32
+	19: Call position_tick(I32): I32 * u8
+	20: StLoc[3](loc0: u8)
+	21: StLoc[6](loc3: I32)
+	22: LdU256(1)
+	23: MoveLoc[3](loc0: u8)
+	24: Shl
+	25: StLoc[4](loc1: u256)
+	26: CopyLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	27: CopyLoc[6](loc3: I32)
+	28: Call try_init_tick_word<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32)
+	29: MoveLoc[0](Arg0: &mut Pool<Ty0, Ty1, Ty2>)
+	30: MoveLoc[6](loc3: I32)
+	31: Call get_tick_word_mut<Ty0, Ty1, Ty2>(&mut Pool<Ty0, Ty1, Ty2>, I32): &mut u256
+	32: StLoc[5](loc2: &mut u256)
+	33: CopyLoc[5](loc2: &mut u256)
+	34: ReadRef
+	35: MoveLoc[4](loc1: u256)
+	36: Xor
+	37: MoveLoc[5](loc2: &mut u256)
+	38: WriteRef
+	39: Ret
+}

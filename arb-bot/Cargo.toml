@@ -6,14 +6,25 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sui-sdk = { git = "https://github.com/MystenLabs/sui" }
-move-core-types = { git = "https://github.com/MystenLabs/sui" }
+anyhow.workspace = true
+async-trait.workspace = true
+bcs.workspace = true
+clap.workspace = true
 custom-sui-sdk = { path = "../custom-sui-sdk" }
-tokio = "1.28.0"
-futures = "0.3.23"
-anyhow = "1.0.71"
-async-trait = "0.1.61"
-page-turner = "0.8.2"
-serde_json = "1.0.96"
-fixed = "1.23.1"
-petgraph = "0.6.3"
+dyn-clone.workspace = true
+ethnum.workspace = true
+indexmap.workspace = true
+itertools.workspace = true
+futures.workspace = true
+fixed.workspace = true
+governor.workspace = true
+move-core-types.workspace = true
+nonzero_ext.workspace = true
+page-turner.workspace = true
+petgraph.workspace = true
+rayon.workspace = true
+serde_json.workspace = true
+shared-crypto.workspace = true
+sui-keys.workspace = true
+sui-sdk.workspace = true
+tokio.workspace = true

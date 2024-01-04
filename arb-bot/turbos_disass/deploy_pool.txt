@@ -1,0 +1,33 @@
+public(friend) deploy_pool<Ty0, Ty1, Ty2>(Arg0: u32, Arg1: u32, Arg2: u128, Arg3: u32, Arg4: &Clock, Arg5: &mut TxContext): Pool<Ty0, Ty1, Ty2> {
+B0:
+	0: CopyLoc[2](Arg2: u128)
+	1: Call math_tick::tick_index_from_sqrt_price(u128): I32
+	2: StLoc[7](loc1: I32)
+	3: CopyLoc[1](Arg1: u32)
+	4: Call math_tick::max_liquidity_per_tick(u32): u128
+	5: StLoc[6](loc0: u128)
+	6: CopyLoc[5](Arg5: &mut TxContext)
+	7: Call object::new(&mut TxContext): UID
+	8: Call balance::zero<Ty0>(): Balance<Ty0>
+	9: Call balance::zero<Ty1>(): Balance<Ty1>
+	10: LdU64(0)
+	11: LdU64(0)
+	12: MoveLoc[2](Arg2: u128)
+	13: MoveLoc[7](loc1: I32)
+	14: MoveLoc[1](Arg1: u32)
+	15: MoveLoc[6](loc0: u128)
+	16: MoveLoc[0](Arg0: u32)
+	17: MoveLoc[3](Arg3: u32)
+	18: LdTrue
+	19: LdU128(0)
+	20: LdU128(0)
+	21: LdU128(0)
+	22: MoveLoc[5](Arg5: &mut TxContext)
+	23: Call table::new<I32, u256>(&mut TxContext): Table<I32, u256>
+	24: MoveLoc[4](Arg4: &Clock)
+	25: Call clock::timestamp_ms(&Clock): u64
+	26: VecPack(81, 0)
+	27: LdU64(0)
+	28: PackGeneric[0](Pool<Ty0, Ty1, Ty2>)
+	29: Ret
+}

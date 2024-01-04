@@ -14,18 +14,30 @@ use move_core_types::language_storage::StructTag;
 use sui_json_rpc::{
     CLIENT_SDK_TYPE_HEADER, CLIENT_SDK_VERSION_HEADER, CLIENT_TARGET_API_VERSION_HEADER,
 };
-use sui_sdk::rpc_types::{
+use sui_json_rpc_types::{
     ObjectsPage, SuiObjectDataFilter, SuiObjectDataOptions, SuiObjectResponse,
     SuiObjectResponseQuery,
 };
-use sui_transaction_builder::{DataReader, TransactionBuilder};
+// use sui_transaction_builder::{DataReader, 
+//     // TransactionBuilder
+// };
 use sui_types::base_types::{ObjectID, ObjectInfo, SuiAddress};
 
-use crate::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi};
-use sui_sdk::error::{Error, SuiRpcResult};
+use crate::apis::{CoinReadApi, EventApi, GovernanceApi, QuorumDriverApi, ReadApi, ExtendedApi};
+use crate::error::{Error, SuiRpcResult};
+
+use crate::transaction_builder::{
+    DataReader,
+    TransactionBuilder
+};
+
+use governor::DefaultDirectRateLimiter;
 
 pub mod apis;
 pub mod error;
+pub mod transaction_builder;
+pub mod programmable_transaction_sui_json;
+
 pub const SUI_COIN_TYPE: &str = "0x2::sui::SUI";
 const WAIT_FOR_TX_TIMEOUT_SEC: u64 = 60;
 
@@ -39,6 +51,7 @@ pub struct SuiClientBuilder {
     request_timeout: Duration,
     max_concurrent_requests: usize,
     ws_url: Option<String>,
+    // max_requests_per_second: usize
 }
 
 impl Default for SuiClientBuilder {
@@ -47,6 +60,7 @@ impl Default for SuiClientBuilder {
             request_timeout: Duration::from_secs(60),
             max_concurrent_requests: 256,
             ws_url: None,
+            // max_requests_per_second: 50
         }
     }
 }
@@ -67,7 +81,12 @@ impl SuiClientBuilder {
         self
     }
 
-    pub async fn build(self, http: impl AsRef<str>) -> SuiRpcResult<SuiClient> {
+    // pub fn max_requests_per_second(mut self, max_requests_per_second: usize) -> Self {
+    //     self.max_requests_per_second = max_requests_per_second;
+    //     self
+    // }
+
+    pub async fn build(self, http: impl AsRef<str>, rate_limiter: &Arc<DefaultDirectRateLimiter>) -> SuiRpcResult<SuiClient> {
         let client_version = env!("CARGO_PKG_VERSION");
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -104,12 +123,13 @@ impl SuiClientBuilder {
 
         let rpc = RpcClient { http, ws };
         let api = Arc::new(rpc);
-        let read_api = Arc::new(ReadApi::new(api.clone()));
-        let quorum_driver_api = QuorumDriverApi::new(api.clone());
-        let event_api = EventApi::new(api.clone());
+        let read_api = Arc::new(ReadApi::new(api.clone(), rate_limiter.clone()));
+        let quorum_driver_api = QuorumDriverApi::new(api.clone(), rate_limiter.clone());
+        let event_api = EventApi::new(api.clone(), rate_limiter.clone());
         let transaction_builder = TransactionBuilder::new(read_api.clone());
-        let coin_read_api = CoinReadApi::new(api.clone());
-        let governance_api = GovernanceApi::new(api.clone());
+        let coin_read_api = CoinReadApi::new(api.clone(), rate_limiter.clone());
+        let governance_api = GovernanceApi::new(api.clone(), rate_limiter.clone());
+        let extended_api = ExtendedApi::new(api.clone(), rate_limiter.clone());
 
         Ok(SuiClient {
             api,
@@ -119,6 +139,8 @@ impl SuiClientBuilder {
             event_api,
             quorum_driver_api,
             governance_api,
+            extended_api
+            // rate_limiter
         })
     }
 
@@ -150,6 +172,8 @@ pub struct SuiClient {
     event_api: EventApi,
     quorum_driver_api: QuorumDriverApi,
     governance_api: GovernanceApi,
+    extended_api: ExtendedApi
+    // rate_limiter: &'a Arc<DefaultDirectRateLimiter>,
 }
 
 pub(crate) struct RpcClient {
@@ -186,6 +210,9 @@ impl SuiClient {
     pub fn governance_api(&self) -> &GovernanceApi {
         &self.governance_api
     }
+    pub fn extended_api(&self) -> &ExtendedApi {
+        &self.extended_api
+    }
 }
 
 #[async_trait]
@@ -195,6 +222,8 @@ impl DataReader for ReadApi {
         address: SuiAddress,
         object_type: StructTag,
     ) -> Result<Vec<ObjectInfo>, anyhow::Error> {
+        self.rate_limiter().until_ready().await;
+
         let mut result = vec![];
         let query = Some(SuiObjectResponseQuery {
             filter: Some(SuiObjectDataFilter::StructType(object_type)),
@@ -233,10 +262,14 @@ impl DataReader for ReadApi {
         object_id: ObjectID,
         options: SuiObjectDataOptions,
     ) -> Result<SuiObjectResponse, anyhow::Error> {
+        self.rate_limiter().until_ready().await;
+
         Ok(self.get_object_with_options(object_id, options).await?)
     }
 
     async fn get_reference_gas_price(&self) -> Result<u64, anyhow::Error> {
+        self.rate_limiter().until_ready().await;
+
         Ok(self.get_reference_gas_price().await?)
     }
 }

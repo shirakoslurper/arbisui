@@ -1,0 +1,32 @@
+[package]
+name = "librarian"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+bcs.workspace = true
+clap.workspace = true
+crossbeam.workspace = true
+custom-sui-sdk = { path = "../custom-sui-sdk" }
+dyn-clone.workspace = true
+ethnum.workspace = true
+indexmap.workspace = true
+itertools.workspace = true
+futures.workspace = true
+futures-core.workspace = true
+fixed.workspace = true
+governor.workspace = true
+move-core-types.workspace = true
+nonzero_ext.workspace = true
+page-turner.workspace = true
+petgraph.workspace = true
+rayon.workspace = true
+serde_json.workspace = true
+shared-crypto.workspace = true
+sui-keys.workspace = true
+sui-sdk.workspace = true
+tokio.workspace = true
