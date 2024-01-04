@@ -148,15 +148,15 @@ pub async fn loop_blocks<'a>(
     let poro = ObjectID::from_str("0x9ddb0d269d1049caf7c872846cc6d9152618d1d3ce994fae84c1c051ee23b179")?;
 
     let mut skip_event_pools: HashSet<ObjectID> = HashSet::new();
-    // skip_event_pools.insert(cetus_sui_pool_id);
-    // skip_event_pools.insert(another_pool);
+    skip_event_pools.insert(cetus_sui_pool_id);
+    skip_event_pools.insert(another_pool);
     // skip_event_pools.insert(otra_pool);
     // skip_event_pools.insert(ignor_too);
     // skip_event_pools.insert(delulu);
     // skip_event_pools.insert(poro);
     // skip_event_pools.insert(cetus_usdc_pool_id);
     // skip_event_pools.insert(ObjectID::from_str("0x2c6fc12bf0d093b5391e7c0fed7e044d52bc14eb29f6352a3fb358e33e80729e")?);
-    skip_event_pools.insert(ObjectID::from_str("0xd0086b7713e0487bbf5bb4a1e30a000794e570590a6041155cdbebee3cb1cb77")?);
+    // skip_event_pools.insert(ObjectID::from_str("0xd0086b7713e0487bbf5bb4a1e30a000794e570590a6041155cdbebee3cb1cb77")?);
     skip_event_pools.insert(ObjectID::from_str("0x5af4976b871fa1813362f352fa4cada3883a96191bb7212db1bd5d13685ae305")?); 
     // skip_event_pools.insert(ObjectID::from_str("0x517ee525c34fdfb2240342bd43fc07e1ec253c2442a7edd2482e6973700c6ef5")?);
     // skip_event_pools.insert(ObjectID::from_str("0x238f7e4648e62751de29c982cbf639b4225547c31db7bd866982d7d56fc2c7a8")?);

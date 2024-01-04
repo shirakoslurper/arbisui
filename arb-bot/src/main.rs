@@ -39,7 +39,7 @@ const CETUS_ROUTER_ADDRESS: &str = "0x2eeaab737b37137b94bfa8f841f92e36a153641119
 const CETUS_GLOBAL_CONFIG_ADDRESS: &str = "0xdaa46292632c3c4d8f31f23ea0f9b36a28ff3677e9684980e4438403a67a3d8f";
 
 const TURBOS_ORIGINAL_PACKAGE_ADDRESS: &str = "0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1";
-const TURBOS_CURRENT_PACKAGE_ADDRESS: &str = "0xeb9210e2980489154cc3c293432b9a1b1300edd0d580fe2269dd9cda34baee6d";
+const TURBOS_CURRENT_PACKAGE_ADDRESS: &str = "0x9632f61a796fc54952d9151d80b319e066cba5498a27b495c99e113db09726b1";
 const TURBOS_VERSIONED_ID: &str = "0xf1cf0e81048df168ebeb1b8030fad24b3e0b53ae827c25053fff0779c1445b6f";
 
 const KRIYADEX_PACKAGE_ADDRESS: &str = "0xa0eba10b173538c8fecca1dff298e488402cc9ff374f8a12ca7758eebe830b66";
@@ -67,7 +67,7 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     // 100 Requests / Sec
-    let rate_limiter = Arc::new(RateLimiter::direct(Quota::per_second(nonzero!(95u32))));
+    let rate_limiter = Arc::new(RateLimiter::direct(Quota::per_second(nonzero!(45u32))));
 
     let run_data = RunData {
         sui_client: SuiClientBuilder::default()

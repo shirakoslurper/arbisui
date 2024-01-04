@@ -3,7 +3,7 @@ use std::result::Result;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, bail, ensure, Ok};
+use anyhow::{anyhow, bail, ensure, Ok, Context};
 use async_trait::async_trait;
 use futures::future::{join_all, try_join_all};
 use move_binary_format::file_format::SignatureToken;
@@ -12,8 +12,8 @@ use move_core_types::language_storage::{StructTag, TypeTag};
 
 use sui_json::{ResolvedCallArg, SuiJsonValue};
 use sui_json_rpc_types::{
-    RPCTransactionRequestParams, SuiData, SuiObjectDataOptions, SuiObjectResponse, SuiRawData,
-    SuiTypeTag,
+    RPCTransactionRequestParams, SuiData, SuiObjectData, SuiObjectDataOptions, 
+    SuiObjectResponse, SuiRawData, SuiTypeTag,
 };
 use sui_protocol_config::ProtocolConfig;
 use sui_types::base_types::{ObjectID, ObjectInfo, ObjectRef, ObjectType, SuiAddress};
@@ -1124,4 +1124,147 @@ impl TransactionBuilder {
         Ok(args)
     }
 
+    // Cacheable
+    // Cache stored by package representing structs
+
+    ///////////
+    // Cache //
+    ///////////
+    
+    // I think we can even cache a 
+
+    fn cached_get_object_arg(
+        // &self,
+        id: ObjectID,
+        objects: &BTreeMap<ObjectID, Object>,
+        is_mutable_ref: bool,
+    ) -> Result<ObjectArg, anyhow::Error> {
+
+        let obj = objects
+            .get(&id)
+            .context(
+                format!("objects missing object for {}", &id)
+            )?;
+        let obj_ref = obj.compute_object_reference();
+        let owner = obj.owner;
+        Ok(match owner {
+            Owner::Shared {
+                initial_shared_version,
+            } => ObjectArg::SharedObject {
+                id,
+                initial_shared_version,
+                mutable: is_mutable_ref,
+            },
+            Owner::AddressOwner(_) | Owner::ObjectOwner(_) | Owner::Immutable => {
+                ObjectArg::ImmOrOwnedObject(obj_ref)
+            }
+        })
+    }
+
+    fn cached_resolve_and_checks_programmable_transaction_args(
+        // &self,
+        builder: &mut ProgrammableTransactionBuilder,
+        // package_object_data: &SuiObjectData, // Package object
+        package: &MovePackage,
+        objects: &BTreeMap<ObjectID, Object>, // All the objects held by package object
+        module: &Identifier,
+        function: &Identifier,
+        type_args: &[TypeTag],
+        json_args: Vec<ProgrammableTransactionArg>,
+    ) -> Result<Vec<Argument>, anyhow::Error> {
+
+        let programmable_transaction_args_and_tokens = programmable_transaction_sui_json::resolve_move_function_args(
+            package,
+            module.clone(),
+            function.clone(),
+            type_args,
+            json_args,
+        )?;
+
+        let mut args = Vec::new();
+        // let mut objects = BTreeMap::new();
+        for (mixed_arg, expected_type) in programmable_transaction_args_and_tokens {
+            args.push(
+                match mixed_arg {
+                    ProgrammableTransactionResolvedCallArg::Argument(arg) => {
+                        arg
+                    },
+                    ProgrammableTransactionResolvedCallArg::ResolvedCallArg(arg) => {
+                        match arg {
+                            ResolvedCallArg::Pure(p) => builder.input(CallArg::Pure(p)),
+            
+                            ResolvedCallArg::Object(id) => builder.input(CallArg::Object(
+                                Self::cached_get_object_arg(
+                                    id,
+                                    &objects,
+                                    matches!(expected_type, SignatureToken::MutableReference(_)),
+                                )?,
+                            )),
+            
+                            ResolvedCallArg::ObjVec(v) => {
+                                let mut object_ids = vec![];
+                                for id in v {
+                                    object_ids.push(
+                                        Self::cached_get_object_arg(id, &objects, /* is_mutable_ref */ false)?
+                                    );
+                                }
+                                builder.make_obj_vec(object_ids)
+                            }
+                        }?
+                    }
+                }
+            );
+        }
+
+        Ok(args)
+    }
+
+    // For caching package info
+    async fn get_package(
+        &self,
+        package_id: ObjectID
+    ) -> Result<MovePackage, anyhow::Error> {
+        let object = self
+            .0
+            .get_object_with_options(package_id, SuiObjectDataOptions::bcs_lossless())
+            .await?
+            .into_object()?;
+        let Some(SuiRawData::Package(package)) = object.bcs else {
+            bail!("Bcs field in object [{}] is missing or not a package.", package_id);
+        };
+        let package: MovePackage = MovePackage::new(
+            package.id,
+            object.version,
+            package.module_map,
+            ProtocolConfig::get_for_min_version().max_move_package_size(),
+            package.type_origin_table,
+            package.linkage_table,
+        )?;
+
+        Ok(package)
+    }
+
+    // For caching object info
+    // These are the objects we are going to need as we go on
+    // But how do we guarantee it?
+
+    // We can get all the ObjectIDs
+    // Get the objects
+    // Then we into_object() all those objects.
+
+
+    // let obj: Object = response.into_object()?.try_into()?;
+    // let obj_ref = obj.compute_object_reference();
+    // let owner = obj.owner;
+    // objects.insert(id, obj);
+
+
+    // async fn get_objects(
+    //     &self,
+    //     object_ids: &[ObjectID]
+    // ) -> Result<BTreeMap<ObjectID, Object>> {
+        
+    // }
+
+    
 }
