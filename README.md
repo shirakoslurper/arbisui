@@ -6,7 +6,7 @@ But it's since fallen behind as I've left it to stagnate due to the explosion of
 
 I think if you get an endpoint with a high rate limit (you'll have to pay or set up your own) and a fairly beefy computer to run this on, it could be competitive again on the currently integrated DEXes given a couple tweaks: limiting the list of markets to those with higher volume, not subscribing to markets with high event emission rates, and generally doing what we can to get the highest return on the amount of compute time we put in.
 
-> A lot of this can just be done via hardcoding. I always meant to write a script to grab market address sorted by 24 hr volume but ever got around to it.
+> A lot of this can just be done via hardcoding a couple lists of addresses. I always meant to write a script to grab market address sorted by 24 hr volume but ever got around to it.
 
 > Even now, as it runs extremely slowly, it's able to grab a couple cents here and there!
 
