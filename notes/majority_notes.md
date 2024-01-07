@@ -19,7 +19,7 @@ notes:
 - Our defi transactions *will* be subject to ordering via Narwhal and Bullshark
 - Single owner transactions will not be subject to this consensus stuff - they'll be causally ordered so FIFO with advantage give nto faster movers
 
-Oh fuck ok so:
+Oh ok so:
 Calling move-call returns a programmable transaction builder in the transaction data. But its a finished programmable transaction builder.
 
 `<TransactionBuilder>.single_move_call()` does exaclty the same thing as `<ProgrammableTransactionBuilder>`
@@ -146,7 +146,7 @@ Also a lot of the APIs we use in Sui client builder are private to the `sui_sdk`
 
 > We can't have shared dependencies fro workspace members: "Workspaces don't exist as far as individual crates are concerned. Every crate must be able to exist independently, as if there was no workspace. Relative path dependencies are a convenience, but could be anywhere on a filesystem independent of the workspace."
 
-YES. IT FUCKING WORKS.
+YES. IT WORKS.
 
 # arb spotter
 First we want to identify arbs and print them.
@@ -777,7 +777,7 @@ Maybe should look a little like this:
 		- We'll only return info - no mutating info in place
 			- Make more sense anyways if we're batching
 			- May have to defer to a (fast hashmap however)
-- Oh shit we could have done get multi object (limited number of rpc calls)
+- Oh we could have done get multi object (limited number of rpc calls)
 	- Ok so batching for sure
 	- Especially since we'll be doing this between every block
 	- So it's likely better to zip and map.
@@ -1460,7 +1460,7 @@ public fun mul_div_ceil(num1: u128, num2: u128, denom: u128): u128 {
 }
 ```
 
-Just use a larger type while calculating lmfao fucking bull shit HAHAHA.
+Just use a larger type while calculating HAHAHA.
 
 ### Loading info
 We don't want to fetch all the positions too (also dynamic fields).
@@ -1575,7 +1575,7 @@ Maybe the tick is initialized but the tick we're returning from `next_initialize
 
 Think HARDER about how to find out what is wrong with this thing.
 
-Wait a fucking second:
+Wait a second:
 ```
 branch 1
 next_initialized_tick() next_tick (word_pos, bit_pos): (-5, 232)
@@ -1611,7 +1611,7 @@ next_initialized_tick() next_tick (word_pos, bit_pos): (-8, 240)
 ticks contains 'uninitialized' tick -121020. initialized field: true
 ```
 
-Ok. That not the fucking case lmao. False for some. True for some?
+Ok. That not the case lmao. False for some. True for some?
 
 Seems like we're loading all the tick maps properly...
 Not sure how to account for the inconsistency... Perhaps the tick being returned by next initialized tick is wrong (doesn't seems like its the case?)
