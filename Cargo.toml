@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["arb-bot", "custom-sui-sdk", "librarian"]
+members = ["arb-bot", "custom-sui-sdk", "librarian", "local-orderbooks"]
 
 [workspace.dependencies]
 

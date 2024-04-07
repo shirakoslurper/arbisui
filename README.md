@@ -112,7 +112,3 @@ Directory:
     - `Market` is a trait.
     - We've chosen to go with using traits over enums for polymorphism.
     - This way we can interact with all the markets in a uniform wa ydespite their differing underlying representations.
-
-Overall, I felt like this was a huge waste of time (who decompiles assembly by hand?) but not by much fault of my own. I thought this was gonna be my seminal project like "woohoo" interviewers look at me, but my god was it not a good return on time (at least in terms of dineros). But looking back on this - I cannot believe it's been a whole 5 months since I put this down - I'm kind of impressed by my persistence. Y'all have no idea how much time I spent in the Sui codebase because of the lack of documentation there was regarding what I wanted to do. I really figured this out and got something working by the sweat of my brow or something like that. Like it's made a couple hundred bucks in it's lifetime! That's crazy!
-
-I'm trying to make this short and sweet so I'm gonna toss all the EXTREMLY messy notes I wrote in some other file here. Also I don't think I have all the notes so uh yeah.
