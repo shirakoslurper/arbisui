@@ -1,5 +1,7 @@
 Note:
 
+**I know this repo is a mess and old and terribly inefficient, but I have no intention of improving on this in public (I've got a private fork I might touch maybe). This was a noob completely out of his depth eating a lot of glass. But if you have questions I might answer.**
+
 This was actually pretty competitive I first got it running. Especially on the longer path opportunities (3+ hops).
 
 But it's since fallen behind as I've left it to stagnate due to the explosion of the number of markets (it's a lot of requests to make and paths to optimize over) and to the dominance of new DEXes that have popped up. Cetus remains #1 but DeepBook, Aftermath, and FlowX have come ahead of KriyaDex and Turbos.
